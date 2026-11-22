@@ -39,7 +39,7 @@ export interface ReplayKit { shirt: string; shorts: string; socks: string }
 /** Trenér klubu (jeho manažer). `motivation` 1–100 říká, jak moc zápas u lajny prožívá. */
 export interface ReplayCoach {
   name: string; motivation: number; skinColor?: string; hairColor?: string | null; avatar?: Record<string, unknown>;
-  /** Bilance týmu v soutěži před zápasem; null = první zápas v soutěži. */
+  /** Ligová bilance týmu v sezóně před zápasem; null = v lize ještě nehrál. */
   record: { played: number; won: number } | null;
 }
 /**

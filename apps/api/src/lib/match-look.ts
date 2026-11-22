@@ -1,6 +1,7 @@
 /**
  * Vzhled hráčů, dresy a trenéři pro 3D záznam zápasu (detail ligového, pohárového i turnajového zápasu).
  */
+import { currentSeasonSql } from "./season";
 
 export interface PlayerLook {
   skinColor?: string;
@@ -26,22 +27,8 @@ export interface MatchCoach {
   hairColor?: string | null;
   /** Celý obličej (facesjs) pro představení trenéra před výkopem. */
   avatar?: Record<string, unknown>;
-  /** Kolik zápasů soutěže tým před tímhle odehrál a vyhrál; null = první zápas v soutěži nebo přátelák. */
+  /** Kolik ligových zápasů téhle sezóny tým před zápasem odehrál a vyhrál; null = ještě žádný. */
   record: { played: number; won: number } | null;
-}
-
-/**
- * Soutěž zápasu: kde hledat její dřívější zápasy. `earlier` je podmínka nad aliasem `m` („stejná soutěž
- * a dřív než tenhle zápas“) s parametry `binds`; `pens` = remízu rozhodují penalty (pohár, turnaj).
- */
-export interface Competition {
-  table: "matches" | "cup_matches" | "tournament_matches";
-  teamColumns: { home: string; away: string };
-  /** Kluby tohohle zápasu, jak je soutěž eviduje (v poháru id z cup_teams). */
-  ids: { home: string; away: string };
-  earlier: string;
-  binds: unknown[];
-  pens: boolean;
 }
 
 export interface MatchLook {
@@ -139,24 +126,23 @@ function awayKit(team: TeamKitRow | undefined, fallback: string, homeShirt: stri
   return candidates.find((kit) => colorDistance(kit.shirt, homeShirt) > MIN_KIT_DISTANCE)!;
 }
 
-/** Bilance klubu v soutěži před tímhle zápasem. */
-async function recordBefore(db: D1Database, c: Competition, side: "home" | "away"): Promise<MatchCoach["record"]> {
-  const { home, away } = c.teamColumns;
-  const wins = (mine: string, theirs: string) =>
-    `m.${mine}_score > m.${theirs}_score${c.pens ? ` OR (m.${mine}_score = m.${theirs}_score AND m.${mine}_pens > m.${theirs}_pens)` : ""}`;
-  const id = c.ids[side];
+/** Ligová bilance klubu v aktuální sezóně před výkopem `kickoff`. */
+async function leagueRecordBefore(db: D1Database, teamId: string, kickoff: string): Promise<MatchCoach["record"]> {
   const row = await db.prepare(
     `SELECT COUNT(*) AS played,
-            COALESCE(SUM((m.${home} = ? AND (${wins("home", "away")})) OR (m.${away} = ? AND (${wins("away", "home")}))), 0) AS won
-       FROM ${c.table} m
-      WHERE m.status = 'simulated' AND ? IN (m.${home}, m.${away}) AND ${c.earlier}`,
-  ).bind(id, id, id, ...c.binds).first<{ played: number; won: number }>();
+            COALESCE(SUM((m.home_team_id = ?1 AND m.home_score > m.away_score) OR (m.away_team_id = ?1 AND m.away_score > m.home_score)), 0) AS won
+       FROM matches m
+       JOIN season_calendar sc ON sc.id = m.calendar_id
+      WHERE m.status = 'simulated' AND ?1 IN (m.home_team_id, m.away_team_id)
+        AND ${currentSeasonSql("sc")} AND sc.scheduled_at < ?2`,
+  ).bind(teamId, kickoff).first<{ played: number; won: number }>();
   return row && row.played > 0 ? { played: row.played, won: row.won } : null;
 }
 
 /**
  * Dresy a trenéři obou klubů a vzhled hráčů pro 3D záznam. Vzhled (pleť, vlasy, výška) doplní
- * přímo do hráčů v sestavách; vzhled i trenér se berou aktuální, jako číslo dresu.
+ * přímo do hráčů v sestavách; vzhled i trenér se berou aktuální, jako číslo dresu. `kickoff` je
+ * čas zápasu (ISO), k němu se počítá ligová bilance trenérů; přátelák ho nemá.
  */
 export async function loadMatchLook(
   db: D1Database,
@@ -164,7 +150,7 @@ export async function loadMatchLook(
   away: MatchSide,
   homeLineup: LineupLike,
   awayLineup: LineupLike,
-  competition: Competition | null,
+  kickoff: string | null,
 ): Promise<MatchLook> {
   const teamIds = [home.teamId, away.teamId].filter((id): id is string => !!id);
   const teams = teamIds.length === 0 ? [] : (await db.prepare(
@@ -184,7 +170,7 @@ export async function loadMatchLook(
     const row = managers.find((m) => m.team_id === (side === "home" ? home : away).teamId);
     if (!row) return null;
     const { skinColor, hairColor, avatar } = playerLook({ avatar: row.avatar, physical: null });
-    return { name: row.name, motivation: row.motivation, skinColor, hairColor, avatar, record: competition ? await recordBefore(db, competition, side) : null };
+    return { name: row.name, motivation: row.motivation, skinColor, hairColor, avatar, record: kickoff ? await leagueRecordBefore(db, row.team_id, kickoff) : null };
   };
 
   const players = [homeLineup, awayLineup].flatMap((ld) => (ld ? [...(ld.starters ?? []), ...(ld.subs ?? [])] : []));

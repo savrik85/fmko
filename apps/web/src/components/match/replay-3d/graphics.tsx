@@ -107,21 +107,24 @@ export function EventCard({ detail, events, index, event, attack }: GraphicsProp
     note={note} board={board} badge={`${event.minute}'`} />;
 }
 
-/** Představení trenéra před výkopem: obličej, jméno, klub a kolik zápasů soutěže jeho tým odehrál a vyhrál. */
+/** Představení trenéra před výkopem: obličej, jméno, klub a kolik ligových zápasů sezóny jeho tým odehrál a vyhrál. */
 export function CoachCard({ detail, side }: { detail: Record<string, unknown>; side: "home" | "away" }) {
   const coach = detail[`${side}_coach`] as ReplayCoach;
   const stats = coach.record && (
-    <div className="flex gap-3 sm:gap-5 text-center leading-none">
-      {([["Zápasy", coach.record.played], ["Výhry", coach.record.won]] as const).map(([label, value]) => (
-        <div key={label}>
-          <div className="text-[8px] sm:text-[11px] font-bold uppercase tracking-widest opacity-80">{label}</div>
-          <div className="mt-0.5 sm:mt-1">{value}</div>
-        </div>
-      ))}
+    <div className="text-center leading-none">
+      <div className="text-[7px] sm:text-[10px] font-[900] uppercase tracking-[0.25em] opacity-80">V lize</div>
+      <div className="flex gap-3 sm:gap-5 mt-0.5 sm:mt-1">
+        {([["Zápasy", coach.record.played], ["Výhry", coach.record.won]] as const).map(([label, value]) => (
+          <div key={label}>
+            <div className="text-[7px] sm:text-[10px] font-bold uppercase tracking-widest opacity-80">{label}</div>
+            <div className="mt-0.5">{value}</div>
+          </div>
+        ))}
+      </div>
     </div>
   );
   return <LowerThird key={side} color={kitColor(detail, side)} name={coach.name} avatar={coach.avatar} title={coach.name}
-    note={`Trenér · ${detail[`${side}_name`]}`} board={coach.record && "bilance týmu v soutěži"} badge={stats} />;
+    note={`Trenér · ${detail[`${side}_name`]}`} board={null} badge={stats} />;
 }
 
 /** Titulek přes spodek obrazu: obličej na barvě klubu, jméno, světlý pruh s poznámkou a pole vpravo. */
