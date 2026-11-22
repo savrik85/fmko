@@ -16,7 +16,7 @@ vi.mock("../lib/ai-provider", () => ({
 import { BEZ_ZNALOSTI, HLAVICKA_ZNALOSTI, type RadekZnalosti } from "../incidents/znalosti";
 import { generateText } from "../lib/ai-provider";
 import {
-  OTHER_LIFE_EVENTS_BAN, ZAKAZ_ZIVOTNICH_SITUACI, buildSystemPrompt, evaluateResolution, generateFollowUpMessage, generateInitialMessage, generateReply,
+  GeminiUnavailableError, OTHER_LIFE_EVENTS_BAN, ZAKAZ_ZIVOTNICH_SITUACI, buildSystemPrompt, evaluateResolution, generateFollowUpMessage, generateInitialMessage, generateReply,
   generateSquadGroupReaction, generateUnrestReply, popisZdravi,
 } from "./ai-player-chat";
 import { getScenarioById } from "./ai-player-scenarios";
@@ -435,5 +435,28 @@ describe("po skončené životní situaci", () => {
 
   it("bez události zůstává původní zákaz", () => {
     expect(buildSystemPrompt(hrac(), tym, kdy(2, 18))).toContain(ZAKAZ_ZIVOTNICH_SITUACI);
+  });
+});
+
+describe("časový rozpočet práce na pozadí", () => {
+  it("volání modelu dostane nejvýš zbývající čas, po rozpočtu se model nevolá vůbec", async () => {
+    vi.mocked(generateText).mockClear();
+    vi.mocked(generateText).mockResolvedValueOnce(JSON.stringify({ body: "Beru to, trenére." }));
+    await generateFollowUpMessage({}, hrac(), tym, [], "Trenér ti dal pokutu.", { deadline: Date.now() + 8_000 });
+    const timeoutMs = (vi.mocked(generateText).mock.calls[0][2] as { timeoutMs: number }).timeoutMs;
+    expect(timeoutMs).toBeLessThanOrEqual(8_000);
+    expect(timeoutMs).toBeGreaterThan(7_000);
+
+    vi.mocked(generateText).mockClear();
+    await expect(generateFollowUpMessage({}, hrac(), tym, [], "Trenér ti dal pokutu.", { deadline: Date.now() + 500 }))
+      .rejects.toBeInstanceOf(GeminiUnavailableError);
+    expect(generateText).not.toHaveBeenCalled();
+  });
+
+  it("bez rozpočtu platí běžný strop 25 s", async () => {
+    vi.mocked(generateText).mockClear();
+    vi.mocked(generateText).mockResolvedValueOnce(JSON.stringify({ body: "Beru to, trenére." }));
+    await generateFollowUpMessage({}, hrac(), tym, [], "Trenér ti dal pokutu.");
+    expect((vi.mocked(generateText).mock.calls[0][2] as { timeoutMs: number }).timeoutMs).toBe(25_000);
   });
 });

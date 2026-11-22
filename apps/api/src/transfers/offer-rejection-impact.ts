@@ -13,6 +13,7 @@
 import { computeInterestForOffer, interestOfferOf, INTEREST_LABELS } from "./player-interest";
 import { sendPlayerSMS, sendPlayerTemplateSMS, sendSystemSMS } from "../messaging/system-sms";
 import { logger } from "../lib/logger";
+import { deadlineIn } from "../lib/time-budget";
 import { applyCoachRelationDelta } from "../lib/coach-relation";
 import { reasonSms, reasonsText, unrestReasonsFromFactors, type ClubStep, type UnrestReason } from "./unrest-reasons";
 import { repeatsAny } from "../messaging/repetition";
@@ -310,6 +311,8 @@ export async function applyOfferRejectionImpact(
     VAPID_SUBJECT?: string; DB?: D1Database; CACHE_KV?: KVNamespace; AI?: Ai;
   },
 ): Promise<void> {
+  // Po odmítnutí v aplikaci běží ve waitUntil: rozpočet na SMS hráče od začátku (lib/time-budget.ts).
+  const deadline = deadlineIn();
   const playerId = offer.player_id as string;
   const sellerRosterTeamId = offer.to_team_id as string;
   const sellerClubTeamId = await db.prepare(
@@ -422,7 +425,7 @@ export async function applyOfferRejectionImpact(
       // Poděkování jednou za čas: conv f14c5721 dostala tutéž větu pětkrát (prod 9–11/2026).
       if (!silent && !(await loyalThanksSentRecently(db, sellerClubTeamId, playerId, teamName))) {
         await sendRejectionSms(db, env, {
-          clubTeamId: sellerClubTeamId, rosterTeamId: player.team_id as string, playerRef, offerId: offer.id as string | undefined,
+          clubTeamId: sellerClubTeamId, rosterTeamId: player.team_id as string, playerRef, offerId: offer.id as string | undefined, deadline,
           facts: {
             teamName, amount, isLoan, trigger, stance: "loyal", reasons: null, leagueNote: null, squadRole: null,
             coachTalked: await coachWroteAboutOffer(db, sellerClubTeamId, playerId, offer.id as string | undefined),
@@ -520,7 +523,7 @@ export async function applyOfferRejectionImpact(
     : temper > 65 ? "hot" : "wants";
   const reasons = newUnrest.reasons ?? [];
   const convId = await sendRejectionSms(db, env, {
-    clubTeamId: sellerClubTeamId, rosterTeamId: player.team_id as string, playerRef, offerId: offer.id as string | undefined,
+    clubTeamId: sellerClubTeamId, rosterTeamId: player.team_id as string, playerRef, offerId: offer.id as string | undefined, deadline,
     facts: {
       teamName, amount, isLoan, trigger, stance: smsStance, coachTalked, leagueNote: step.note,
       reasons: reasons.length > 0 ? reasonsText(reasons) : null, squadRole: null,
@@ -636,7 +639,7 @@ async function sendRejectionSms(
   o: {
     clubTeamId: string; rosterTeamId: string; offerId: string | undefined;
     playerRef: { id: string; firstName: string; lastName: string; nickname: string | null; avatar: string | null };
-    facts: RejectionSmsFacts; suffix?: string;
+    facts: RejectionSmsFacts; suffix?: string; deadline: number;
   },
 ): Promise<string> {
   const facts = { ...o.facts, squadRole: o.facts.squadRole ?? await squadRoleOf(db, o.rosterTeamId, o.playerRef.id) };
@@ -650,6 +653,7 @@ async function sendRejectionSms(
     seed: `rejection|${o.offerId ?? ""}|${o.playerRef.id}`,
     scenarioId: facts.stance === "loyal" ? LOYAL_SCENARIO_ID : "rejected_offer",
     metadata: { offerId: o.offerId ?? null, stance: facts.stance },
+    deadline: o.deadline,
   });
   return sent.convId;
 }

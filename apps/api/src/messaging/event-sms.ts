@@ -8,9 +8,15 @@
  * vztah k trenérovi a posledních pár zpráv konverzace, takže navazuje a neopakuje se
  * (repetition.ts). Když model nejede nebo vrátí nepoužitelný text, pošle se předem napsaná
  * varianta, kterou hráč ještě neposlal (`sendPlayerTemplateSMS`).
+ *
+ * Posílá se ve `waitUntil` (~30 s), proto časový rozpočet (lib/time-budget.ts): text od
+ * modelu musí být hotový do `deadline`, jinak jde rovnou předem napsaná varianta. Dřív
+ * mohlo druhé volání modelu (přegenerování kvůli opakování) skončit až po limitu a worker
+ * ho uřízl i se zprávou: hráč nenapsal nic.
  */
 
 import { logger } from "../lib/logger";
+import { beforeDeadline, deadlineIn } from "../lib/time-budget";
 import type { ChatEnv, TeamContext, ThreadMessage } from "./ai-player-chat";
 import type { PlayerSnapshot } from "./ai-player-scenarios";
 import { historyBody } from "./player-photo";
@@ -94,6 +100,11 @@ export interface EventSmsRequest {
   reject?: (body: string) => string | null;
   /** Konverzace, když ji volající už má. */
   convId?: string;
+  /**
+   * Do kdy (ms) musí být text od modelu hotový, jinak jde předem napsaná varianta. Volající
+   * ve `waitUntil` ho počítá od začátku své práce, bez něj platí rozpočet od zavolání.
+   */
+  deadline?: number;
 }
 
 /**
@@ -103,9 +114,15 @@ export interface EventSmsRequest {
 export async function sendEventSms(
   db: D1Database, env: ChatEnv | undefined, req: EventSmsRequest,
 ): Promise<{ convId: string; body: string; aiGenerated: boolean }> {
+  const deadline = req.deadline ?? deadlineIn();
   const { getOrCreatePlayerConversation } = await import("./ai-player-spawn");
   const convId = req.convId ?? await getOrCreatePlayerConversation(db, req.clubTeamId, req.player);
-  const generated = env ? await generateEventBody(db, env, req, convId) : null;
+  const generated = env
+    ? await beforeDeadline(generateEventBody(db, env, req, convId, deadline), deadline, () => {
+      logger.warn({ module: M, teamId: req.clubTeamId }, `model nestihl zprávu ${req.scenarioId} v časovém rozpočtu, jde předem napsaná`);
+      return null;
+    })
+    : null;
   if (generated) {
     const body = await sendPlayerSmsToConversation(db, convId, req.player, generated, {
       ...(req.metadata ?? {}), ai_generated: true, scenario_id: req.scenarioId,
@@ -118,14 +135,16 @@ export async function sendEventSms(
   return { convId, body: sent.body, aiGenerated: false };
 }
 
-async function generateEventBody(db: D1Database, env: ChatEnv, req: EventSmsRequest, convId: string): Promise<string | null> {
+async function generateEventBody(
+  db: D1Database, env: ChatEnv, req: EventSmsRequest, convId: string, deadline: number,
+): Promise<string | null> {
   const { isAiEnabled } = await import("../lib/ai-provider");
   if (!(await isAiEnabled(env))) return null;
   const { GeminiUnavailableError, generateFollowUpMessage } = await import("./ai-player-chat");
   try {
     const ctx = await loadEventSmsContext(db, { clubTeamId: req.clubTeamId, playerId: req.player.id, convId });
     if (!ctx) return null;
-    const out = await generateFollowUpMessage(env, ctx.player, ctx.team, ctx.history, req.instruction);
+    const out = await generateFollowUpMessage(env, ctx.player, ctx.team, ctx.history, req.instruction, { deadline });
     const why = req.reject?.(out.body) ?? null;
     if (why) {
       logger.warn({ module: M, teamId: req.clubTeamId }, `text modelu ${req.scenarioId} nejde použít (${why}): ${out.body}`);

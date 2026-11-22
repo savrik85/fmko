@@ -12,6 +12,7 @@
 
 import { logger } from "../lib/logger";
 import { seedFromString } from "../lib/seed";
+import { RETRY_MIN_MS, remainingMs } from "../lib/time-budget";
 import { tooSimilar } from "./match-speech";
 
 const M = "repetition";
@@ -197,11 +198,15 @@ export function repeatRetryRule(repeated: readonly string[]): string {
  * jednou s výslovně zakázanou větou (nejvýš jedno přegenerování kvůli latenci a kvótě).
  * Když opakuje i potom, opakovaná věta se vyškrtne, pokud zbytek dává smysl; jinak
  * zpráva zůstane, jak je, a zaloguje se.
+ *
+ * `deadline` (lib/time-budget.ts): přegenerování jen s rezervou `RETRY_MIN_MS`. Práce na
+ * pozadí končí po ~30 s a uříznutý druhý pokus by zahodil i hotový první text.
  */
 export async function generateWithoutRepeats<T extends { body: string }>(
   previous: readonly string[] | undefined,
   generate: (retryRule: string) => Promise<T>,
   where: string,
+  opts: { deadline?: number } = {},
 ): Promise<T> {
   previous = previous ?? [];
   const first = await generate("");
@@ -210,16 +215,20 @@ export async function generateWithoutRepeats<T extends { body: string }>(
 
   let best = first;
   let bestRepeated = repeated;
-  try {
-    const second = await generate(repeatRetryRule(repeated));
-    const again = findRepeatedSentences(second.body, previous);
-    if (again.length === 0) return second;
-    if (again.length <= repeated.length) {
-      best = second;
-      bestRepeated = again;
+  if (remainingMs(opts.deadline) < RETRY_MIN_MS) {
+    logger.info({ module: M }, `na přegenerování nezbývá čas (${where}), vyškrtávám rovnou`);
+  } else {
+    try {
+      const second = await generate(repeatRetryRule(repeated));
+      const again = findRepeatedSentences(second.body, previous);
+      if (again.length === 0) return second;
+      if (again.length <= repeated.length) {
+        best = second;
+        bestRepeated = again;
+      }
+    } catch (e) {
+      logger.warn({ module: M }, `druhý pokus bez opakování selhal (${where})`, e);
     }
-  } catch (e) {
-    logger.warn({ module: M }, `druhý pokus bez opakování selhal (${where})`, e);
   }
   const trimmed = withoutSentences(best.body, bestRepeated);
   if (trimmed) {
