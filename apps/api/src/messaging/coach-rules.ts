@@ -37,6 +37,50 @@ export const LAPS_TARGETS: readonly LapsTarget[] = ["self", "absentees", "team"]
 export type LapsOutcome = "ran" | "refused";
 export type ApologyTone = "sincere" | "clumsy" | "refused";
 
+/** Malá písmena bez diakritiky a interpunkce. */
+function plainText(text: string): string {
+  return text.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
+}
+
+const RUN_RE = /\b(?:kolec\w*|beh(?:at|ani|a|as|ate|aji|y|u)?|pobez\w*|odbeh\w*|bezis|bezite)\b/;
+const LAPS_RE = /\bkolec\w*/;
+const EXPLICIT_PUNISHMENT_RE = /\b(?:za trest|trestn\w*|potrestam|trestem)\b/;
+/** Důvod trestu: „za tu omluvenku“, „za tenhle výkon“, „za pozdní příchod“. */
+const PUNISHMENT_REASON_RE = new RegExp("\\bza (?:to|tohle|tenhle|tento|ten|tu|tuhle|tuto|takov\\w*|dnesn\\w*|vcerejs\\w*|posledn\\w*|kazd\\w*"
+  + "|omluvenk\\w*|pozdn\\w*|vykon\\w*|absenc\\w*|chyb\\w*|kart\\w*|ostud\\w*|neucast\\w*|vynechan\\w*|nedochvil\\w*|flakan\\w*)\\b");
+/** Podmínka podle člověka: „kdo se omluví, poběží“. */
+const ANYONE_RE = /\b(?:kdo|kdokoli|kdokoliv|kazdy kdo|ten kdo)\b/;
+const YOU_RE = /\b(?:pobezis|pobezite|odbehas|odbehate|budes|budete|bezis|bezite|behas|behate)\b/;
+const YOU_PLURAL_RE = /\b(?:pobezite|odbehate|budete|bezite|behate)\b/;
+/** Trenér běhá s nimi, nebo popisuje trénink: „budeme hodně běhat“, „začínáme v šest“. */
+const PLAN_RE = /\b(?:budeme|pobezime|odbehame|bezime|behame|zaciname|dame si|jdeme)\b/;
+const WHOLE_SQUAD_RE = /\b(?:cela kabina|celou kabinu|cele kabine|vsichni|cely tym|celej tym|cely team|cele muzstvo|cely mancaft|celej mancaft)\b/;
+
+/**
+ * Je věta výslovný trest kolečky? Trest = „za trest“, důvod („za tu omluvenku poběžíš“), podmínka
+ * („kdo se omluví, poběží kolečka“) nebo kolečka uložená hráči („budeš běhat kolečka“). Plán
+ * a popis tréninku („budeme hodně běhat“, „bude hodně běhání“) ani vtip trest nejsou: lokální E2E
+ * (22. 11.) z „začínáme v půl šesté a bude hodně běhání“ udělalo kolečka celé kabině.
+ * `wholeSquad`: výslovně celá kabina („celá kabina“, „všichni“); `plural`: „budete běhat“
+ * (v kabině všem, v SMS jednomu hráči je to vykání); `anyone`: podmínka „kdo…“.
+ */
+export function lapsPunishmentCues(sentence: string): { punishment: boolean; wholeSquad: boolean; plural: boolean; anyone: boolean } {
+  const p = plainText(sentence);
+  const anyone = ANYONE_RE.test(p);
+  const run = RUN_RE.test(p);
+  const laps = LAPS_RE.test(p);
+  const you = YOU_RE.test(p);
+  const reason = PUNISHMENT_REASON_RE.test(p);
+  const punishment = run && (EXPLICIT_PUNISHMENT_RE.test(p)
+    || (!PLAN_RE.test(p) && (anyone || (you && (laps || reason)) || (reason && laps))));
+  return { punishment, wholeSquad: WHOLE_SQUAD_RE.test(p), plural: YOU_PLURAL_RE.test(p), anyone };
+}
+
+/** Pokyn modelu, co trest kolečky je a co ne (SMS i kabina). */
+export const LAPS_PENALTY_NOT_PLAN =
+  "Plán nebo popis tréninku trest NENÍ („budeme hodně běhat“, „bude hodně běhání“, „dáme kondičku“, „vemte si boty na běhání“), ani vtip. "
+  + "Trest trenér ukládá za něco nebo s podmínkou („za trest“, „za tu omluvenku poběžíš kolečka“, „kdo se omluví, poběží kolečka“).";
+
 /** Část `CommitmentDetails`, kterou používají pravidla. */
 export interface RuleDetails {
   squad?: boolean;
@@ -715,8 +759,8 @@ export function missedTrainingStmt(db: D1Database, playerId: string, lifeContext
 
 // ─── Kabina ─────────────────────────────────────────────────────────────────
 
-/** Zpráva do kabiny, ve které může být pravidlo nebo trest (stejné síto jako u SMS). */
-const SQUAD_RULE_HINT_RE = /(nehraje|nebude hr[aá]t|kole[cč]k|b[eě]h[aá]|odb[eě]h|posledn[ií] [sš]anc|let[ií][sš]\b|vyhod[ií]m|omluv)/i;
+/** Zpráva do kabiny, ve které může být pravidlo nebo trest (stejné síto jako u SMS, coach-commitments.ts). */
+const SQUAD_RULE_HINT_RE = /(?<![\p{L}])nehraje(?![\p{L}])|nebude hr[aá]t|kole[cč]k|za trest|trestn|odb[eě]h|pob[eě][zž][ií]|(?<![\p{L}])bude(?:[sš]|te) b[eě]hat|posledn[ií] [sš]anc|(?<![\p{L}])let[ií](?:[sš]|te)(?![\p{L}])|vyhod[ií]m|(?<![\p{L}])omluv(?:[ií][sš]|[ií]te|it)(?![\p{L}])/iu;
 
 /**
  * Pravidlo nebo trest napsaný do kabiny: „kdo nebude chodit na tréninky, nebude hrát“, „kdo se
@@ -743,20 +787,28 @@ export async function handleSquadRule(
       "",
       "Vyhlašuje v ní pravidlo nebo trest? Vyber jednu možnost:",
       "- \"training_rule\": kdo nechodí nebo vynechá trénink, nehraje („kdo nebude chodit na tréninky, nebude hrát“).",
-      "- \"laps_penalty\": trest kolečky nebo běháním na tréninku. target: team (celá kabina, „za tenhle výkon budete běhat“), absentees (kdo se omluví nebo nepřijde na zápas), named (jen jmenovaní hráči).",
+      "- \"laps_penalty\": TREST kolečky nebo běháním na tréninku. target: team (celá kabina, „za tenhle výkon budete běhat“, „za trest běhá celá kabina“), absentees (kdo se omluví nebo nepřijde na zápas), named (jen jmenovaní hráči).",
+      `  ${LAPS_PENALTY_NOT_PLAN}`,
       "- \"last_chance\": jmenovaný hráč má poslední šanci, při dalším průšvihu letí.",
       "- \"squad_apology\": jmenovaný hráč se má omluvit celé kabině.",
-      "- \"none\": nic z toho (nadávka bez trestu, kritika výkonu, vtip, otázka).",
+      "- \"none\": nic z toho (nadávka bez trestu, kritika výkonu, plán tréninku, vtip, otázka).",
       "Do quote dej DOSLOVA tu část zprávy, ve které pravidlo nebo trest je.",
       "Vrať POUZE JSON: {\"kind\": \"training_rule\"|\"laps_penalty\"|\"last_chance\"|\"squad_apology\"|\"none\", \"quote\": \"...\", \"target\": \"team\"|\"absentees\"|\"named\"|null}",
     ].join("\n"), 140);
     const kind = typeof raw?.kind === "string" && (RULE_KINDS as readonly string[]).includes(raw.kind) ? raw.kind as RuleKind : null;
     if (!kind) return [];
-    const { quoteHoldsUp, recordCommitment } = await import("./coach-commitments");
+    const { quoteContext, quoteHoldsUp, recordCommitment } = await import("./coach-commitments");
     if (!quoteHoldsUp(raw?.quote, o.message, kind)) return [];
+    let target: LapsTarget | "named" = raw?.target === "team" || raw?.target === "absentees" ? raw.target : "named";
+    if (kind === "laps_penalty") {
+      // Kolečka jen jako výslovný trest; celé kabině jen „celá kabina“, „všichni“ nebo „budete“.
+      const cues = lapsPunishmentCues(quoteContext(String(raw?.quote), o.message));
+      if (!cues.punishment) return [];
+      if (target === "team" && !cues.wholeSquad && !cues.plural) target = "named";
+      if (target === "absentees" && !cues.anyone) target = "named";
+    }
     const club = await db.prepare("SELECT COALESCE(parent_team_id, id) AS id FROM teams WHERE id = ?").bind(o.teamId).first<{ id: string }>();
     const clubTeamId = club?.id ?? o.teamId;
-    const target: LapsTarget | "named" = raw?.target === "team" || raw?.target === "absentees" ? raw.target : "named";
     if (kind === "training_rule" || (kind === "laps_penalty" && target !== "named")) {
       return [await recordCommitment(db, {
         clubTeamId, playerId: o.representative.id, convId: o.convId, coachMessage: o.message,

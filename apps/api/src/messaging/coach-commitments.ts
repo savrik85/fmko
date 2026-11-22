@@ -23,7 +23,7 @@ import { LINEUP_PROMISE_BROKEN_SMS, LINEUP_PROMISE_KEPT_SMS } from "./promise-te
 import { sendPlayerTemplateSMS } from "./system-sms";
 import { czechDayWords } from "../weddings/wedding";
 import {
-  LAPS_TARGETS, RULE_DUE_DAYS, RULE_KINDS, lastChanceStmt, rulePromptLine, ruleText,
+  LAPS_PENALTY_NOT_PLAN, LAPS_TARGETS, RULE_DUE_DAYS, RULE_KINDS, lapsPunishmentCues, lastChanceStmt, rulePromptLine, ruleText,
   type LapsTarget, type RuleDetails, type RuleKind,
 } from "./coach-rules";
 import {
@@ -245,7 +245,8 @@ function detectionPrompt(
     "- \"weight_target\": dohoda o hubnutí: trenér dá odměnu, když hráč zhubne („1000 Kč, když zhubneš“, „shodíš 5 kilo za 2 týdny a dám ti litr“), nebo hráč platí, když nezhubne („když neshodíš 5 kilo, platíš pivo všem“). Vyplň kg (kolik kilo, „na normální váhu“ = null), days (za kolik dní, 2 týdny = 14, není-li = null), reward (money peníze a amount, round runda, keg basa, bottle flaška, none trenér nic nedá), forfeit (true, když hráč platí, pokud nezhubne). „Litr“ = 1000 Kč.",
     "- \"reward\": dárek nebo odměna za službu mimo zápas („zjisti, kdo to byl, a koupím ti flašku rumu“, „za tu pomoc ti dám pětistovku“). Vyplň reward (bottle flaška, round runda nebo pivo, keg basa, money peníze a amount). „Litr“ = 1000 Kč.",
     "- \"training_rule\": pravidlo pro celý tým, že kdo nechodí nebo vynechá trénink, nehraje („kdo nebude chodit na tréninky, nebude hrát“).",
-    "- \"laps_penalty\": trest kolečky nebo běháním na tréninku („budeš běhat kolečka“, „za omluvenku kolečka“). Vyplň target: self (jen tenhle hráč), absentees (každý, kdo se omluví nebo nepřijde na zápas), team (celá kabina).",
+    "- \"laps_penalty\": TREST kolečky nebo běháním na tréninku („za trest budeš běhat kolečka“, „za omluvenku kolečka“). Vyplň target: self (jen tenhle hráč), absentees (každý, kdo se omluví nebo nepřijde na zápas), team (celá kabina, jen když to trenér výslovně řekne: „celá kabina za trest poběží“).",
+    `  ${LAPS_PENALTY_NOT_PLAN}`,
     "- \"last_chance\": poslední šance, při dalším průšvihu letí z klubu („máš poslední šanci, jedna blbost a letíš“).",
     "- \"squad_apology\": ať se omluví celé kabině nebo týmu („omluvíš se celé kabině“).",
     "- \"bet\": sázka o výkon v příštím zápase („dej gól a platím basu“, „když vyhrajeme, platím rundu“, „za hattrick ti dám 500 Kč“). Vyplň condition: goal (gól), hattrick, assist (přihrávka na gól), win (výhra), clean_sheet (čisté konto, nula). Vyplň reward: round (runda), keg (basa, sud), money (peníze, pak i amount v Kč).",
@@ -254,6 +255,7 @@ function detectionPrompt(
     "  - váhání a neurčitost („možná“, „uvidíme“, „zkusím zařídit“, „jakmile to půjde“, „rotace“),",
     "  - otázka („200 Kč za zápas?“, „co bys chtěl?“), přemlouvání, ať přijde („pojď, potřebujeme tě“),",
     "  - lavička nebo nominace bez základu („mám tě jako zálohu“, „jedeš s námi na zápas“),",
+    "  - plán nebo popis tréninku („budeme hodně běhat“, „bude hodně běhání“, „v úterý dáme kondičku“),",
     "  - slib na příští sezónu nebo až po sezóně, minulost, vtip, slib někomu jinému",
     "  - a obecná podpora („počítám s tebou“, „věřím ti“, „šanci dostaneš“),",
     "  - odpověď na pozvánku na svatbu: přijdu na svatbu, svatební dar nebo obálka, zákaz pití na svatbě (to řeší svatba zvlášť).",
@@ -306,6 +308,18 @@ function sentences(text: string): string[] {
   return text.split(/(?<=[.!?\n])\s*/).map((s) => s.trim()).filter(Boolean);
 }
 
+/** Věta (nebo věty) zprávy, přes kterou citace vede (`q` už v `plain`). Citace může přesahovat do další věty. */
+function quoteSentences(q: string, message: string): string[] {
+  const parts = sentences(message);
+  const hit = parts.filter((s) => { const p = plain(s); return p.length > 0 && (q.includes(p) || p.includes(q)); });
+  return hit.length > 0 ? hit : parts.filter((s) => q.includes(plain(s).slice(0, 12)));
+}
+
+/** Věty zprávy, ve kterých je citace slibu, jako jeden text (kolečka: je to trest? coach-rules.ts). */
+export function quoteContext(quote: string, message: string): string {
+  return quoteSentences(plain(quote), message).join(" ");
+}
+
 /**
  * Pojistka proti tomu, co model přehlédne: citace slibu musí ve zprávě opravdu být a věta,
  * ve které je, nesmí být otázka, podmínka, přemlouvání ani slib na dalekou budoucnost.
@@ -319,10 +333,7 @@ export function quoteHoldsUp(quote: unknown, coachMessage: string, kind: Commitm
   const bet = kind === "bet" || (RULE_KINDS as readonly string[]).includes(kind) || (REWARD_KINDS as readonly string[]).includes(kind);
   const invite = kind === "invite_pub" || kind === "invite_talk";
   if (!q || !plain(coachMessage).includes(q) || (!bet && CONDITIONAL_RE.test(q))) return false;
-  // Věta (nebo věty), přes kterou citace vede. Citace může přesahovat do další věty.
-  const parts = sentences(coachMessage);
-  const hit = parts.filter((s) => { const p = plain(s); return p.length > 0 && (q.includes(p) || p.includes(q)); });
-  const context = hit.length > 0 ? hit : parts.filter((s) => q.includes(plain(s).slice(0, 12)));
+  const context = quoteSentences(q, coachMessage);
   // „Zajdeme dneska na jedno?“ je pozvání, „200 Kč za zápas?“ slib není.
   if (!invite && context.some((s) => s.endsWith("?"))) return false;
   const not = bet ? NOT_A_BET_RE : invite ? NOT_AN_INVITE_RE : NOT_A_PROMISE_RE;
@@ -377,7 +388,16 @@ export function parseDetection(
     return w ? { kind, rewardType: w.reward, ...(w.amount ? { amount: w.amount } : {}) } : null;
   }
   if (kind === "laps_penalty") {
-    return { kind, target: (LAPS_TARGETS as readonly unknown[]).includes(raw.target) ? raw.target as LapsTarget : "self" };
+    let target: LapsTarget = (LAPS_TARGETS as readonly unknown[]).includes(raw.target) ? raw.target as LapsTarget : "self";
+    if (coachMessage !== undefined) {
+      // Jen výslovný trest, plán tréninku ne (coach-rules.ts). Jednomu hráči v SMS je „budete“
+      // vykání: celá kabina jen při „celá kabina“ nebo „všichni“, omluvení jen při „kdo…“.
+      const cues = lapsPunishmentCues(quoteContext(String(raw.quote), coachMessage));
+      if (!cues.punishment) return null;
+      if (target === "team" && !cues.wholeSquad) target = "self";
+      if (target === "absentees" && !cues.anyone) target = "self";
+    }
+    return { kind, target };
   }
   if (kind === "bet") {
     const condition = (BET_CONDITIONS as readonly unknown[]).includes(raw.condition) ? raw.condition as BetCondition : null;

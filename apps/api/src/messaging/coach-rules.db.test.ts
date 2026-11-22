@@ -284,4 +284,25 @@ describe("pravidla z kabiny", () => {
     expect((await life("p1")).condition).toBe(85);
     expect((await life("p3")).condition).toBe(90);
   });
+
+  // Lokální E2E 22. 11. (Fezko, Kabina): plán tréninku se zapsal jako kolečka celé kabině.
+  it("plán tréninku v kabině trest není, ani když ho model za trest vezme", async () => {
+    expect(await handleSquadRule(db, {}, {
+      teamId: "club", convId: "kab", message: "Ještě k úternímu tréninku: začínáme v půl šesté a bude hodně běhání.", squad, representative: squad[0],
+    })).toEqual([]);
+    expect(askModelJson).not.toHaveBeenCalled();
+    askModelJson.mockResolvedValueOnce({ kind: "laps_penalty", quote: "budeme běhat kolečka na rozcvičku", target: "team" });
+    expect(await handleSquadRule(db, {}, {
+      teamId: "club", convId: "kab", message: "Ve čtvrtek budeme běhat kolečka na rozcvičku a pak standardky.", squad, representative: squad[0],
+    })).toEqual([]);
+    // Trest bez „celá kabina“, „všichni“ nebo „budete“ dostanou jen jmenovaní (tady nikdo).
+    askModelJson.mockResolvedValueOnce({ kind: "laps_penalty", quote: "Kopecký za trest poběží kolečka", target: "team" });
+    const ids = await handleSquadRule(db, {}, {
+      teamId: "club", convId: "kab", message: "Kopecký za trest poběží kolečka.", squad, representative: squad[0],
+    });
+    expect(ids).toHaveLength(1);
+    const row = await db.prepare("SELECT player_id, details FROM coach_commitments WHERE id = ?").bind(ids[0]).first<{ player_id: string; details: string }>();
+    expect(row?.player_id).toBe("p2");
+    expect(JSON.parse(row?.details ?? "{}")).toMatchObject({ target: "self" });
+  });
 });
