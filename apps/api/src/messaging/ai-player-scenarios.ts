@@ -139,6 +139,12 @@ export interface PlayerSnapshot {
    */
   pendingOffers?: Array<{ club: string; interest: InterestLevel }>;
   /**
+   * Je na přestupové listině (na prodej nebo na hostování), `since` = `YYYY-MM-DD`. Trh je
+   * veřejný, hráč o tom ví. Bez toho Študlar trenérovi, který ho dal na prodej, psal
+   * „Zraněný jsem nebyl, tak proč mě neberete do hry?“ (Výškovice, 8. 10.).
+   */
+  marketListing?: { kind: "transfer" | "loan"; since: string };
+  /**
    * Odpovídá se zpožděním: `busy` = slíbil, že se ozve po práci, `offline` = zprávu
    * nedostal hned (výpadek modelu). Jen pro odložené zprávy (follow-ups.ts).
    */

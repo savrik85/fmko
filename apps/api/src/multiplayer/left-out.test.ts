@@ -1,7 +1,7 @@
 import { describe, it, expect } from "vitest";
 import { createRng } from "../generators/rng";
 import {
-  weakestComparableSub, moraleLoss, pickComplainer, complaintText, nthTime,
+  weakestComparableSub, moraleLoss, pickComplainer, complaintText, nthTime, notCountedOn, notCountedOnText,
   isSulking, leftOutStreakFor, sulkChance, SULK_TRAINING_REASONS,
   type LeftOutPlayer, type BenchPlayer,
 } from "./left-out";
@@ -100,6 +100,28 @@ describe("complaintText", () => {
     const first = complaintText({ reason: "generic", weaker: null, streak: 1 }, fixedRng(0));
     const second = complaintText({ reason: "generic", weaker: null, streak: 1 }, fixedRng(0), first);
     expect(second).not.toBe(first);
+  });
+});
+
+describe("hráč, se kterým se nepočítá", () => {
+  it("listina má přednost před tím, co trenér napsal", () => {
+    expect(notCountedOn({ listing: { kind: "transfer" }, toldOut: true })).toBe("on_market");
+    expect(notCountedOn({ listing: { kind: "loan" }, toldOut: false })).toBe("on_loan");
+    expect(notCountedOn({ listing: null, toldOut: true })).toBe("told_out");
+    expect(notCountedOn({ listing: null, toldOut: false })).toBeNull();
+  });
+
+  it("neptá se, jestli se s ním počítá, a neopakuje se", () => {
+    const sent: string[] = [];
+    for (const reason of ["on_market", "on_loan", "told_out"] as const) {
+      for (let i = 0; i < 8; i++) {
+        const t = notCountedOnText(reason, fixedRng(i / 8), sent);
+        expect(t).not.toContain("—");
+        expect(t).not.toMatch(/počítá se se mnou\?|jestli se se mnou/);
+        expect(sent).not.toContain(t);
+        sent.push(t);
+      }
+    }
   });
 });
 

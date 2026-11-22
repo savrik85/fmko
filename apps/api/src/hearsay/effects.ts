@@ -99,14 +99,30 @@ export function learningEffect(
 export const LINEUP_TALK_RE = /(sestav|z[aá]klad|lavi[cč]k|st[rř][ií]d|nehraj|nebude[sš] hr[aá]t|nepojede|nejede[sš]|nastoup|p[aá]sk|kapit[aá]n|br[aá]n[aěeu]|chytat|nominac|soupisk|na z[aá]pas nep|tribun)/i;
 /** U pásky stačí jen zmínka o pásce nebo kapitánovi (lavička kvůli bráchovi se nepočítá). */
 export const CAPTAINCY_TALK_RE = /(p[aá]sk|kapit[aá]n)/i;
+/**
+ * Trenér hráči napsal, že s ním nepočítá: dává ho na prodej nebo na hostování, nebude ho
+ * stavět, má si hledat klub. Študlar (Výškovice, 7. 10.): „Dávám tě na seznam nepotřebných
+ * hráčů určených k prodeji“ a druhý den přišla stížnost „Řekněte mi rovnou, jestli se se mnou
+ * ještě počítá“. `LINEUP_TALK_RE` tohle nepoznal.
+ */
+export const NOT_COUNTED_ON_RE = new RegExp([
+  "k prodeji", "na prodej", "prod[aá]m t[eě]", "prod[aá]me t[eě]", "p[rř]estupov\\S* listin", "seznam\\S* nepot[rř]ebn",
+  "na hostov[aá]n[ií]", "p[uů]j[cč][ií]m t[eě]",
+  "nebudu t[eě] stav[eě]t", "u[zž] t[eě] stav[eě]t nebudu", "nepostav[ií]m t[eě]", "nebude[sš] hr[aá]t",
+  "nepo[cč][ií]t[aá]m s tebou", "nepo[cč][ií]t[aá]me s tebou", "s tebou (u[zž] )?nepo[cč][ií]t[aá]",
+  "hledej si (klub|jin|nov|m[ií]sto|angaž)", "najdi si (klub|jin|nov|m[ií]sto)", "hledat (si )?(m[ií]sto|klub|jin|nov)",
+  "m[uů][zž]e[sš] (odej[ií]t|j[ií]t jinam)", "jsi nav[ií]c", "nepot[rř]ebuj(eme|u) t[eě]",
+  "na tr[eé]nink(y)? (chodit )?nemus[ií][sš]",
+].join("|"), "i");
 
 /**
  * Psal trenér hráči v jejich konverzaci 1:1 od `sinceIso`? S `about` jen zprávu o sestavě
- * (`lineup`) nebo o pásce (`captaincy`); jinak by stačilo „ahoj“ (závěrečná kontrola).
+ * (`lineup`), o pásce (`captaincy`) nebo že s ním nepočítá (`not_counted_on`); jinak by
+ * stačilo „ahoj“ (závěrečná kontrola).
  */
 export async function coachTalkedSince(
   db: D1Database,
-  o: { clubTeamId: string; playerId: string; sinceIso: string; about?: "lineup" | "captaincy" },
+  o: { clubTeamId: string; playerId: string; sinceIso: string; about?: "lineup" | "captaincy" | "not_counted_on" },
 ): Promise<boolean> {
   const rows = await db.prepare(
     `SELECT m.body FROM conversations c JOIN messages m ON m.conversation_id = c.id
@@ -115,7 +131,8 @@ export async function coachTalkedSince(
       ORDER BY m.sent_at DESC LIMIT 20`,
   ).bind(o.clubTeamId, o.playerId, o.sinceIso).all<{ body: string }>()
     .catch((e) => { logger.warn({ module: M }, `psal trenér hráči ${o.playerId}`, e); return { results: [] as Array<{ body: string }> }; });
-  const re = o.about === "captaincy" ? CAPTAINCY_TALK_RE : o.about === "lineup" ? LINEUP_TALK_RE : null;
+  const re = o.about === "captaincy" ? CAPTAINCY_TALK_RE : o.about === "lineup" ? LINEUP_TALK_RE
+    : o.about === "not_counted_on" ? NOT_COUNTED_ON_RE : null;
   return re ? rows.results.some((r) => re.test(r.body)) : rows.results.length > 0;
 }
 

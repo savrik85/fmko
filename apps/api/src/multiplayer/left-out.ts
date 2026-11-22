@@ -22,6 +22,7 @@ import { coachRelationStmts } from "../lib/coach-relation";
 import { createRng } from "../generators/rng";
 import { seedFromString } from "../lib/seed";
 import { TEMPLATE_HISTORY_LIMIT, loadOwnRecentLines, pickFreshVariant } from "../messaging/repetition";
+import { loadActiveListing } from "../transfers/listing-status";
 
 type Rng = ReturnType<typeof createRng>;
 
@@ -250,6 +251,58 @@ const GENERIC_TEXTS: readonly string[] = [
   "Trenére, na zápas jsem se těšil a nakonec nic. Aspoň mi řekněte proč.",
 ];
 
+// Hráč, se kterým trenér nepočítá (je na listině nebo mu to trenér napsal), si nestěžuje, že
+// nejel, a neptá se, jestli se s ním počítá: ví to. Ozve se trucovitě, nejvýš jednou za týden.
+const MARKET_TEXTS: readonly string[] = [
+  "Na zápas jsem nejel, ale co jsem čekal. Stejně mě chcete prodat.",
+  "Vím, že mě máte na prodej. Tak se nedivím, že nejedu.",
+  "Jasně, kdo je na prodej, ten nehraje. Chápu, trenére.",
+  "Zase doma. Asi abych se nezranil, než mě prodáte, co?",
+  "Trenére, kdyby se mnou někdo počítal, nebyl bych na prodej. Takže nic nečekám.",
+  "Tak to už je jasný. Na prodej a ani na lavičku. Aspoň vím, jak na tom jsem.",
+  "Doma koukám na výsledky. Na prodej se holt nehraje.",
+  "Neberete mě, protože mě chcete prodat. Tak ať to proběhne rychle.",
+];
+const LOAN_TEXTS: readonly string[] = [
+  "Na hostování mě nabízíte a hrát mě nenecháte. Tak ať aspoň někam jdu.",
+  "Vím, že mě chcete poslat na hostování. Tak aspoň chápu, proč nejedu.",
+  "Zase doma. Asi už se počítá s tím, že půjdu hostovat jinam.",
+  "Trenére, kdo je na hostování, ten tady nehraje. Jasný.",
+  "Radši ať mě někdo vezme na hostování. Tady stejně jen sedím doma.",
+  "Nabízíte mě jinam a já koukám z gauče. Aspoň vím, na čem jsem.",
+  "Jestli mě chcete poslat hostovat, tak rychle. Takhle to nemá cenu.",
+  "Tak nic, další zápas beze mě. Snad mě brzo pošlete hrát jinam.",
+];
+const TOLD_OUT_TEXTS: readonly string[] = [
+  "Tak jsem nejel. Řekl jste mi to dopředu, tak se aspoň nedivím.",
+  "Vím, že se mnou nepočítáte. Beru to, ale líbit se mi to nemusí.",
+  "Zase doma, jak jste říkal. Aspoň že jste to řekl na rovinu.",
+  "Už vím, na čem jsem. Bez nominace, bez šance. Fajn.",
+  "Nečekal jsem nic jinýho. Po tom, co jste mi napsal, je to jasný.",
+  "Takže platí, co jste řekl. Já na gauči a kluci hrajou.",
+  "Trenére, beru na vědomí. Ale doma mě to fakt nebaví.",
+  "Jasně, nepočítá se se mnou. Tak aspoň nemusím nikam jezdit.",
+];
+
+/** Proč hráč ví, že se s ním nepočítá. Stížnost „jestli se se mnou počítá“ by byla nesmysl. */
+export type NotCountedOn = "on_market" | "on_loan" | "told_out";
+
+export function notCountedOn(o: { listing: { kind: "transfer" | "loan" } | null; toldOut: boolean }): NotCountedOn | null {
+  if (o.listing) return o.listing.kind === "loan" ? "on_loan" : "on_market";
+  return o.toldOut ? "told_out" : null;
+}
+
+/** Trucovitá SMS hráče, se kterým se nepočítá: varianta, kterou trenérovi ještě neposlal. */
+export function notCountedOnText(reason: NotCountedOn, rng: Rng, previous: readonly string[]): string {
+  const pool = reason === "on_market" ? MARKET_TEXTS : reason === "on_loan" ? LOAN_TEXTS : TOLD_OUT_TEXTS;
+  return pickFreshVariant(pool, previous, `left-out-out|${Math.floor(rng.random() * 1e9)}`).text;
+}
+
+/** Jak dlouho platí, co trenér hráči napsal o tom, že s ním nepočítá (Študlar 7. 10. → stížnost 8. 10.). */
+export const NOT_COUNTED_ON_DAYS = 14;
+/** Trucovitá SMS „vím, že mě chcete prodat“ nejvýš jednou za tolik dní. */
+const NOT_COUNTED_ON_REPEAT_DAYS = 7;
+
 function capitalize(s: string): string {
   return s.charAt(0).toLocaleUpperCase("cs") + s.slice(1);
 }
@@ -366,7 +419,7 @@ export async function reactToLeftOut(
       overallRating: r.overall_rating,
     }));
 
-  const leftOut: Array<LeftOutPlayer & { row: PlayerRow; life: Record<string, unknown> }> = [];
+  const leftOut: Array<LeftOutPlayer & { row: PlayerRow; life: Record<string, unknown>; toldOut: boolean }> = [];
   for (const id of squad.leftOutIds) {
     const row = byId.get(id);
     if (!row) continue;
@@ -374,6 +427,9 @@ export async function reactToLeftOut(
     // Tenhle zápas už jednou zpracovaný — obnova kola nesmí trestat dvakrát ani psát znovu
     if (life.leftOutMatch === matchId) return;
     const personality = parseJson(row.personality, "personality");
+    const toldOut = writesToCoach && await coachTalkedSince(db, {
+      clubTeamId: teamId, playerId: row.id, sinceIso: new Date(Date.now() - NOT_COUNTED_ON_DAYS * 86_400_000).toISOString(), about: "not_counted_on",
+    });
     leftOut.push({
       id: row.id,
       lastName: row.last_name,
@@ -382,10 +438,12 @@ export async function reactToLeftOut(
       temper: Number(personality.temper ?? 40),
       discipline: Number(personality.discipline ?? 50),
       previousStreak: leftOutStreakFor(life, teamId),
-      // Trenér mu v posledních dvou dnech sám psal o sestavě: ví to od něj, ne až ze sestavy.
-      toldInAdvance: writesToCoach && await coachTalkedSince(db, {
+      // Trenér mu v posledních dvou dnech sám psal o sestavě, nebo v posledních dvou týdnech, že
+      // s ním nepočítá: ví to od něj, ne až ze sestavy.
+      toldInAdvance: toldOut || (writesToCoach && await coachTalkedSince(db, {
         clubTeamId: teamId, playerId: row.id, sinceIso: new Date(Date.now() - 2 * 86_400_000).toISOString(), about: "lineup",
-      }),
+      })),
+      toldOut,
       row,
       life,
     });
@@ -421,7 +479,14 @@ export async function reactToLeftOut(
   const sender = leftOut.find((p) => p.id === complaint.player.id)!;
   const previous = await loadOwnRecentLines(db, { playerId: sender.id, teamId, limit: TEMPLATE_HISTORY_LIMIT });
 
-  let text = complaintText(complaint, rng, previous);
+  // Na listině, nebo mu trenér napsal, že s ním nepočítá: neptá se, jestli se s ním počítá.
+  const outReason = notCountedOn({ listing: await loadActiveListing(db, sender.id), toldOut: sender.toldOut });
+  if (outReason && await sentNotCountedOnRecently(db, teamId, sender.id)) {
+    logger.info({ module: "left-out", teamId }, `${sender.row.last_name} nejel, se kterým se nepočítá (${outReason}), už to trenérovi napsal`);
+    return;
+  }
+  let text = outReason ? notCountedOnText(outReason, rng, previous) : complaintText(complaint, rng, previous);
+  const reason: ComplaintReason | NotCountedOn = outReason ?? complaint.reason;
   const sulks = rng.random() < sulkChance(sender, complaint, coachMotivation);
   if (sulks) {
     text += ` ${SULK_SUFFIXES[Math.floor(rng.random() * SULK_SUFFIXES.length)]}`;
@@ -439,6 +504,20 @@ export async function reactToLeftOut(
     lastName: sender.row.last_name,
     nickname: sender.row.nickname,
     avatar: sender.row.avatar,
-  }, text, { type: "left_out", matchId, reason: complaint.reason, sulk: sulks });
-  logger.info({ module: "left-out", teamId }, `${sender.row.last_name} píše trenérovi, nejel na zápas (${complaint.reason}${sulks ? ", trucuje" : ""})`);
+  }, text, { type: "left_out", matchId, reason, sulk: sulks });
+  logger.info({ module: "left-out", teamId }, `${sender.row.last_name} píše trenérovi, nejel na zápas (${reason}${sulks ? ", trucuje" : ""})`);
+}
+
+/** Napsal hráč v posledním týdnu, že ví, že se s ním nepočítá? Pak po dalším zápase mlčí. */
+export async function sentNotCountedOnRecently(db: D1Database, teamId: string, playerId: string): Promise<boolean> {
+  const row = await db.prepare(
+    `SELECT 1 AS x FROM messages m JOIN conversations c ON c.id = m.conversation_id
+      WHERE c.team_id = ? AND c.participant_id = ? AND m.sender_type = 'player'
+        AND json_extract(m.metadata, '$.type') = 'left_out'
+        AND json_extract(m.metadata, '$.reason') IN ('on_market', 'on_loan', 'told_out')
+        AND julianday(m.sent_at) >= julianday(?)
+      LIMIT 1`,
+  ).bind(teamId, playerId, new Date(Date.now() - NOT_COUNTED_ON_REPEAT_DAYS * 86_400_000).toISOString()).first<{ x: number }>()
+    .catch((e) => { logger.warn({ module: "left-out" }, `nedávná SMS hráče, se kterým se nepočítá ${playerId}`, e); return null; });
+  return !!row;
 }
