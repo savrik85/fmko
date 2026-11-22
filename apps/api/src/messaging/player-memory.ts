@@ -12,6 +12,7 @@
 
 import { logger } from "../lib/logger";
 import { hearsayPromptLines } from "../hearsay/prompt";
+import { loadActiveListing } from "../transfers/listing-status";
 import { computeInterestForOffer, interestOfferOf, type InterestLevel } from "../transfers/player-interest";
 import type { PlayerSnapshot } from "./ai-player-scenarios";
 import { commitmentPromptLines, loadCommitmentMemory, pendingInviteOf } from "./coach-commitments";
@@ -39,7 +40,7 @@ export async function loadChatMemory(
   opts: { teamId: string; convId: string },
 ): Promise<{ offerIds: string[] }> {
   const fullName = `${player.firstName} ${player.lastName}`;
-  const [call, drunk, offers, commitments] = await Promise.all([
+  const [call, drunk, offers, commitments, listing] = await Promise.all([
     db.prepare(
       `SELECT pocet FROM missed_calls
         WHERE team_id = ? AND volajici = 'hrac' AND jmeno = ? AND julianday(created_at) > julianday('now', ?)
@@ -55,6 +56,7 @@ export async function loadChatMemory(
       .catch((e) => { logger.warn({ module: M }, "opilá hlasovka hráče", e); return null; }),
     loadPendingOffers(db, player.id),
     loadCommitmentMemory(db, player.id),
+    loadActiveListing(db, player.id),
   ]);
   const { loadHearsayMemory } = await import("../hearsay/prompt");
   const hearsay = await loadHearsayMemory(db, player.id, opts.teamId)
@@ -65,6 +67,7 @@ export async function loadChatMemory(
   if (call) player.missedCall = { count: call.pocet ?? 1 };
   if (drunk) player.drunkVoiceRecently = true;
   if (offers.length > 0) player.pendingOffers = offers.map(({ club, interest }) => ({ club, interest }));
+  if (listing) player.marketListing = listing;
   return { offerIds: offers.map((o) => o.id) };
 }
 
@@ -145,6 +148,19 @@ const INTEREST_WORDS: Record<InterestLevel, string> = {
   3: "hodně tě to táhne, chceš jít",
 };
 
+function dayCz(iso: string): string {
+  const [, m, d] = iso.split("-").map(Number);
+  return m && d ? `${d}. ${m}.` : "";
+}
+
+/** Hráč je na přestupové listině: ví to a nezapírá, že se s ním počítá. */
+export function marketListingLine(l: { kind: "transfer" | "loan"; since: string }): string {
+  const since = dayCz(l.since);
+  return l.kind === "loan"
+    ? `- Trenér tě nabízí na hostování${since ? ` (od ${since})` : ""}: klub tě chce poslat hrát jinam. Víš o tom. Nediv se, že nehraješ, a netvrď, že nevíš proč. Reaguj podle povahy: naštvaně, smířeně, nebo že rád půjdeš hrát jinam.`
+    : `- Trenér tě dal na přestupovou listinu${since ? ` (od ${since})` : ""}: klub tě chce prodat. Víš o tom. Nediv se, že nehraješ, a netvrď, že nevíš proč. Reaguj podle povahy: naštvaně, smířeně, nebo že si hledáš klub.`;
+}
+
 /** Řádky do promptu podle toho, co `loadChatMemory` zjistil. Prázdné pole = nic. */
 export function memoryPromptLines(player: PlayerSnapshot): string[] {
   const lines: string[] = [];
@@ -156,6 +172,7 @@ export function memoryPromptLines(player: PlayerSnapshot): string[] {
   }
   lines.push(...commitmentPromptLines(player.coachCommitments));
   lines.push(...hearsayPromptLines(player.hearsay));
+  if (player.marketListing) lines.push(marketListingLine(player.marketListing));
   for (const o of player.pendingOffers ?? []) {
     lines.push(`- NABÍDKA: ${o.club} o tebe stojí a trenér ještě nerozhodl. Jak tě to láká: ${INTEREST_WORDS[o.interest]}. Když se tě na to trenér ptá, odpovídej podle toho. Rozmyslet si to můžeš, jen když tě opravdu přesvědčí (konkrétní slib, ocenění, víc peněz); samotné „zůstaň" nestačí.`);
   }

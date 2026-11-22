@@ -1,6 +1,6 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { Miniflare } from "miniflare";
-import { backfillLeftOutTeams, reactToLeftOut } from "./left-out";
+import { backfillLeftOutTeams, reactToLeftOut, sentNotCountedOnRecently } from "./left-out";
 
 let miniflare: Miniflare;
 let db: D1Database;
@@ -103,5 +103,55 @@ describe("série bez nominace patří týmu", () => {
     const gone = await lifeOf("old-gone");
     expect(gone).toEqual({ morale: 40 });
     expect(await backfillLeftOutTeams(db)).toMatchObject({ tagged: 0, cleared: 0 });
+  });
+});
+
+describe("hráč, se kterým trenér nepočítá (Študlar, Výškovice, 7.–8. 10.)", () => {
+  const setup = async (team: string) => {
+    await db.batch([
+      db.prepare("INSERT INTO teams VALUES (?, 'user-3', NULL, 'senior', '2026-10-08')").bind(team),
+      db.prepare("INSERT INTO managers VALUES (?, 40)").bind(team),
+      db.prepare("INSERT INTO players (id, team_id, first_name, last_name, position, overall_rating, personality, life_context, status) VALUES (?, ?, 'Martin', 'Študlar', 'MID', 70, ?, ?, 'active')")
+        .bind(`${team}-out`, team, PERS, LIFE),
+      db.prepare("INSERT INTO players (id, team_id, first_name, last_name, position, overall_rating, personality, life_context, status) VALUES (?, ?, 'Petr', 'Slabý', 'MID', 40, ?, ?, 'active')")
+        .bind(`${team}-bench`, team, PERS, LIFE),
+      db.prepare("INSERT INTO conversations (id, team_id, type, participant_id, created_at) VALUES (?, ?, 'player', ?, '2026-09-01')")
+        .bind(`${team}-conv`, team, `${team}-out`),
+    ]);
+  };
+  /** Zápasy po sobě, dokud hráč nenapíše (kdo napíše, je los). Vrací metadata a text jeho SMS. */
+  const untilHeWrites = async (team: string) => {
+    for (let k = 0; k < 40; k++) {
+      await db.prepare("UPDATE players SET life_context = ? WHERE id = ?").bind(LIFE, `${team}-out`).run();
+      await reactToLeftOut(db, team, `${team}-m${k}`, { leftOutIds: [`${team}-out`], benchIds: [`${team}-bench`], matchSquadIds: [`${team}-bench`] });
+      const sms = await db.prepare("SELECT body, metadata FROM messages WHERE conversation_id = ? AND sender_type = 'player'")
+        .bind(`${team}-conv`).first<{ body: string; metadata: string }>();
+      if (sms) return { body: sms.body, meta: JSON.parse(sms.metadata) as Record<string, unknown> };
+    }
+    throw new Error("hráč nenapsal ani po 40 zápasech");
+  };
+
+  it("je na prodej: neptá se, jestli se s ním počítá, ví to", async () => {
+    await db.exec("CREATE TABLE IF NOT EXISTS transfer_listings (id TEXT PRIMARY KEY, player_id TEXT, team_id TEXT, status TEXT, deal_type TEXT, created_at TEXT)");
+    await setup("c");
+    await db.prepare("INSERT INTO transfer_listings VALUES ('l1', 'c-out', 'c', 'active', 'transfer', '2026-10-07 16:36:00')").run();
+    const sms = await untilHeWrites("c");
+    expect(sms.meta).toMatchObject({ type: "left_out", reason: "on_market" });
+    expect(sms.body).toMatch(/prod/);
+    expect(sms.body).not.toMatch(/počítá|zápisu|hledat jinej klub/);
+    expect(await sentNotCountedOnRecently(db, "c", "c-out")).toBe(true);
+  });
+
+  it("trenér mu napsal, že ho dává na seznam k prodeji: další den se ví, že se s ním nepočítá", async () => {
+    await setup("d");
+    await db.prepare("INSERT INTO messages (id, conversation_id, sender_type, body, sent_at) VALUES ('coach-d', 'd-conv', 'user', ?, ?)")
+      .bind("Dobře. Dávám tě na seznam nepotřebných hráčů určených k prodeji a po sezoně tě připustíme.", new Date(Date.now() - 86_400_000).toISOString()).run();
+    const sms = await untilHeWrites("d");
+    expect(sms.meta).toMatchObject({ reason: "told_out" });
+    expect(sms.body).not.toMatch(/Řekněte mi rovnou, jestli se se mnou ještě počítá/);
+  });
+
+  it("obyčejná stížnost se za „vím, že se se mnou nepočítá“ nepočítá", async () => {
+    expect(await sentNotCountedOnRecently(db, "a", "a-out")).toBe(false);
   });
 });
