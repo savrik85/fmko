@@ -304,3 +304,32 @@ describe("váhání bez slovesa docházky", () => {
     expect(isClearPledge("V sobotu nemůžu, mám šichtu do večera.", coach)).toBe(true);
   });
 });
+
+// final3 Chyba 5 (E2E 22. 11., Stehlík, ZEFA, ráno po hospodě): na „A dorazíš v pátek na trénink?“
+// odpověděl „…v patek budu musím si to rozmyslet…“ a dostal 📝 „přijde na trénink v pátek 4. 12.“.
+describe("rozmyslím si to, dám vědět, zkusím: slib to není", () => {
+  const coach = "A dorazíš v pátek na trénink?";
+  it.each([
+    "trenere diky za otazku v patek budu musím si to rozmyslet ale diky za pochopení",
+    "V pátek budu, ale ještě si to rozmyslím.",
+    "Rozmyslím si to a ozvu se.",
+    "Musím si to promyslet, trenére.",
+    "Ještě to promyslím, v pátek asi jo.",
+    "Uvidím podle práce, v pátek budu.",
+    "Dám ti vědět, jestli v pátek dorazím.",
+    "Dorazím, dám vědět do čtvrtka.",
+    "Zkusím to, trenére, v pátek budu.",
+    "V pátek přijdu, zkusíme to.",
+    "Uvidí se, v pátek budu.",
+  ])("„%s“ slib není", (reply) => {
+    expect(isClearPledge(reply, coach)).toBe(false);
+  });
+
+  it("jasné „budu“ a „uvidíme se v pátek“ slib dál je", () => {
+    expect(isClearPledge("trenere ve středu budu na tréninku určitě diky za otázku 😊", coach)).toBe(true);
+    expect(isClearPledge("Jo, v pátek jsem tam, trenére! Na standardkách si dám záležet.", coach)).toBe(true);
+    expect(isClearPledge("Jasně, v pátek přijdu. Uvidíme se na tréninku!", coach)).toBe(true);
+    expect(isClearPledge("Budu tam, uvidíš.", coach)).toBe(true);
+    expect(isClearPledge("Uvidíme se v pátek, přijdu.", coach)).toBe(true);
+  });
+});

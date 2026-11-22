@@ -226,10 +226,13 @@ const ATTEND_WORD_RE = /\b(n?e?prijd\w*|n?e?doraz\w*|n?e?prijed\w*|budu|nebudu|v
 const HEDGE_RE = /\b(asi|mozna|snad|uvidime|uvidim|nevim|nejspis|spis|zkusim|pokusim|treba)\b/;
 /**
  * Váhání, které platí v celé odpovědi, i bez slovesa docházky: „asi těžko“, „spíš ne, uvidíme“
- * (Marek, E2E 22. 11.: dostal 📝 „nepřijde“). Užší než `HEDGE_RE`: „třeba“ nebo „zkusím“ mimo
- * větu o docházce o slibu nic neříkají.
+ * (Marek, E2E 22. 11.: dostal 📝 „nepřijde“), „musím si to rozmyslet“, „dám vědět“, „zkusím“
+ * (Stehlík, E2E 22. 11.: „v patek budu musím si to rozmyslet“ dostalo 📝 „přijde“). Užší než
+ * `HEDGE_RE`: „třeba“ mimo větu o docházce o slibu nic neříká.
  */
-const REPLY_HEDGE_RE = /\b(asi|spis|nejspis|uvidime|uvidim|mozna|tezko|nevim)\b/;
+const REPLY_HEDGE_RE = /\b(asi|spis|nejspis|uvidime|uvidim|uvidi se|mozna|tezko|nevim|rozmysl\w*|rozmejsl\w*|promysl\w*|promejsl\w*|dam (ti |vam )?vedet|dame (ti |vam )?vedet|zkusim|zkusime|zkusil bych|zkusila bych|pokusim se|pokusime se)\b/;
+/** „Uvidíme se v pátek“: rozloučení, ne váhání. */
+const SEE_YOU_RE = /\buvidime se\b/g;
 /** Hráč sám jmenuje, o co jde (trénink, zápas): k tématu, i když se trenér neptal. */
 const EVENT_WORD_RE = /(tr[eé]nin|z[aá]pas|p[rř][aá]tel[aá]k|utk[aá]n|ma[cč]\b)/i;
 /** Trenér psal o docházce (nebo o volnu): odpověď „nepřijdu“ je k tématu. */
@@ -243,8 +246,8 @@ const COACH_ATTENDANCE_RE = /(tr[eé]nin|z[aá]pas|p[rř][aá]tel[aá]k|doraz|om
  */
 export function isClearPledge(replyBody: string, coachText: string): boolean {
   const plainText = (t: string) => t.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase();
-  const hedged = REPLY_HEDGE_RE.test(plainText(replyBody)) || replyBody.split(/(?<=[.!?…])\s+|\n+/).some((raw) => {
-    const sentence = plainText(raw);
+  const hedged = REPLY_HEDGE_RE.test(plainText(replyBody).replace(SEE_YOU_RE, " ")) || replyBody.split(/(?<=[.!?…])\s+|\n+/).some((raw) => {
+    const sentence = plainText(raw).replace(SEE_YOU_RE, " ");
     return ATTEND_WORD_RE.test(sentence) && HEDGE_RE.test(sentence);
   });
   if (hedged) return false;
