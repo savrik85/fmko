@@ -299,8 +299,8 @@ export function ReplayScene({ replay, kits, snow, step, camBadge, shade, onReady
     });
     for (const mesh of meshes.current) if (mesh) mesh.instanceMatrix.needsUpdate = true;
 
-    // Karta ve zdvižené ruce rozhodčího.
-    const shown = scene.card && t >= scene.card.at ? scene.card : null;
+    // Karta ve zdvižené ruce rozhodčího; když ruku spustí, kartu schoval.
+    const shown = scene.card && t >= scene.card.at && frame.figures[replay.referee].pose === "armUp" ? scene.card : null;
     if (card.current) {
       const r = states[replay.referee];
       card.current.visible = shown !== null;

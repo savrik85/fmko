@@ -86,9 +86,9 @@ function scorers(events: ReplayEvent[], index: number, teamId: number): string {
 }
 
 /**
- * Televizní titulek přes spodek obrazu u gólu, karty, zranění a střídání: obličej na barvě klubu, jméno hráče,
- * pod ním světlý pruh s tím, co nápis nahoře neříká (kolikátý gól a střelci zápasu, druh zranění, kdo odchází),
- * a minuta.
+ * Televizní titulek přes spodek obrazu u gólu, karty, zranění a střídání: obličej na barvě klubu, jméno hráče
+ * a minuta. Pod jménem je světlý pruh s tím, co nápis nahoře neříká (kolikátý gól a střelci zápasu, druh zranění,
+ * kdo odchází); u karty není, tam není co dodat.
  */
 export function EventCard({ detail, events, index, event, attack }: GraphicsProps) {
   if (!event || attack || !["goal", "card", "injury", "substitution"].includes(event.type)) return null;
@@ -100,7 +100,7 @@ export function EventCard({ detail, events, index, event, attack }: GraphicsProp
   const note = event.type === "goal" ? `${goals}. gól v zápase`
     : event.type === "substitution" ? `↓ ${out}`
     : event.type === "injury" ? event.detail
-    : event.detail === "red" ? "vyloučen" : "napomenut";
+    : null;
   const board = event.type === "goal" ? [1, 2].map((teamId) => scorers(events, index, teamId)).filter(Boolean).join("   —   ") : null;
   return (
     <div className="absolute bottom-2 left-32 right-2 z-30 pointer-events-none">
@@ -112,10 +112,12 @@ export function EventCard({ detail, events, index, event, attack }: GraphicsProp
           <div className={`flex-1 flex items-center px-3 min-w-0 ${PANEL}`}>
             <span className="text-sm sm:text-xl font-[900] uppercase tracking-wide truncate">{event.type === "substitution" ? `↑ ${event.playerName}` : event.playerName}</span>
           </div>
-          <div className="flex items-center justify-between gap-3 px-3 h-4 sm:h-6 bg-white/95 text-gray-900 text-[9px] sm:text-xs font-bold uppercase tracking-wider">
-            <span className="truncate">{note}</span>
-            {board && <span className="hidden sm:block truncate normal-case tracking-normal font-semibold text-gray-600">{board}</span>}
-          </div>
+          {note && (
+            <div className="flex items-center justify-between gap-3 px-3 h-4 sm:h-6 bg-white/95 text-gray-900 text-[9px] sm:text-xs font-bold uppercase tracking-wider">
+              <span className="truncate">{note}</span>
+              {board && <span className="hidden sm:block truncate normal-case tracking-normal font-semibold text-gray-600">{board}</span>}
+            </div>
+          )}
         </div>
         <div className="shrink-0 flex items-center px-3 font-[900] text-sm sm:text-2xl tabular-nums" style={{ backgroundColor: color, color: onColor(color) }}>{event.minute}&apos;</div>
       </div>

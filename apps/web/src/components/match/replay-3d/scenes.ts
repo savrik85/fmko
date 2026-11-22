@@ -15,8 +15,14 @@ const JOG = 4.5;
 const CUT = 1e-3;
 /** Výška výskoku na hlavičku. */
 const HOP = 0.7;
-/** Jak dlouho drží jednotlivé kroky 2D záznam na „Živě“ (zaznam/page.tsx); scény jsou napsané na tyhle délky. */
-const PLAIN = 3.5, ATTACK = 3.5, GOAL = 6, CHANCE = 3, DRAMA = 4, PENALTY = 7;
+/**
+ * Délky scén (s). Rozehrání (`SETUP`) a útok (`ATTACK`) trvají přesně jako jejich krok záznamu (SCENE_MS
+ * v zaznam/page.tsx), protože na ně další část téže akce navazuje bez střihu. Ostatní scény jsou o kus delší než
+ * jejich krok, ať se v nich při střihu na další akci ještě něco děje.
+ */
+const SETUP = 2, ATTACK = 3.5, GOAL = 6, CHANCE = 3, DRAMA = 4, PENALTY = 7;
+/** Jak dlouho drží rozhodčí kartu nad hlavou. */
+const CARD_UP = 1.4;
 
 export type Side = "home" | "away";
 type Role = "GK" | "DEF" | "MID" | "FWD";
@@ -374,12 +380,16 @@ class Stage {
   }
 
   wait(seconds: number) { this.t += seconds; }
-  /** Od teď hráči bez úkolu drží tvar týmu podle míče (výkop: do hvizdu stojí, pak se hraje). */
-  release(shape: NonNullable<Stage["shape"]>) {
+  /**
+   * Od teď se hraje: tvar týmu drží všichni, i hráči, kteří měli úkol ze scénáře (kromě `busy`). Výkop: do hvizdu
+   * se stojí. Po zahozené šanci nebo kartě: scéna nekončí stojícím obrazem, hra běží dál.
+   */
+  release(shape: NonNullable<Stage["shape"]>, busy: number[] = []) {
     this.follow();
     this.shape = shape;
     this.keep = [];
     this.from = this.t;
+    this.scripted = new Set(busy);
   }
   /** Další rozestavení už počítá s jiným obsazením (druhé střídání v jedné akci). */
   recast(roster: Roster) { this.roster = roster; }
@@ -427,6 +437,8 @@ class Stage {
       const s = k1.t > k0.t ? clamp((t - k0.t) / (k1.t - k0.t), 0, 1) : 1;
       const at = { x: lerp(k0.x, k1.x, s), z: lerp(k0.z, k1.z, s) };
       for (const { slot, side } of idle) {
+        // Kdo ještě dobíhá pohyb ze scénáře, přidá se až po něm.
+        if (this.clip.tracks[slot.figure].at(-1)!.t > t - 0.5 + 1e-6) continue;
         const from = this.pos(slot.figure), to = shape(slot, side, at);
         // Kvůli metru se nikdo nehýbe (jinak by se celý tým pořád vrtěl).
         if (dist(from, to) < 1) continue;
@@ -735,7 +747,7 @@ export class Replay {
         const start = st.t;
         const carded = this.onPitch(st, events[card]);
         const color = events[card].detail === "red" ? "red" : "yellow";
-        return window(card, start, { focus: [carded], card: { at: this.showCard(st, carded, color), color } });
+        return window(card, start, { focus: [carded], card: { at: this.showCard(st, sideOf(events[card].teamId), carded, color), color } });
       }
       case "card": {
         // Karta bez faulu (protesty): hráč stojí proti rozhodčímu.
@@ -744,7 +756,7 @@ export class Replay {
         const at = inView(this.playSpot(other(side))(st.slot(carded), side, ball));
         this.open(st, ball, other(side), [[carded, at], [this.referee, { x: at.x + 2.6, z: at.z + 2 }]], [{ ...at, r: 3.5 }]);
         const color = e.detail === "red" ? "red" : "yellow";
-        return window(head, 0, { focus: [carded], card: { at: this.showCard(st, carded, color), color } });
+        return window(head, 0, { focus: [carded], card: { at: this.showCard(st, side, carded, color), color } });
       }
       case "injury": {
         const injured = this.onPitch(st, e);
@@ -763,14 +775,17 @@ export class Replay {
       // Rozstřel se kope na jednu bránu; kdo kopal, uložené není, jde některý hráč z pole.
       const kicker = st.pick(side, [], ["FWD", "MID", "DEF"]) ?? st.keeper(side);
       const shotResult = chanceResult(e);
-      this.penaltyKick(st, side, kicker, shotResult, 1.5, PLAIN - 1.5, -HALF_L, true);
+      this.penaltyKick(st, side, kicker, shotResult, 1.5, DRAMA - 1.5, -HALF_L, true);
       return window(head, 0, { focus: [kicker], result: shotResult });
     }
     throw new Error(`Událost ${e.type} v ${e.minute}. minutě scénu nemá`);
   }
 
-  /** Střela od nohy (nebo hlavy) střelce, u kterého míč právě je. Vrací čas, kdy míč doletí k bráně. */
-  private shoot(st: Stage, side: Side, shooter: number, result: ShotResult, after: number, gz: number, blocker: number | null): number {
+  /**
+   * Střela od nohy (nebo hlavy) střelce, u kterého míč právě je. Vrací čas, kdy míč doletí k bráně.
+   * S `playsOn` se po nevyužité šanci hraje dál (v rozstřelu ne): bránící tým vyráží od brány a útočící se vrací.
+   */
+  private shoot(st: Stage, side: Side, shooter: number, result: ShotResult, after: number, gz: number, blocker: number | null, playsOn: boolean): number {
     const s = Math.sign(gz), sgn = st.rng() < 0.5 ? -1 : 1, fly = 0.5;
     const gk = st.keeper(other(side));
     const split = st.t + fly;
@@ -820,6 +835,11 @@ export class Replay {
       st.ballTo(line(x), fly, { h: result === "over" ? 3.6 : 0.3 + st.rng(), arc: 0.4 });
       st.wait(fly);
       st.ballTo({ x: x * 1.2, z: gz + s * (result === "over" ? 10 : 7) }, 0.7, { arc: result === "over" ? 0.6 : 0 });
+    }
+    if (playsOn && result !== "goal") {
+      const spot = this.playSpot(other(side)), restart = { x: 0, z: gz * 0.3 };
+      st.t = split + 0.5;
+      st.release((slot, sd) => spot(slot, sd, restart), [gk]);
     }
     st.t = split + after;
     return split;
@@ -891,7 +911,7 @@ export class Replay {
       st.wait(0.4);
     }
     st.chase(this.referee, refereeSpot, 3, -3);
-    return this.shoot(st, side, shooter, result, result === "goal" ? GOAL : CHANCE, gz, marker);
+    return this.shoot(st, side, shooter, result, result === "goal" ? GOAL : CHANCE, gz, marker, true);
   }
 
   /** Roh, centr ze strany nebo přímý kop: střih na rozestavení ve vápně; hráč, který kope, se hlásí o míč. */
@@ -928,8 +948,8 @@ export class Replay {
       : sd === side ? inFront(gz, slot.base.v * 12, slot.role === "DEF" ? 34 : BOX_DEPTH + 4)
       : inFront(gz, slot.base.v * 7, slot.role === "FWD" ? 30 : 4 + slot.base.u * 14)), fixed,
       [{ ...target, r: 2.6 }, { ...ball, r: 3 }, { ...celebrationSpot(gz), r: 3.6 }]);
-    st.pose(taker, "armUp", 1, 1);
-    st.t = PLAIN;
+    st.pose(taker, "armUp", 0.9, 0.6);
+    st.t = SETUP;
   }
 
   /** Centr ze standardky na hlavu zakončujícího. */
@@ -948,7 +968,7 @@ export class Replay {
     }
     st.jump(header, 1.4);
     st.wait(1.4);
-    return this.shoot(st, side, header, result, result === "goal" ? GOAL : CHANCE, gz, marker);
+    return this.shoot(st, side, header, result, result === "goal" ? GOAL : CHANCE, gz, marker, true);
   }
 
   private directKick(st: Stage, side: Side, kicker: number, result: ShotResult): number {
@@ -959,7 +979,7 @@ export class Replay {
     st.wait(ATTACK - 1.2);
     st.go(kicker, toward(st.ball, goal, -0.5), 0.6);
     st.wait(0.7);
-    return this.shoot(st, side, kicker, result, result === "goal" ? GOAL : CHANCE, goal.z, inTheWay);
+    return this.shoot(st, side, kicker, result, result === "goal" ? GOAL : CHANCE, goal.z, inTheWay, true);
   }
 
   /** Penalta začíná faulem ve vápně: útočník padá, rozhodčí ukazuje na značku. */
@@ -995,7 +1015,7 @@ export class Replay {
     st.wait(lead - 1.2);
     st.go(kicker, toward(spot, { x: 0, z: gz }, -0.5), 0.7);
     st.wait(0.7);
-    return this.shoot(st, side, kicker, result, after, gz, null);
+    return this.shoot(st, side, kicker, result, after, gz, null, !shootout);
   }
 
   private foul(st: Stage, side: Side, fouler: number) {
@@ -1009,27 +1029,37 @@ export class Replay {
     // Rozhodčí dobíhá ze strany faulujícího, ať ke kartě nejde přes ležícího.
     st.go(this.referee, { x: contact.x + wing * 4, z: contact.z - fwd * 2.4 }, 1.6, 0.2);
     st.wait(1.2);
-    st.pose(victim, "down");
+    // Faulovaný vstane, než rozhodčí schová kartu.
+    st.pose(victim, "down", SETUP + CARD_UP - 0.4);
     st.ballTo({ x: contact.x - wing * 2.5, z: contact.z + fwd * 2.5 }, 0.6);
     st.go(fouler, { x: contact.x + wing * 2.6, z: contact.z + fwd * 0.6 }, 0.8, 0.3);
-    st.pose(this.referee, "armUp", 1.2, 0.6);
-    st.t = PLAIN;
+    st.pose(this.referee, "armUp", 0.6, 0.4);
+    st.t = SETUP;
   }
 
-  /** Rozhodčí dojde k hráči a zvedne kartu; vyloučený odchází ke střídačkám. Vrací čas, kdy je karta nahoře. */
-  private showCard(st: Stage, carded: number, color: CardColor): number {
+  /**
+   * Rozhodčí dojde k hráči týmu `side` a zvedne kartu (je vidět, dokud má ruku nahoře); vyloučený odchází ke
+   * střídačkám. Pak se hraje dál: týmy se rozbíhají na rozehrání. Vrací čas, kdy je karta nahoře.
+   */
+  private showCard(st: Stage, side: Side, carded: number, color: CardColor): number {
     const end = st.t + DRAMA;
-    const at = toward(st.pos(carded), st.pos(this.referee), 1.7);
+    const stood = st.pos(carded);
+    const at = toward(stood, st.pos(this.referee), 1.7);
     const walk = Math.max(0.9, dist(st.pos(this.referee), at) / 5);
     st.go(this.referee, at, walk);
     st.wait(walk);
     const shown = st.t;
-    st.pose(this.referee, "armUp");
+    st.pose(this.referee, "armUp", CARD_UP);
     if (color === "red") {
-      const from = st.pos(carded), exit = { x: BENCH_X - 2, z: from.z * 0.3 };
+      const exit = { x: BENCH_X - 2, z: stood.z * 0.3 };
       const seconds = end - shown - 0.8;
-      st.go(carded, toward(from, exit, Math.min(dist(from, exit), 2.4 * seconds)), seconds, 0.8);
+      st.go(carded, toward(stood, exit, Math.min(dist(stood, exit), 2.4 * seconds)), seconds, 0.8);
     }
+    st.wait(CARD_UP);
+    // Rozehrává soupeř potrestaného, o kus dál směrem k jeho bráně.
+    const spot = this.playSpot(other(side));
+    const restart = { x: st.ball.x, z: clamp(st.ball.z + attackSign(other(side)) * 12, -HALF_L + 8, HALF_L - 8) };
+    st.release((slot, sd) => spot(slot, sd, restart), color === "red" ? [carded] : []);
     st.t = end;
     return shown;
   }
@@ -1043,7 +1073,7 @@ export class Replay {
     st.pose(injured, "down", Infinity, 0.6);
     // Dva nejbližší spoluhráči k němu dojdou, každý z jiné strany (kdo je daleko, zůstane stát).
     st.outfield(side, [injured]).sort((a, b) => dist(st.pos(a), at) - dist(st.pos(b), at)).slice(0, 2).filter((m) => dist(st.pos(m), at) < 14)
-      .forEach((m, n) => st.go(m, { x: down.x + (n ? -1.7 : 1.9), z: down.z + (n ? 1.6 : -1.2) }, 2.4, 0.8));
+      .forEach((m, n) => st.go(m, { x: down.x + (n ? -1.7 : 1.9), z: down.z + (n ? 1.6 : -1.2) }, 3, 0.8));
     st.go(this.referee, { x: at.x - 1.4, z: at.z - 1.6 }, 1.5, 0.7);
     st.pose(this.referee, "armUp", 1.2, 1);
     st.t = DRAMA;
@@ -1052,7 +1082,7 @@ export class Replay {
   /** Střídání: střih k postranní čáře u střídaček, hráči si plácnou a vymění se. Vrací [přicházející, odcházející]. */
   private substitution(st: Stage, index: number): number[] {
     const { incoming, outgoing } = this.swaps.get(index)!;
-    const end = st.t + PLAIN;
+    const end = st.t + DRAMA;
     const z = (st.rng() - 0.5) * 6;
     const ball = { x: 3, z: z + 9 };
     const spot = this.playSpot("home");
@@ -1063,7 +1093,7 @@ export class Replay {
     st.pose(outgoing, "armUp", 0.6);
     st.pose(incoming, "armUp", 0.6);
     st.wait(0.4);
-    st.go(incoming, { x: BENCH_X + 8, z: z + 1.5 }, 1.5);
+    st.go(incoming, { x: BENCH_X + 8, z: z + 1.5 }, 2.2);
     st.go(outgoing, { x: BENCH_X - 2.5, z: z + 2 }, 1.2);
     st.t = end;
     return [incoming, outgoing];

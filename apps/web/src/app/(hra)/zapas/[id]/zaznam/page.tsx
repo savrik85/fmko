@@ -36,15 +36,16 @@ const TACTIC_LABEL: Record<string, string> = {
 };
 
 type Speed = "live" | "fast" | "instant";
-const SPEED_MS: Record<Speed, number> = { live: 3500, fast: 600, instant: 0 };
+/** Jak dlouho drží kroky 2D záznamu (ms). `plain` je čekání u běžné události, ostatní jsou kroky s nápisem přes hřiště. */
+const FLAT_MS = { kickoff: 3000, secondHalf: 2500, plain: 3500, attack: 3500, goal: 6000, chance: 3000, drama: 4000, penalty: 7000 };
+const FLAT_FAST_MS = { ...FLAT_MS, plain: 600, attack: 1800, drama: 2500, penalty: 4000 };
 /**
- * Jak dlouho drží kroky záznamu (ms). Ve 3D podle délky scén: výkop a gól (oslava a opakovaný záběr) déle,
- * ostatní kratší, ať obraz po odehrané akci nestojí.
+ * Ve 3D drží krok tak dlouho jako jeho scéna („Rychle“ ji přehrává dvakrát rychleji) a hned po něm přijde další,
+ * ať obraz po odehrané akci nestojí; události bez scény proběhnou okamžitě (`plain`). `setup` je rozehrání před
+ * šancí nebo kartou (roh, standardka, faul): útok nebo karta na ně navazují bez střihu, proto `setup` a `attack`
+ * musí sedět se SETUP a ATTACK ve scenes.ts. Gól končí opakovaným záběrem.
  */
-const STEP_MS = {
-  flat: { kickoff: 3000, secondHalf: 2500, goal: 6000, chance: 3000, drama: 4000, penalty: 7000 },
-  scene: { kickoff: 5000, secondHalf: 5000, goal: 8600, chance: 2200, drama: 3500, penalty: 4500 },
-};
+const SCENE_MS = { kickoff: 5000, secondHalf: 5000, plain: 0, setup: 2000, attack: 3500, goal: 8600, chance: 2200, drama: 3500, penalty: 4500 };
 /** Po skoku na akci stojí její první snímek, než se rozběhne (ať je vidět, kam se skočilo). */
 const CUE_MS = 700;
 
@@ -69,15 +70,17 @@ function useStepTimer(paused: boolean) {
     clearTimeout(s.id);
     s.left -= performance.now() - s.armedAt;
   }, [paused]);
-  useEffect(() => () => clearTimeout(slot.current?.id), []);
+  const cancel = () => { clearTimeout(slot.current?.id); slot.current = null; };
+  useEffect(() => cancel, []);
   /** Naplánuje krok a vrátí funkci, která ho zruší (pokud mezitím nebyl naplánován jiný). */
-  return (ms: number, fn: () => void) => {
-    clearTimeout(slot.current?.id);
+  const later = (ms: number, fn: () => void) => {
+    cancel();
     const s: NonNullable<typeof slot.current> = { fn, left: ms, armedAt: 0 };
     slot.current = s;
     arm();
-    return () => { if (slot.current === s) { clearTimeout(s.id); slot.current = null; } };
+    return () => { if (slot.current === s) cancel(); };
   };
+  return { later, cancel };
 }
 
 function ini(n: string) { return n.split(" ").map((w) => w[0]).filter(Boolean).slice(0, 2).join("").toUpperCase(); }
@@ -156,7 +159,7 @@ export default function MatchReplayPage() {
   const [htPause, setHtPause] = useState(false);
   const [htDone, setHtDone] = useState(false);
   const [kickoff, setKickoff] = useState<"1st" | "2nd" | null>(null);
-  const [flash, setFlash] = useState<"goal" | "card" | "chance" | "attacking" | "injury" | "penalty" | "substitution" | null>(null);
+  const [flash, setFlash] = useState<"goal" | "card" | "chance" | "attacking" | "injury" | "penalty" | null>(null);
   const [flashEvent, setFlashEvent] = useState<MatchEvent | null>(null);
   const animating = useRef(false);
   const [tick, setTick] = useState(0);
@@ -170,14 +173,15 @@ export default function MatchReplayPage() {
   // 3D záznam ukazuje jen důležité akce; události bez scény (držení míče, počasí…) v něm proběhnou hned.
   const can3d = !!match?.home_lineup_data && !!match?.away_lineup_data;
   const long3d = view3d && can3d;
-  const stepMs = STEP_MS[long3d ? "scene" : "flat"];
+  const sceneMs = (step: keyof typeof SCENE_MS) => SCENE_MS[step] / (speed === "fast" ? 2 : 1);
+  const stepMs = (step: keyof typeof FLAT_MS) => (long3d ? sceneMs(step) : (speed === "fast" ? FLAT_FAST_MS : FLAT_MS)[step]);
   // Zápas se rozběhne, až je 3D scéna načtená; jinak by výkop proběhl za načítacím kolečkem.
   const [ready3d, setReady3d] = useState(false);
   const started = useRef(false);
   const scened = useMemo(() => (match && can3d ? scenedEvents(match.events) : null), [match, can3d]);
   // Pauza a skok na předchozí/další akci.
   const [paused, setPaused] = useState(false);
-  const later = useStepTimer(paused);
+  const { later, cancel } = useStepTimer(paused);
   const starts = useMemo(() => (match ? actionStarts(match.events) : []), [match]);
   /** Po skoku: akce, jejíž první snímek chvíli stojí, než se rozběhne. */
   const [cue, setCue] = useState<number | null>(null);
@@ -187,6 +191,8 @@ export default function MatchReplayPage() {
     setHg(before.filter((e) => e.type === "goal" && e.teamId === 1).length);
     setAg(before.filter((e) => e.type === "goal" && e.teamId !== 1).length);
     setFlash(null); setFlashEvent(null); setKickoff(null); setHtPause(false); setFinished(false); setPaused(false);
+    // Po „Konec“ by se záznam hned zase přetočil na konec.
+    if (speed === "instant") setSpeed("live");
     // Skok rovnou do druhého poločasu přestávku nespouští.
     setHtDone((match.events[k]?.minute ?? 0) > 45);
     setIdx(k);
@@ -197,7 +203,8 @@ export default function MatchReplayPage() {
   };
   /** Událost, která se právě hraje (při „ŠANCE!“ ta, která teprve přijde; po skoku ta, na které záznam stojí). */
   const playing = cue ?? (flash === "attacking" ? idx : idx - 1);
-  const previousAction = starts.findLast((k) => k < (starts.findLast((x) => x <= playing) ?? 0));
+  // Po konci zápasu je „předchozí“ jeho poslední akce.
+  const previousAction = finished ? starts.at(-1) : starts.findLast((k) => k < (starts.findLast((x) => x <= playing) ?? 0));
   const nextAction = starts.find((k) => k > playing);
 
   useEffect(() => {
@@ -276,29 +283,32 @@ export default function MatchReplayPage() {
     started.current = true;
     setKickoff("1st");
     animating.current = true;
-    later(stepMs.kickoff, () => { setKickoff(null); animating.current = false; setTick((t) => t + 1); });
+    later(stepMs("kickoff"), () => { setKickoff(null); animating.current = false; setTick((t) => t + 1); });
   }, [!!match, long3d, ready3d]);
 
   // Kickoff 2nd half — auto-dismiss
   useEffect(() => {
     if (kickoff !== "2nd") return;
     animating.current = true;
-    return later(stepMs.secondHalf, () => { setKickoff(null); animating.current = false; setTick((t) => t + 1); });
+    return later(stepMs("secondHalf"), () => { setKickoff(null); animating.current = false; setTick((t) => t + 1); });
   }, [kickoff]);
 
   // Auto-advance
   useEffect(() => {
-    if (!match || !started.current || finished || htPause || animating.current) return;
+    if (!match || !started.current || finished || htPause) return;
+    // „Konec“ platí hned, i uprostřed rozehraného kroku.
+    if (speed === "instant") {
+      cancel();
+      animating.current = false;
+      setHg(match.home_score); setAg(match.away_score); setIdx(match.events.length); setFinished(true);
+      setKickoff(null); setFlash(null); setFlashEvent(null); setCue(null); setPaused(false); markSeen(); return;
+    }
+    if (animating.current) return;
     // Po skoku se akce rozběhne ve stejném kroku, ve kterém zmizí její stojící snímek.
     const afterJump = cue !== null;
     if (afterJump) setCue(null);
     const endStep = () => { setFlash(null); setFlashEvent(null); animating.current = false; setTick((t) => t + 1); };
     if (idx >= match.events.length) { setFinished(true); setHg(match.home_score); setAg(match.away_score); markSeen(); return; }
-    if (speed === "instant") {
-      let h = 0, a = 0;
-      for (const e of match.events) { if (e.type === "goal") { if (e.teamId === 1) h++; else a++; } }
-      setHg(h); setAg(a); setIdx(match.events.length); setFinished(true); setKickoff(null); setPaused(false); markSeen(); return;
-    }
     const next = match.events[idx];
     if (next.type === "special" && next.description.includes("Poločas")) { setIdx((i) => i + 1); return; }
     const prev = idx > 0 ? match.events[idx - 1]?.minute ?? 0 : 0;
@@ -310,8 +320,7 @@ export default function MatchReplayPage() {
       setFlashEvent(next);
       setFlash("penalty");
       setIdx((i) => i + 1);
-      const dur = speed === "fast" ? 4000 : stepMs.penalty;
-      later(dur, endStep);
+      later(stepMs("penalty"), endStep);
       return;
     }
 
@@ -321,8 +330,7 @@ export default function MatchReplayPage() {
     const isPenaltyOutcome = next.type === "chance"
       && (next.detail === "penalty_missed" || next.detail === "penalty_saved");
     const isShot = (next.type === "goal" || next.type === "chance") && !isPenaltyOutcome;
-    const isSubScene = view3d && scened !== null && next.type === "substitution";
-    const isDramatic = next.type === "card" || next.type === "injury" || isPenaltyOutcome || isSubScene;
+    const isDramatic = next.type === "card" || next.type === "injury" || isPenaltyOutcome;
 
     if (isShot || isDramatic) {
       animating.current = true;
@@ -330,34 +338,39 @@ export default function MatchReplayPage() {
       if (isShot) {
         setFlash("attacking");
         setFlashEvent(next);
-        const atkDur = speed === "fast" ? 1800 : 3500;
-        later(atkDur, () => {
+        later(stepMs("attack"), () => {
           if (next.type === "goal") {
             if (next.teamId === 1) setHg((s) => s + 1); else setAg((s) => s + 1);
             setFlash("goal");
             setIdx((i) => i + 1);
-            later(stepMs.goal, endStep);
+            later(stepMs("goal"), endStep);
           } else {
             setFlash("chance");
             setIdx((i) => i + 1);
-            later(stepMs.chance, endStep);
+            later(stepMs("chance"), endStep);
           }
         });
       } else {
         setFlashEvent(next);
-        setFlash(next.type === "card" ? "card" : isPenaltyOutcome ? "chance" : isSubScene ? "substitution" : "injury");
+        setFlash(next.type === "card" ? "card" : isPenaltyOutcome ? "chance" : "injury");
         setIdx((i) => i + 1);
-        const dur = speed === "fast" ? 2500 : stepMs.drama;
-        later(dur, endStep);
+        later(stepMs("drama"), endStep);
       }
       return;
     }
 
+    // Ve 3D mají vlastní krok i scény, které 2D záznam jen vypíše: rozehrání před šancí nebo kartou (roh, standardka,
+    // faul), střídání a kop v rozstřelu.
+    if (long3d && scened?.[idx]) {
+      animating.current = true;
+      setIdx((i) => i + 1);
+      later(sceneMs(next.type === "corner" || next.type === "freekick" || next.type === "foul" ? "setup" : "drama"), endStep);
+      return;
+    }
     // Po skoku se nečeká a událost se ukáže hned, ve stejném kroku jako zmizí stojící snímek.
     if (afterJump) { setIdx((i) => i + 1); return; }
-    // Čekání patří právě ukázané události (idx - 1); ve 3D se u události bez scény nečeká, ani po výkopu.
-    return later(view3d && scened && (idx === 0 || !scened[idx - 1]) ? 0 : SPEED_MS[speed], () => setIdx((i) => i + 1));
-  }, [match, idx, speed, finished, htPause, htDone, tick, markSeen, view3d, scened, cue]);
+    return later(stepMs("plain"), () => setIdx((i) => i + 1));
+  }, [match, idx, speed, finished, htPause, htDone, tick, markSeen, long3d, scened, cue]);
 
   if (loading) return <div className="flex items-center justify-center min-h-[60vh]"><Spinner /></div>;
   if (!match || match.events.length === 0) return (

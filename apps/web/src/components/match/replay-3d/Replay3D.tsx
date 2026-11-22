@@ -16,7 +16,7 @@ const Stadium3D = clientOnly(() => import("@/components/stadium/stadium-3d/Stadi
 export interface ReplayProgress {
   /** Kolik událostí už záznam ukázal. */
   idx: number;
-  flash: "goal" | "card" | "chance" | "attacking" | "injury" | "penalty" | "substitution" | null;
+  flash: "goal" | "card" | "chance" | "attacking" | "injury" | "penalty" | null;
   kickoff: "1st" | "2nd" | null;
   halfTime: boolean;
   finished: boolean;
@@ -95,17 +95,25 @@ export function Replay3D({ detail, events, progress, onReady }: {
   }, [venue, homeTeamId]);
 
   const [fullscreen, setFullscreen] = useState(false);
+  // Závěrečná scéna dohraje a obraz pod výsledkem zůstane stát.
+  const [over, setOver] = useState(false);
+  useEffect(() => {
+    if (!finished) return setOver(false);
+    const timer = setTimeout(() => setOver(true), (replay.finale().end * 1000) / (fast ? 2 : 1));
+    return () => clearTimeout(timer);
+  }, [finished, replay, fast]);
+  const finalScore = `${detail.home_score} : ${detail.away_score}${pens ? ` (pen. ${pens.home}:${pens.away})` : ""}`;
   const camBadge = useRef<HTMLDivElement>(null);
   const shade = useRef<HTMLDivElement>(null);
   // Výkop, přestávka a konec zápasu grafiku události nemají.
   const event = cue === null && (kickoff !== null || halfTime || finished) ? undefined : events[index];
   const attendance = detail.attendance as number | null;
   const graphics = { detail, events, index, event, attack, result: scene.result };
-  const fixedLabel = finished ? { text: "KONEC ZÁPASU", sub: `${detail.home_score} : ${detail.away_score}${pens ? ` (pen. ${pens.home}:${pens.away})` : ""}`, tone: "info" as const }
+  const fixedLabel = finished && !over ? { text: "KONEC ZÁPASU", sub: finalScore, tone: "info" as const }
     : kickoff ? { text: "VÝKOP", sub: kickoff === "2nd" ? "2. poločas" : undefined, tone: "info" as const } : undefined;
 
-  // Výkop a konec zápasu mají vlastní scénu, obraz ztmaví jen přestávka.
-  const curtain = halfTime ? { text: "POLOČAS", sub: `${homeGoals} : ${awayGoals}` } : null;
+  // Výkop a konec zápasu mají vlastní scénu; obraz ztmaví přestávka a výsledek po závěrečné scéně.
+  const curtain = halfTime ? { text: "POLOČAS", sub: `${homeGoals} : ${awayGoals}` } : over ? { text: "KONEC ZÁPASU", sub: finalScore } : null;
 
   return (
     <div className={fullscreen ? "fixed inset-0 z-50 bg-black" : "absolute inset-0 z-20 bg-black"}>
