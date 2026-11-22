@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   BROKEN_PLEDGE_SMS, COACH_REST_REASONS, MATCH_ATTEND_PLEDGE_TEXTS, MATCH_SKIP_PLEDGE_TEXTS, SKIP_PLEDGE_REASONS,
   coachGrantsRest, excusedByCoach, isClearPledge, matchPledgeOverrides, pickGroupLine, parseAttendancePledge, pledgeNote, pledgeOutcome, pledgePromptLines, pledgedAttendProb,
-  resolveTrainingPledge, trainingPledgeIntent, trainingScheduleText, type TrainingPledge,
+  pledgeDayFromText, resolveTrainingPledge, trainingPledgeIntent, trainingScheduleText, weekdaysNamedIn, type TrainingPledge,
 } from "./attendance-pledge";
 import { simulateAttendance, trainingWeekdays } from "../season/training";
 import { createRng } from "../generators/rng";
@@ -35,10 +35,11 @@ describe("slib na herní dny", () => {
       .toMatchObject({ from: "2026-11-24", once: true });
   });
 
-  it("den bez tréninku: nejbližší trénink po něm", () => {
-    // Středa: netrénuje se, nejbližší trénink je pátek.
-    expect(resolveTrainingPledge({ event: "training", intent: "attend", when: "wed" }, { ...base, gameDay: "2026-11-17" }))
-      .toMatchObject({ from: "2026-11-20" });
+  it("den bez tréninku: slib se nezapíše na jiný den", () => {
+    // Středa: netrénuje se. Dřív šel slib na páteční trénink a 📝 ukázala jiný den, než hráč řekl.
+    expect(resolveTrainingPledge({ event: "training", intent: "attend", when: "wed" }, { ...base, gameDay: "2026-11-17" })).toBeNull();
+    // V den zápasu se netrénuje: „v pátek dorazím“ při pátečním zápase taky nic.
+    expect(resolveTrainingPledge({ event: "training", intent: "attend", when: "fri" }, { ...base, matchDays: new Set(["2026-11-20"]) })).toBeNull();
   });
 
   it("„na trénink tenhle týden nečekejte“: všechny tréninky do týdne", () => {
@@ -77,6 +78,67 @@ describe("slib na herní dny", () => {
     expect(pledgeOutcome(week, "2026-11-20", false)).toBe("broken");
     const skip = resolveTrainingPledge({ event: "training", intent: "skip", when: "next" }, base)!;
     expect(pledgeOutcome(skip, "2026-11-20", true)).toBe("kept");
+  });
+});
+
+// Jitona trénuje v neděli, ve středu, v pátek a v sobotu (E2E 22. 11.). V sobotu 28. 11. pohár,
+// v pondělí 30. 11. liga: v ty dny se netrénuje.
+const JITONA_DAYS = [0, 3, 5, 6];
+
+describe("den jmenovaný v textu má přednost (E2E 22. 11.)", () => {
+  it("Beran v pátek 27. 11.: „Ve středu jsem tam“ je středa 2. 12., ne neděle 29. 11.", () => {
+    const raw = pledgeDayFromText({ event: "training", intent: "attend", when: "next" }, {
+      replyBody: "Ve středu jsem tam, trenére! Standardky mi jdou 👍",
+      coachText: "Honzo, dorazíš ve středu na trénink? Potřebuju tě na standardky.", gameDay: "2026-11-27",
+    })!;
+    expect(raw.when).toBe("wed");
+    expect(resolveTrainingPledge(raw, { ...base, gameDay: "2026-11-27", trainingDays: JITONA_DAYS, matchDays: new Set(["2026-11-28"]) }))
+      .toMatchObject({ from: "2026-12-02", until: "2026-12-02", once: true });
+  });
+
+  it("Hovorka v neděli 29. 11.: „Dorazím v pátek!“ je pátek 4. 12., ne středa 2. 12.", () => {
+    const raw = pledgeDayFromText({ event: "training", intent: "attend", when: "next" }, {
+      replyBody: "Dorazím v pátek! Standardky budou dobré, jsem připravenej.",
+      coachText: "Kubo, dorazíš v pátek na trénink? Budeme dělat standardky.", gameDay: "2026-11-29",
+    })!;
+    expect(resolveTrainingPledge(raw, { ...base, gameDay: "2026-11-29", trainingDays: JITONA_DAYS, matchDays: new Set(["2026-11-30"]) }))
+      .toMatchObject({ from: "2026-12-04" });
+  });
+
+  it("model vrátí jiný den, než hráč napsal: platí text", () => {
+    expect(pledgeDayFromText({ event: "training", intent: "attend", when: "sun" }, {
+      replyBody: "Ve středu jsem tam, trenére!", coachText: "", gameDay: "2026-11-27",
+    })).toMatchObject({ when: "wed" });
+  });
+
+  it("hráč den nejmenuje: platí den z otázky trenéra", () => {
+    expect(pledgeDayFromText({ event: "training", intent: "attend", when: "next" }, {
+      replyBody: "Jasně, budu tam!", coachText: "Kubo, dorazíš v pátek na trénink? Budeme dělat standardky.", gameDay: "2026-11-29",
+    })).toMatchObject({ when: "fri" });
+  });
+
+  it("obecné „přijdu na trénink“ bez dne: nejbližší trénink, jak řekl model", () => {
+    const raw = { event: "training", intent: "attend", when: "next" } as const;
+    expect(pledgeDayFromText(raw, { replyBody: "Jasně, na trénink přijdu.", coachText: "Přijdeš na trénink?", gameDay: "2026-11-29" })).toEqual(raw);
+  });
+
+  it("jmenovaný den bez tréninku: slib nikam jinam (úterý u Jitony)", () => {
+    const raw = pledgeDayFromText({ event: "training", intent: "attend", when: "next" }, {
+      replyBody: "V úterý dorazím, trenére.", coachText: "", gameDay: "2026-11-29",
+    })!;
+    expect(resolveTrainingPledge(raw, { ...base, gameDay: "2026-11-29", trainingDays: JITONA_DAYS })).toBeNull();
+  });
+
+  it("víc dnů a model žádný z nich: nejasné; „do pátku“ je lhůta, ne den; „zítra“ podle herního dne", () => {
+    expect(pledgeDayFromText({ event: "training", intent: "attend", when: "next" }, {
+      replyBody: "Ve středu nemůžu, ale v pátek dorazím.", coachText: "", gameDay: "2026-11-29",
+    })).toBeNull();
+    expect(pledgeDayFromText({ event: "training", intent: "attend", when: "fri" }, {
+      replyBody: "Ve středu nemůžu, ale v pátek dorazím.", coachText: "", gameDay: "2026-11-29",
+    })).toMatchObject({ when: "fri" });
+    expect(weekdaysNamedIn("Do pátku to mám nabitý, nedělej si starosti, uprostřed týdne nic.", "2026-11-29")).toEqual(new Set());
+    expect(weekdaysNamedIn("Zítra jsem tam.", "2026-11-29")).toEqual(new Set(["mon"]));
+    expect(weekdaysNamedIn("Na páteční trénink ale nepřijdu.", "2026-11-29")).toEqual(new Set(["fri"]));
   });
 });
 

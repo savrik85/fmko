@@ -294,15 +294,55 @@ export function resolveTrainingPledge(
   if (candidates.length === 0) return null;
   const base = { intent: raw.intent, at: o.at, convId: o.convId };
   if (raw.when === "week") return { ...base, from: candidates[0], until: candidates[candidates.length - 1], once: false };
-  let day = candidates[0];
-  if (raw.when !== "next") {
-    // „V pátek dorazím“: nejbližší pátek, a když se v pátek netrénuje, nejbližší trénink po něm.
-    const wanted = WEEKDAY_KEYS.indexOf(raw.when);
-    let target = shiftDay(o.gameDay, 1);
-    while (weekdayOf(target) !== wanted) target = shiftDay(target, 1);
-    day = candidates.find((d) => d >= target) ?? candidates[0];
-  }
+  // „V pátek dorazím“: nejbližší pátek. Když se v pátek netrénuje (nebo se hraje), slib nic
+  // neslibuje: dřív šel na nejbližší trénink po něm a 📝 ukázala jiný den, než hráč řekl.
+  const wanted = raw.when === "next" ? null : WEEKDAY_KEYS.indexOf(raw.when);
+  const day = wanted === null ? candidates[0] : candidates.find((d) => weekdayOf(d) === wanted);
+  if (!day) return null;
   return { ...base, from: day, until: day, once: true };
+}
+
+/**
+ * Den v týdnu jmenovaný v textu: „ve středu“, „v pátek“, „na páteční trénink“, „zítra“ (den po
+ * `gameDay`). „Do pátku“ je lhůta, ne den slibu, takže se nepočítá.
+ */
+const NAMED_DAY_RE = /(\bdo\s)?\b(nedel[ei]|nedelni\w*|pondel\w*|uter(?:y|ka|ku|ni\w*)|stred(?:a|u|y|e|ecni\w*)|ctvrt(?:ek|ka|ku|ecni\w*)|pat(?:ek|ku|ka|ecni\w*)|sobot(?:a|u|y|e|ni\w*)|zitra|zitrek|zitrejsi\w*|pozitri)\b/g;
+const NAMED_DAY_PREFIXES: ReadonlyArray<[string, WeekdayKey]> = [
+  ["nedel", "sun"], ["pondel", "mon"], ["uter", "tue"], ["stred", "wed"], ["ctvrt", "thu"], ["pat", "fri"], ["sobot", "sat"],
+];
+
+export function weekdaysNamedIn(text: string, gameDay: string): Set<WeekdayKey> {
+  const plain = text.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
+  const days = new Set<WeekdayKey>();
+  for (const m of plain.matchAll(NAMED_DAY_RE)) {
+    if (m[1]) continue;
+    const word = m[2];
+    const relative = word.startsWith("pozitri") ? 2 : word.startsWith("zitr") ? 1 : 0;
+    const key = relative > 0 ? WEEKDAY_KEYS[weekdayOf(shiftDay(gameDay, relative))] : NAMED_DAY_PREFIXES.find(([p]) => word.startsWith(p))?.[1];
+    if (key) days.add(key);
+  }
+  return days;
+}
+
+/**
+ * Den slibu tréninku podle toho, co hráč napsal (E2E 22. 11.: Beran „Ve středu jsem tam“ dostal
+ * 📝 na neděli, Hovorka „Dorazím v pátek!“ na středu, model vrátil nejbližší trénink). Den
+ * jmenovaný v odpovědi hráče má přednost před dnem od modelu; když hráč žádný den nejmenuje,
+ * platí den z otázky trenéra („dorazíš ve středu?“ – „Jo, budu tam“). Hráč jmenuje víc dnů
+ * a model žádný z nich: nejasné, null (slib se nezapíše). Lhůtu „do týdne“ den nepřepíše.
+ */
+export function pledgeDayFromText(
+  raw: RawAttendancePledge, o: { replyBody: string; coachText: string; gameDay: string },
+): RawAttendancePledge | null {
+  if (raw.event !== "training" || raw.when === "week") return raw;
+  const inReply = weekdaysNamedIn(o.replyBody, o.gameDay);
+  if (inReply.size > 0) {
+    if (raw.when !== "next" && inReply.has(raw.when)) return raw;
+    return inReply.size === 1 ? { ...raw, when: [...inReply][0] } : null;
+  }
+  const inQuestion = weekdaysNamedIn(o.coachText, o.gameDay);
+  if (inQuestion.size === 1) return { ...raw, when: [...inQuestion][0] };
+  return raw;
 }
 
 /** Platí slib pro trénink v herní den `day`? Vrací záměr, nebo undefined. */
@@ -579,10 +619,19 @@ export async function recordAttendancePledge(
     const at = now.toISOString();
     let stored: TrainingPledge | MatchPledge | null = null;
     if (o.pledge.event === "training") {
-      const resolved = resolveTrainingPledge(o.pledge, {
+      // Den, který hráč (nebo trenér v otázce) jmenoval, platí přednostně před dnem od modelu.
+      const pledge = o.replyBody !== undefined ? pledgeDayFromText(o.pledge, { replyBody: o.replyBody, coachText, gameDay }) : o.pledge;
+      if (!pledge) {
+        logger.info({ module: M, teamId: o.clubTeamId }, `slib tréninku hráče ${o.playerId} jmenuje víc dnů, nezapisuje se`);
+        return null;
+      }
+      const resolved = resolveTrainingPledge(pledge, {
         gameDay, trainingDays: await loadTrainingDays(db, p.team_id), matchDays: await loadMatchDays(db, p.team_id, gameDay), at, convId: o.convId,
       });
-      if (!resolved) return null;
+      if (!resolved) {
+        logger.info({ module: M, teamId: o.clubTeamId }, `slib tréninku hráče ${o.playerId} (${pledge.when}): v ten den se netrénuje, nezapisuje se`);
+        return null;
+      }
       // Zraněný na trénink nechodí: slib by se nikdy nevyhodnotil (ani „přijdu“, ani „nepřijdu“).
       if (await injuredOn(db, o.playerId, gameDay, resolved.from)) {
         logger.info({ module: M, teamId: o.clubTeamId }, `hráč ${o.playerId} je ${resolved.from} zraněný, slib tréninku se nezapisuje`);
