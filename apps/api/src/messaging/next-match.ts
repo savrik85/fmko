@@ -23,6 +23,25 @@ export function pragueTomorrow(now: Date): string {
   return d.toISOString().slice(0, 10);
 }
 
+/** Pražský včerejšek jako YYYY-MM-DD (předchozí den v kalendáři). */
+function pragueYesterday(now: Date): string {
+  const d = new Date(`${pragueDay(now)}T12:00:00Z`);
+  d.setUTCDate(d.getUTCDate() - 1);
+  return d.toISOString().slice(0, 10);
+}
+
+/**
+ * Kdy se odehrál zápas: „dnes, středa 25. 11.“, „včera, úterý 24. 11.“, jinak „neděle 22. 11.“.
+ * Bez dne si model domýšlel (lokální E2E 22. 11.: „včera jsme dali pět gólů“ o dnešním kole).
+ */
+export function playedDayLabel(at: Date, now: Date = new Date()): string {
+  const weekday = new Intl.DateTimeFormat("cs-CZ", { timeZone: TZ, weekday: "long" }).format(at);
+  const date = new Intl.DateTimeFormat("cs-CZ", { timeZone: TZ, day: "numeric", month: "numeric" }).format(at);
+  const day = pragueDay(at);
+  const prefix = day === pragueDay(now) ? "dnes, " : day === pragueYesterday(now) ? "včera, " : "";
+  return `${prefix}${weekday} ${date}`;
+}
+
 /** „DNES (čtvrtek 29. 10.)“, „zítra (čtvrtek 29. 10.)“, jinak „čtvrtek 29. 10.“ */
 export function matchDayLabel(at: Date, now: Date): string {
   const weekday = new Intl.DateTimeFormat("cs-CZ", { timeZone: TZ, weekday: "long" }).format(at);

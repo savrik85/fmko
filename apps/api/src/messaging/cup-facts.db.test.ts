@@ -88,7 +88,8 @@ describe("hráč zná pohár", () => {
     expect(team.previousMatchResult).toBe("mistrovský zápas: prohra 0:2 doma s FK Volary");
     const p = loadPlayerSnapshot(row, await loadLastMatchContext(db, "ckyne"));
     const prompt = buildSystemPrompt(p, team);
-    expect(prompt).toContain("Poslední zápas: pohárový zápas (Okresní pohár, 1. kolo)");
+    // S dnem zápasu (next-match.ts playedDayLabel), ať model neříká „včera“ o dnešku.
+    expect(prompt).toMatch(/Poslední zápas \(hrál se [^)]+\): pohárový zápas \(Okresní pohár, 1\. kolo\)/);
     expect(buildLastMatchFacts(p, team.lastMatchResult)).toContain("V posledním zápase jsi nastoupil, pohárový zápas");
     expect(buildPreviousMatchFacts(p, team.previousMatchResult)).toContain("V tom předchozím mistrovském zápase jsi NEHRÁL");
     expect(prompt).toContain("Kromě mistrovských zápasů se hraje i pohár");

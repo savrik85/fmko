@@ -14,6 +14,7 @@ vi.mock("../stats/standings", () => ({
 import { loadTeamContext } from "./ai-player-spawn";
 import { buildSystemPrompt, playingForFact } from "./ai-player-chat";
 import type { PlayerSnapshot } from "./ai-player-scenarios";
+import { playedDayLabel } from "./next-match";
 
 let miniflare: Miniflare;
 let db: D1Database;
@@ -100,6 +101,20 @@ describe("loadTeamContext podle týmu hráče", () => {
       lastMatchResult: "remíza 2:2 doma s SK Lhota", leaguePosition: 7, squadNames: ["Hugo Hostitel"],
     });
     expect(ctx.nextMatch).toContain("SK Lhota");
+  });
+
+  // Lokální E2E 22. 11. (Rohde, Kabina): „včera jsme přece dali pět gólů“ o dnešním kole. Výsledek
+  // posledního zápasu v promptu neměl den, model si ho domyslel.
+  it("u posledního zápasu je den, kdy se hrál", async () => {
+    expect((await loadTeamContext(db, "club")).lastMatchWhen).toBe("neděle 8. 11.");
+    expect((await loadTeamContext(db, "club", "club-u21")).lastMatchWhen).toBe("pondělí 9. 11.");
+    const now = new Date("2026-11-09T12:00:00Z");
+    expect(playedDayLabel(new Date("2026-11-09T17:00:00Z"), now)).toBe("dnes, pondělí 9. 11.");
+    expect(playedDayLabel(new Date("2026-11-08T17:00:00Z"), now)).toBe("včera, neděle 8. 11.");
+    // Těsně po půlnoci v Praze je zápas z 23:30 UTC předchozího dne už „včera“.
+    expect(playedDayLabel(new Date("2026-11-08T17:00:00Z"), new Date("2026-11-08T23:30:00Z"))).toBe("včera, neděle 8. 11.");
+    const prompt = buildSystemPrompt(player, { teamName: "TJ Dvory", lastMatchResult: "výhra 5:0 doma s SK Lhota", lastMatchWhen: "dnes, středa 25. 11." });
+    expect(prompt).toContain("Poslední zápas (hrál se dnes, středa 25. 11.): výhra 5:0 doma s SK Lhota.");
   });
 
   it("neznámý tým hráče nic nerozbije, zůstane kontext klubu", async () => {
