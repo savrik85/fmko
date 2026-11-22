@@ -17,7 +17,7 @@ import { BEZ_ZNALOSTI, HLAVICKA_ZNALOSTI, type RadekZnalosti } from "../incident
 import { generateText } from "../lib/ai-provider";
 import {
   GeminiUnavailableError, OTHER_LIFE_EVENTS_BAN, ZAKAZ_ZIVOTNICH_SITUACI, buildSystemPrompt, evaluateResolution, generateFollowUpMessage, generateInitialMessage, generateReply,
-  generateSquadGroupReaction, generateUnrestReply, popisZdravi,
+  coachAddressForm, generateSquadGroupReaction, generateUnrestReply, popisZdravi,
 } from "./ai-player-chat";
 import { getScenarioById } from "./ai-player-scenarios";
 import { complainsAboutWaking } from "./chat-kontext";
@@ -115,6 +115,27 @@ const znalost = (o: Partial<RadekZnalosti> = {}): RadekZnalosti => ({
   incidentId: "inc-1", role: "kadr", fact: "Ze skladu zmizelo vybavení: Dresy.", vyslech: null,
   kategorie: "kradez", zavaznost: 1, den: "2027-01-02", predDny: 3, stav: "otevreny", vysledek: null,
   odhalen: false, pachatel: null, pachatelJeOn: false, ...o,
+});
+
+// Lokální E2E 22. 11.: tentýž hráč trenérovi jednou tykal a jednou vykal („Jo, trenére, to byla
+// moje práce. Promiňte to.“, „Trenére… Promiň, byl jsem fakt unavenej.“). Prompt oslovení neurčoval.
+describe("tykání a vykání trenérovi", () => {
+  it("každý hráč jednotně: mladý vyká, dospělý většinou tyká, stejně pokaždé", () => {
+    expect(coachAddressForm({ id: "p-1", age: 18 })).toBe("vy");
+    expect(coachAddressForm({ id: "p-1", age: 31 })).toBe(coachAddressForm({ id: "p-1", age: 31 }));
+    const adults = Array.from({ length: 200 }, (_, i) => coachAddressForm({ id: `p-${i}`, age: 30 }));
+    const formal = adults.filter((f) => f === "vy").length;
+    expect(formal).toBeGreaterThan(20);
+    expect(formal).toBeLessThan(100);
+  });
+
+  it("prompt to řekne a zakáže střídání", () => {
+    const young = buildSystemPrompt(hrac({ age: 18 }), tym, kdy(2, 18));
+    expect(young).toContain("Trenérovi VYKÁŠ");
+    expect(young).toContain("Nestřídej");
+    const id = Array.from({ length: 50 }, (_, i) => `p-${i}`).find((x) => coachAddressForm({ id: x, age: 30 }) === "ty")!;
+    expect(buildSystemPrompt(hrac({ id, age: 30 }), tym, kdy(2, 18))).toContain("Trenérovi TYKÁŠ");
+  });
 });
 
 describe("cizinec píše lámaně, Slovák slovensky", () => {

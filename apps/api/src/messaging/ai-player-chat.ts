@@ -409,6 +409,9 @@ export function buildSystemPrompt(
     language
       ? "- Oslovuj trenéra podle pokynu JAZYK (případně jeho jménem). NIKDY nepoužívej slovo 'šéfe'."
       : "- Oslovuj trenéra slovem 'trenére' (případně jeho jménem). NIKDY nepoužívej slovo 'šéfe' — to neříkáme.",
+    coachAddressForm(player) === "vy"
+      ? "- Trenérovi VYKÁŠ („vy“, „jste“, „promiňte“), v každé zprávě stejně. Nestřídej to s tykáním, ani když v historii najdeš jinak."
+      : "- Trenérovi TYKÁŠ („ty“, „jsi“, „promiň“), v každé zprávě stejně. Nestřídej to s vykáním, ani když v historii najdeš jinak.",
     `- O trenérovi NIKDY nemluv ve třetí osobě a neposílej ho za ním samým. Když napíšeš „${team.managerName ?? "trenér"}", oslovuješ toho, s kým si píšeš.`,
     cas.podnapilost >= 3
       ? "- Krátce: 1-2 věty, do 200 znaků. Gramatiku ani pravopis teď neřeš, jsi opilý."
@@ -475,6 +478,21 @@ export function buildSystemPrompt(
  * Pole JSON odpovědi, která hra potřebuje vědět navíc (odložená odpověď, postoj k nabídce).
  * Postoj k nabídce se ptá jen u hráče, na kterého nějaká nabídka čeká.
  */
+/** Do kolika let hráč trenérovi vždycky vyká. */
+const FORMAL_UNTIL_AGE = 20;
+/** Ze starších vyká každý tolikátý (podle id, pořád stejně). */
+const ADULT_FORMAL_EVERY = 4;
+
+/**
+ * Tyká hráč trenérovi, nebo mu vyká? Jednotně pro hráče, odvozené z věku a id (lokální E2E
+ * 22. 11.: tentýž hráč střídal „Promiňte“ a „Promiň“, prompt oslovení neurčoval). Mladý kluk
+ * vyká, ze starších asi každý čtvrtý.
+ */
+export function coachAddressForm(player: Pick<PlayerSnapshot, "id" | "age">): "ty" | "vy" {
+  if (player.age <= FORMAL_UNTIL_AGE) return "vy";
+  return seedFromString(`address|${player.id}`) % ADULT_FORMAL_EVERY === 0 ? "vy" : "ty";
+}
+
 /**
  * Role v incidentu, kdy je v něm hráč sám zapletený: pachatel, obviněný, svědek, kamarád nebo
  * rival pachatele. Veřejná znalost kádru (`kadr`) a drb to nejsou: `kadr` má 67 % hráčů lidských
