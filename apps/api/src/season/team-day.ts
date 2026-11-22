@@ -186,7 +186,7 @@ export async function processTeamDay(
             if (!alreadySent) {
               const { absenceSeedForMatch } = await import("../lib/seed");
               const { generateAbsences } = await import("../events/absence");
-              const { generateAttendanceMessage } = await import("../messaging/message-generator");
+              const { dayBeforeSquadLines } = await import("../messaging/message-generator");
               const matchRow = await env.DB.prepare(
                 "SELECT m.home_team_id, m.away_team_id, t1.name as home_name, t2.name as away_name FROM matches m JOIN teams t1 ON m.home_team_id = t1.id JOIN teams t2 ON m.away_team_id = t2.id WHERE m.calendar_id = ? AND (m.home_team_id = ? OR m.away_team_id = ?) LIMIT 1"
               ).bind(tomorrowMatch.id, teamId, teamId).first<Record<string, unknown>>().catch((e) => { logger.warn({ module: "daily-tick" }, "tomorrow match row", e); return null; });
@@ -240,20 +240,27 @@ export async function processTeamDay(
                 .bind(crypto.randomUUID(), matchConvId, teamId, `📋 Zítra hrajeme proti ${opponentName}! Kdo může?`, JSON.stringify({ type: "match_announce", calendarId: tomorrowMatch.id }), 0)
                 .run().catch((e) => logger.warn({ module: "daily-tick" }, "match announce msg", e));
               let msgCount = 1;
-              // Věty, které v kabině už padly: dva hráči nenapíšou doslova totéž (E2E 22. 11.).
-              const usedLines = new Set<string>([...pledgeTexts.values(), ...dayBeforeAbsences.map((a) => a.smsText)]);
-              for (const row of squadRows.results) {
+              // Věty v kabině: dva hráči nenapíšou doslova totéž, ani dvě omluvenky (E2E 22. 11., final3).
+              // Los textů je stejný jako dřív, kdo je omluvený, rozhodlo `generateAbsences` výš.
+              const attendees = squadRows.results.map((row) => {
                 const pid = row.id as string;
                 const available = !absentIds.has(pid);
                 const absence = available ? undefined : dayBeforeAbsences.find((a) => squadRows.results[a.playerIndex]?.id === pid);
-                const lc = (() => { try { return JSON.parse(row.life_context as string); } catch { return {}; } })();
-                const ownText = pledgeTexts.has(pid) || !!absence;
-                const msg = generateAttendanceMessage(`${row.first_name} ${row.last_name}`, available, lc.condition ?? 100, absRng as any, ownText ? undefined : usedLines);
+                const lc = (() => {
+                  try { return JSON.parse(row.life_context as string) as { condition?: number }; } catch (e) {
+                    logger.warn({ module: "daily-tick" }, `life_context hráče ${pid}`, e);
+                    return {} as { condition?: number };
+                  }
+                })();
+                return { pid, row, available, name: `${row.first_name} ${row.last_name}`, condition: lc.condition ?? 100, ownText: pledgeTexts.get(pid) ?? absence?.smsText };
+              });
+              const lines = dayBeforeSquadLines(attendees, absRng as any);
+              for (const [i, a] of attendees.entries()) {
                 await env.DB.prepare(
                   "INSERT INTO messages (id, conversation_id, sender_type, sender_id, sender_name, body, metadata, sent_at) VALUES (?, ?, 'player', ?, ?, ?, ?, datetime('now', '+' || ? || ' seconds'))"
-                ).bind(crypto.randomUUID(), matchConvId, pid, msg.senderName,
-                  brokenCzech(pledgeTexts.get(pid) ?? (absence ? absence.smsText : msg.body), row.nationality as string | null, `${pid}|${tomorrowMatch.id}`),
-                  JSON.stringify({ type: "attendance", response: available ? "yes" : "no", timing: "day_before", calendarId: tomorrowMatch.id }), msgCount * 10,
+                ).bind(crypto.randomUUID(), matchConvId, a.pid, a.name,
+                  brokenCzech(lines[i], a.row.nationality as string | null, `${a.pid}|${tomorrowMatch.id}`),
+                  JSON.stringify({ type: "attendance", response: a.available ? "yes" : "no", timing: "day_before", calendarId: tomorrowMatch.id }), msgCount * 10,
                 ).run().catch((e) => logger.warn({ module: "daily-tick" }, "day_before attendance msg", e));
                 msgCount++;
               }

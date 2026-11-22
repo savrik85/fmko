@@ -234,3 +234,27 @@ describe("práce u sponzora (F8)", () => {
     expect(absences(atSponsor)).toBeLessThan(absences(shiftWorker));
   });
 });
+
+// final3 Chyba 6 (ticky 2. a 4. 12.): v kabině Jitony dvakrát „Musím do práce, nemůžu přijít“.
+// Hráč bez povolání dostal vždy tuhle jednu větu. Náhradní věta se vybírá bez losu, takže kdo
+// je omluvený, zůstává stejné jako dřív (indexy z kódu před opravou).
+describe("výmluva do práce bez povolání", () => {
+  const BIG: PlayerForAbsence[] = Array.from({ length: 35 }, (_, i) => ({
+    firstName: "Hráč", lastName: `Č${i}`, age: 20 + (i % 18), occupation: i % 4 === 0 ? "Zedník" : "",
+    discipline: 5 + (i % 7) * 4, patriotism: 30, alcohol: 30, temper: 50, morale: 40, stamina: 70, injuryProneness: 30, commuteKm: 0,
+  }));
+  const run = (seed: number) => generateAbsences(createRng(seed), BIG, { timing: "day_before", district: "Prachatice" });
+
+  it("tři hráči bez povolání v jedné kabině: tři různé věty, omluvení stejní", () => {
+    const r = run(22);
+    expect(r.map((a) => a.playerIndex)).toEqual([9, 23, 31]);
+    expect(new Set(r.map((a) => a.smsText)).size).toBe(3);
+    expect(r[0].smsText).toBe("Musím do práce, nemůžu přijít");
+  });
+
+  it("los omluvených se nemění", () => {
+    expect(run(11).map((a) => a.playerIndex)).toEqual([6, 29]);
+    expect(run(44).map((a) => a.playerIndex)).toEqual([2, 9, 11, 17, 27, 30]);
+    expect(run(55).map((a) => a.playerIndex)).toEqual([4, 7, 9, 11, 15, 20, 22]);
+  });
+});

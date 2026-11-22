@@ -4,10 +4,14 @@
  */
 
 import type { Rng } from "../generators/rng";
+import { seedFromString } from "../lib/seed";
 
 // ── Docházka před zápasem (skupinový chat "Kabina") ──
+//
+// Pooly pokryjí i 35členný kádr bez opakování (final3, ticky 2. a 4. 12.: FC AppYours Čkyně
+// s 31 hráči měla v kabině jen 24 různých vět, „Jo, dorazím i s kopačkama“ 3×).
 
-const ATTENDANCE_YES = [
+export const ATTENDANCE_YES: readonly string[] = [
   "Jsem tam! 💪",
   "Počítejte se mnou",
   "Dorazím",
@@ -28,17 +32,43 @@ const ATTENDANCE_YES = [
   "Beru, budu tam",
   "Jo, dorazím i s kopačkama",
   "Tady, jsem připravenej",
+  "Jsem v pohodě, přijdu",
+  "Budu tam o půl hodiny dřív",
+  "Přijdu, kopačky už mám v tašce",
+  "Platí, dorazím",
+  "Jo, s tím počítám",
+  "Jasně, tohle si nenechám ujít",
+  "Budu, zítra to rozbalíme 🔥",
+  "Přijedu i se švagrem, bude fandit",
+  "Jdu, už se nemůžu dočkat",
+  "Budu tam, hlava je v pohodě",
+  "Jo, přijdu i na rozcvičku",
+  "Přijdu, tentokrát to dáme",
+  "Zítra jsem k mání",
+  "Počítám s tím, budu",
+  "Dorazím autem, můžu někoho svézt",
+  "Budu, ať to stojí za to 💪",
+  "Přijdu, ať nás je dost",
+  "Dorazím, máte mě",
+  "Jsem nachystanej, budu tam",
+  "Zítra nechybím",
 ];
 
-const ATTENDANCE_LATE = [
+export const ATTENDANCE_LATE: readonly string[] = [
   "Přijdu pozdě, mám směnu do 14:00",
   "Dorazím až na druhej poločas, sorry",
   "Budu tam kolem 15:30, jde to?",
   "Přijdu o trochu pozdějc, mám doktora",
   "Přiběhnu rovnou z roboty, možná 10 min zpoždění",
+  "Dorazím trochu později, vezu babičku z nemocnice",
+  "Přijedu na poslední chvíli, v práci končím v půl",
+  "Budu tam, jen nestihnu úvodní poradu",
+  "Přijdu, ale až po rozcvičce, mám služebku",
+  "Dorazím s menším zpožděním, autobus jede pozdějc",
+  "Budu tam, jen o čtvrt hodiny později",
 ];
 
-const ATTENDANCE_NO = [
+export const ATTENDANCE_NO: readonly string[] = [
   "Sorry, nemůžu. Mám směnu.",
   "Dneska ne, hlídám děti",
   "Bohužel musím na svatbu",
@@ -49,23 +79,70 @@ const ATTENDANCE_NO = [
   "Promiň, slíbil jsem ženě že pomůžu s přestavbou",
   "Dneska fakt nejde, příště určitě",
   "Nepočítej se mnou, rozhodil jsem si koleno",
+  "Zítra nemůžu, jsem na školení",
+  "Bohužel, máme v práci inventuru",
+  "Musím k zubaři, nejde to",
+  "Jedu za mámou do nemocnice, sorry",
+  "Zítra to nedám, stěhujeme bráchu",
 ];
 
 /**
- * Věta z poolu podle losu, a když ji v téhle kabině už někdo napsal (`used`), nejbližší další,
- * kterou ještě ne. Los se volá pořád jednou, ať se nezmění, co dál vychází ze stejného semínka.
+ * Citoslovce a oslovení na začátek věty, když už v kabině padla doslova (`varyLine`). Jen takové,
+ * které sednou k „přijdu“ i k omluvence („Hele, musím do práce…“), žádné „jasně“ ani 👍.
  */
-function pickUnused(pool: readonly string[], rng: Rng, used?: Set<string>): string {
+const VARY_PREFIXES = ["Jo, ", "No, ", "Hele, ", "Tak ", "Kluci, ", "Trenére, "] as const;
+/** Oslovení na konec věty, jen za písmeno (ne za tečku nebo emoji). */
+const VARY_SUFFIXES = [", trenére", ", kluci"] as const;
+
+function lowerFirst(s: string): string {
+  return s.charAt(0).toLowerCase() + s.slice(1);
+}
+
+/**
+ * Věta, která v kabině už padla, s drobnou obměnou (citoslovce nebo oslovení navíc), ať tam dva
+ * hráči nenapíšou doslova totéž. Bez losu: stejná věta a stejné zabrané věty dají stejnou obměnu.
+ * Oslovení „trenére“ se nepřidá do věty, která ho už má, a citoslovce, kterým věta začíná, taky ne.
+ */
+export function varyLine(text: string, taken: ReadonlySet<string>): string {
+  const lower = text.toLowerCase();
+  const hasCoach = lower.includes("trenér");
+  const prefixes = VARY_PREFIXES.filter((p) => !(hasCoach && p.startsWith("Trenér")) && !lower.startsWith(p.trim().replace(",", "").toLowerCase()));
+  const suffixes = /\p{L}$/u.test(text) ? VARY_SUFFIXES.filter((x) => !(hasCoach && x.includes("trenér"))) : [];
+  const candidates = [...prefixes.map((p) => p + lowerFirst(text)), ...suffixes.map((x) => text + x)];
+  const start = candidates.length > 0 ? seedFromString(text) % candidates.length : 0;
+  for (let k = 0; k < candidates.length; k++) {
+    const c = candidates[(start + k) % candidates.length];
+    if (!taken.has(c)) return c;
+  }
+  // Všechny jednoduché obměny zabrané (kabina o desítkách stejných vět): citoslovce i oslovení.
+  for (const p of prefixes) for (const x of VARY_SUFFIXES) {
+    const c = /\p{L}$/u.test(text) ? p + lowerFirst(text) + x : p + lowerFirst(text);
+    if (!taken.has(c)) return c;
+  }
+  return text;
+}
+
+/**
+ * Věta z poolu podle losu, a když ji v téhle kabině už někdo napsal (`used`), nejbližší další,
+ * kterou ještě ne, pak z náhradních poolů (`spare`, třeba „přijdu“ místo „přijdu pozdě“). Když
+ * dojdou všechny, obměna (`varyLine`). Los se volá pořád jednou, ať se nezmění, co dál vychází
+ * ze stejného semínka.
+ */
+function pickUnused(pool: readonly string[], rng: Rng, used?: Set<string>, spare: readonly (readonly string[])[] = []): string {
   const start = rng.int(0, pool.length - 1);
   if (!used) return pool[start];
-  for (let k = 0; k < pool.length; k++) {
-    const text = pool[(start + k) % pool.length];
-    if (!used.has(text)) {
-      used.add(text);
-      return text;
+  for (const list of [pool, ...spare]) {
+    for (let k = 0; k < list.length; k++) {
+      const text = list[(start + k) % list.length];
+      if (!used.has(text)) {
+        used.add(text);
+        return text;
+      }
     }
   }
-  return pool[start];
+  const varied = varyLine(pool[start], used);
+  used.add(varied);
+  return varied;
 }
 
 /**
@@ -90,7 +167,7 @@ export function generateAttendanceMessage(
   if (rng.int(0, 100) < 15) {
     return {
       senderName: playerName,
-      body: pickUnused(ATTENDANCE_LATE, rng, used),
+      body: pickUnused(ATTENDANCE_LATE, rng, used, [ATTENDANCE_YES]),
       metadata: { type: "attendance", response: "late" },
     };
   }
@@ -99,6 +176,39 @@ export function generateAttendanceMessage(
     body: pickUnused(ATTENDANCE_YES, rng, used),
     metadata: { type: "attendance", response: "yes" },
   };
+}
+
+/** Hráč v kabině zápasu den předem: přijde, nebo ne, a jestli má vlastní text. */
+export interface SquadChatAttendee {
+  name: string;
+  available: boolean;
+  condition: number;
+  /** Vlastní text: omluvenka z losu (`generateAbsences`) nebo slib ze SMS. */
+  ownText?: string;
+}
+
+/**
+ * Věty den před zápasem do kabiny zápasu, jedna na hráče v pořadí kádru. Obecná věta („Jsem
+ * tam!“) nezopakuje vlastní text nikoho jiného ani jinou obecnou; vlastní text (omluvenka, slib),
+ * který už v kabině padl, dostane obměnu (`varyLine`). final3 (ticky 2. a 4. 12.): v Jitoně 2×
+ * „Musím do práce, nemůžu přijít“, omluvenky se mezi sebou nehlídaly.
+ *
+ * Los se volá pro každého hráče stejně jako dřív (i pro toho s vlastním textem): kdo je omluvený,
+ * rozhodl `generateAbsences` předem, tady se mění jen text. Stejné semínko = stejné věty.
+ */
+export function dayBeforeSquadLines(attendees: readonly SquadChatAttendee[], rng: Rng): string[] {
+  const used = new Set(attendees.flatMap((a) => (a.ownText ? [a.ownText] : [])));
+  const posted = new Set<string>();
+  return attendees.map((a) => {
+    const generic = generateAttendanceMessage(a.name, a.available, a.condition, rng, a.ownText ? undefined : used).body;
+    let text = a.ownText ?? generic;
+    if (posted.has(text)) {
+      text = varyLine(text, new Set([...used, ...posted]));
+      used.add(text);
+    }
+    posted.add(text);
+    return text;
+  });
 }
 
 // ── Zprávy od hráčů 1:1 ──

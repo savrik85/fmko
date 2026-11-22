@@ -714,6 +714,19 @@ function pickFresh<T extends { text: string }>(rng: Rng, pool: readonly T[], use
   return pool[start];
 }
 
+/**
+ * Výmluva do práce u hráče bez známého povolání. Dřív jediná věta, v kabině Jitony 2× (final3,
+ * ticky 2. a 4. 12.). Bere se první nepoužitá bez losu, ať se nezmění, kdo je omluvený.
+ */
+const WORK_FALLBACK_EXCUSES = [
+  "Musím do práce, nemůžu přijít",
+  "Zítra makám, nedám to",
+  "Mám v práci službu, nepůjde to",
+  "Šéf mě nepustí, musím do práce",
+  "Zítra dělám přesčas, sorry",
+  "Musím vzít směnu za kolegu, nejde to",
+] as const;
+
 /** Nad tímhle stropem by dodávka s řidiči absence z dojíždění vypnuly úplně. */
 const COMMUTE_MOD_CAP = 0.55;
 
@@ -853,7 +866,7 @@ export function generateAbsences(
         // ve sněhu odklízí sníh, na slunci zalévá a v dešti čeká až oschne.
         smsText = occupation
           ? pickProfessionalExcuse(rng, occupation, opts.weather, usedTexts)
-          : "Musím do práce, nemůžu přijít";
+          : WORK_FALLBACK_EXCUSES.find((t) => !usedTexts.has(t)) ?? WORK_FALLBACK_EXCUSES[0];
         emoji = "\u{1F3D7}";
         excuseTiming = "day_before";
         break;
