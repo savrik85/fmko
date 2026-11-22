@@ -161,4 +161,20 @@ describe("kývnutí v textu odpovědi", () => {
       "Kdybych zhubnul, dáš mi to?",
     ]) expect(acceptanceInReply(t), t).toBeUndefined();
   });
+
+  // final3 (E2E 22. 11., harness acc.mjs): obě věty vracely true, jako by hráč kývl.
+  it("podmínka nebo protinávrh kývnutí není", () => {
+    for (const t of [
+      "Udělám to, když mi přidáš.",
+      "Dám to, ale chci 2000.",
+      "Jasně, beru. Ale chci za to 2000.",
+      "Zhubnu, ale jen 2 kila.",
+      "Platí, ale až po sezóně.",
+      "Udělám to. Přidáš mi?",
+    ]) expect(acceptanceInReply(t), t).toBeUndefined();
+    // Čisté kývnutí dál projde, i se „když to říkáš“.
+    for (const t of ["Udělám to, trenére.", "Dám to, slibuju.", "Jasně, když to říkáš, beru.", "Jasně, do dvou týdnů zhubnu 3 kila, dám se za to 1000 Kč od tebe."]) {
+      expect(acceptanceInReply(t), t).toBe(true);
+    }
+  });
 });
