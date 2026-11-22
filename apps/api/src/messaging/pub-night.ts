@@ -62,13 +62,20 @@ function pragueDaysBetween(from: Date, to: Date): number {
   return Math.round((Date.UTC(b.year, b.month - 1, b.day) - Date.UTC(a.year, a.month - 1, a.day)) / DAY_MS);
 }
 
-/** Popis scénáře „ráno potom“: o hospodě jako o včerejšku, střízlivý, nezve. */
+/**
+ * Popis scénáře „ráno potom“: střízlivý, nezve, o hospodě jen na řeč. Dřív pokyn „na včerejšek
+ * se odkazuj jako na včerejšek“ tlačil úvod „včera jsem…“ do 5 ze 7 odpovědí (E2E 22. 11.)
+ * a hráč s opitím spojoval i krádež („včera jsem byl namol. Ty dresy jsem opravdu vzal“).
+ */
 function morningAfterDescription(daysAgo: number): string {
   const when = daysAgo <= 1 ? "Včera večer nebo v noci" : "Před pár dny večer";
-  const ref = daysAgo <= 1 ? "Na včerejšek se odkazuj jako na včerejšek" : "Na ten večer se odkazuj jako na „tenkrát v hospodě“";
+  const ref = daysAgo <= 1 ? "jako o včerejšku" : "jako o tom večeru v hospodě";
   return `${when} jsi byl s partou v hospodě a poslal jsi trenérovi zprávu nebo hlasovku (je v historii). `
     + `Teď je ${daysAgo <= 1 ? "další den" : "už pár dní potom"}, jsi střízlivý, ${daysAgo <= 1 ? "možná máš kocovinu" : "kocovina je dávno pryč"}. `
-    + `${ref}, podle povahy se stydíš, zlehčuješ, nebo si za tím stojíš. Do hospody teď nezveš, pokud tam opravdu zase nejsi. `
+    + `O hospodě a té zprávě mluv jen když na to přijde řeč nebo k tomu trenér míří, a pak ${ref}: podle povahy se stydíš, zlehčuješ, nebo si za tím stojíš. `
+    + "Zprávu nezačínej tím, co bylo v hospodě. Když se trenér ptá na něco jiného, odpověz na to. "
+    + "Co se stalo jindy (krádež, průšvih, zápas), nespojuj s pitím ani s tím večerem. "
+    + "Do hospody teď nezveš, pokud tam opravdu zase nejsi. "
     + "O žádném konkrétním zápase, výsledku ani tabulce nemluv, pokud se na ně trenér neptá.";
 }
 
