@@ -204,9 +204,10 @@ export function Pitch({
   // Ohrnuté hřiště se kreslí jako tráva (rozbředlá), ne jako sněhová pokrývka.
   const isCleared = snowFalling && snowCleared;
   const isSnow = snowFalling && !snowCleared;
-  const hasLines = condition >= 20;
-  const hasCenter = condition >= 40;
-  const hasFull = condition >= 65;
+  // Zápas se bez nalajnovaného hřiště nehraje: v záznamu jsou čáry všechny, i na zničeném trávníku.
+  const hasLines = broadcast || condition >= 20;
+  const hasCenter = broadcast || condition >= 40;
+  const hasFull = broadcast || condition >= 65;
   const hasStripes = condition >= 50;
 
   // Hřiště je naplocho na zemi (rotation -π/2 kolem X)
@@ -337,7 +338,8 @@ export function Pitch({
       ))}
 
       {/* Čáry hřiště */}
-      <PitchLines hasFull={hasFull} hasCenter={hasCenter} wide={broadcast} opacity={hasLines ? (condition < 35 ? 0.75 : 0.92) : 0} />
+      {/* Bez čar se nekreslí nic: neviditelné čáry by zapsaly hloubku a vyřízly se do kaluží. */}
+      {hasLines && <PitchLines hasFull={hasFull} hasCenter={hasCenter} wide={broadcast} opacity={condition < 35 ? 0.75 : 0.92} />}
 
       {/* Rohové praporky */}
       <CornerFlags />

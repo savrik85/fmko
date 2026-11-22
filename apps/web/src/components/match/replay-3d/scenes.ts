@@ -621,7 +621,8 @@ export class Replay {
    */
   before(next: number): Scene {
     const kickoff = this.secondHalf >= 0 && next >= this.secondHalf ? this.secondHalf : 0;
-    const shown = this.scened.lastIndexOf(true, next - 1);
+    // Záporný začátek by lastIndexOf počítal od konce pole: před první událostí by vrátil poslední akci zápasu.
+    const shown = next > 0 ? this.scened.lastIndexOf(true, next - 1) : -1;
     return shown < kickoff ? this.kickoff(kickoff) : this.scene(shown);
   }
 

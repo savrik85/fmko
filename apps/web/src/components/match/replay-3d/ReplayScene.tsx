@@ -194,7 +194,7 @@ export function ReplayScene({ replay, kits, snow, step, replayBadge, veil, onRea
       Object.assign(p, { play, elapsed: seamless ? p.t - first : 0 });
     }
     const { scene, attack } = play;
-    const elapsed = p.elapsed = Math.min(p.elapsed + delta * rate, hold);
+    const elapsed = p.elapsed = Math.min(p.elapsed + dt * rate, hold);
     // Gól: po chvíli oslavy se zakončení zpomaleně zopakuje, pak oslava pokračuje.
     const again = !attack && scene.replay ? scene.replay : null;
     const replaying = again !== null && elapsed >= REPLAY.after && elapsed < REPLAY.after + REPLAY.seconds;

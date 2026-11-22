@@ -131,6 +131,7 @@ describe("scény 3D záznamu", () => {
     expect(types(true)).toEqual(["card", "chance", "corner", "foul", "freekick", "goal", "injury", "penalty", "shootout", "substitution"]);
     expect(types(false)).toEqual(["assist", "corner", "special"]);
     // Držení míče před první akcí: běží výkop. Asistence po gólu: běží dál gólová scéna. Druhý poločas začíná výkopem.
+    expect(replay.before(0)).toBe(replay.kickoff(0));
     expect(replay.before(1)).toBe(replay.kickoff(0));
     expect(replay.before(3)).toBe(replay.scene(1));
     const secondHalf = all.findIndex((e) => e.minute > 45);
