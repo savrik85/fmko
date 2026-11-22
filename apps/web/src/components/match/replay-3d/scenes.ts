@@ -89,7 +89,7 @@ export interface Scene {
 }
 interface Point3 extends Point { y: number }
 /** Kde kamera v čase `t` stojí a kam míří. Mezi klíči jede rovnoměrně, s `ease` se rozjede a dojede; na klíč s `cut` se střihne. */
-export interface CameraKey { t: number; from: Point3; at: Point3; cut?: true; ease?: true }
+export interface CameraKey { t: number; from: Point3; at: Point3; cut?: boolean; ease?: true }
 type Window = Omit<Scene, "clip">;
 
 const clamp = (n: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, n));
@@ -169,7 +169,6 @@ function follows(head: ReplayEvent, e: ReplayEvent): boolean {
     case "chance": return !sameTeam && (e.detail === "save" || e.detail === "block" || e.detail === "gk_hero");
     case "goal": return sameTeam && e.type === "assist";
     case "foul": return e.type === "card";
-    case "injury": return sameTeam && e.type === "substitution";
     // Víc střídání jednoho týmu ve stejné minutě je jedno hromadné střídání.
     case "substitution": return sameTeam && e.type === "substitution";
     default: return false;
@@ -211,7 +210,7 @@ export function scenedEvents(events: ReplayEvent[]): boolean[] {
  */
 export function substitutionsTogether(events: ReplayEvent[], index: number): number {
   const heads = actionHeads(events);
-  return events[index].type === "substitution" ? events.filter((e, i) => heads[i] === heads[index] && e.type === "substitution").length : 1;
+  return events[index].type === "substitution" ? heads.filter((h) => h === heads[index]).length : 1;
 }
 
 /** Kde začínají akce, které mají scénu (roh před gólem, faul před kartou…): sem skáče „předchozí/další akce“. */
@@ -698,7 +697,7 @@ export class Replay {
     // Kamera stojí na hřišti kousek před trenérem a jede s ním.
     const closeUp = (c: typeof coaches[number], t: number, cut: boolean): CameraKey => {
       const p = spotAt(c, t);
-      return { t, from: { x: p.x + 6.3, y: 1.9, z: p.z - Math.sign(c.from.z) * 2.8 }, at: { ...p, y: 1.35 }, ...(cut ? { cut: true as const } : {}) };
+      return { t, from: { x: p.x + 6.3, y: 1.9, z: p.z - Math.sign(c.from.z) * 2.8 }, at: { ...p, y: 1.35 }, cut };
     };
     const camera = coaches.flatMap((c, n) => [closeUp(c, n * COACH_INTRO, n > 0), closeUp(c, (n + 1) * COACH_INTRO, false)]);
     if (coaches.length === 2) camera.push({ t: walk, from: { x: BENCH_X + 13, y: 4, z: 0 }, at: { x: BENCH_X, y: 1.3, z: 0 }, ease: true });
@@ -876,12 +875,6 @@ export class Replay {
     const window = (i: number, start: number, w: Partial<Window> = {}) => windows.set(i, { start, split: start, end: st.t, focus: [], card: null, result: null, replay: null, ...w });
     /** Gól: po oslavě se zopakuje zakončení (od rozběhu ke střele po míč v síti). */
     const goalShots = (split: number) => ({ replay: { from: split - 1.8, to: split + 0.6 } });
-    /** Střídání (i hromadné): všichni se vymění v jedné scéně, titulky se v ní vystřídají po stejných dílech. */
-    const swap = (subs: number[]) => {
-      if (!subs.length) return;
-      const start = st.t, pairs = this.substitution(st, subs);
-      subs.forEach((i, n) => window(i, start + (n * DRAMA_STEP) / subs.length, { focus: pairs[n] }));
-    };
     const finisher = find("goal", "chance");
     const result = finisher === undefined ? null : events[finisher].type === "goal" ? "goal" : chanceResult(events[finisher]);
 
@@ -943,10 +936,14 @@ export class Replay {
         const injured = this.onPitch(st, e);
         this.injury(st, side, injured);
         window(head, 0, { focus: [injured] });
-        return swap(rest.filter((n) => events[n].type === "substitution"));
+        return;
       }
-      case "substitution":
-        return swap(group);
+      case "substitution": {
+        // Všichni se vymění v jedné scéně, titulky se v ní vystřídají po stejných dílech.
+        const pairs = this.substitution(st, group);
+        group.forEach((i, n) => window(i, (n * DRAMA_STEP) / group.length, { focus: pairs[n] }));
+        return;
+      }
     }
     if (e.detail?.startsWith("shootout:")) {
       // Rozstřel se kope na jednu bránu; kdo kopal, uložené není, jde některý hráč z pole.

@@ -143,7 +143,7 @@ describe("scény 3D záznamu", () => {
   it("akce začínají první událostí se scénou: roh před gólem, faul před kartou, zranění před střídáním", () => {
     const starts = actionStarts(all).filter((i) => i < events.length);
     expect(starts.map((i) => all[i].type)).toEqual(["goal", "goal", "chance", "chance", "chance", "chance", "chance", "corner", "freekick", "freekick",
-      "penalty", "penalty", "foul", "foul", "card", "injury", "goal"]);
+      "penalty", "penalty", "foul", "foul", "card", "injury", "substitution", "goal"]);
   });
 
   it("rozstřel má pět sérií a sedí na uložený výsledek", () => {
