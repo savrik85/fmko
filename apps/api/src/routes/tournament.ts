@@ -10,6 +10,7 @@ import { requireAdmin, requireTeamOwnership } from "../auth/middleware";
 import { sendSystemSMS } from "../messaging/system-sms";
 import { sendWebPushToTeam, getNotificationPreferences } from "../community/web-push";
 import { logger } from "../lib/logger";
+import { loadMatchLook } from "../lib/match-look";
 import { DrawError, drawPreview, loadCurrentTournament, performDraw, resetDraw, type DrawChoice, type TournamentRow } from "../tournament/service";
 import { loadCompetitionView } from "../tournament/view";
 import { maybeAdvanceTournament } from "../tournament/advance";
@@ -427,9 +428,13 @@ tournamentRouter.get("/tournament-matches/:id", async (c) => {
     }
   }
 
+  const kits = await loadMatchLook(c.env.DB, { teamId: row.home_team_id as string, fallbackColor: row.home_color as string | null },
+    { teamId: row.away_team_id as string, fallbackColor: row.away_color as string | null }, homeLineup, awayLineup);
+
   const stage = row.stage as string;
   return c.json({
     ...row,
+    ...kits,
     isCup: false,
     isTournament: true,
     round: null,
