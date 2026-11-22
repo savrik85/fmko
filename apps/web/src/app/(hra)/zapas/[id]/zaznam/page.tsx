@@ -47,7 +47,7 @@ const FLAT_FAST_MS = { ...FLAT_MS, plain: 600, attack: 1800, drama: 2500, penalt
  * musí sedět se SETUP a ATTACK ve scenes.ts. Gól končí opakovaným záběrem. `embrace` je podání rukou s objetím
  * (trenéři, kteří spolu vycházejí), `substitution` jedno střídání; hromadné si dělí krok `drama`.
  */
-const SCENE_MS = { coach: 4000, handshake: 3800, embrace: 5600, substitution: 2600, kickoff: 5000, secondHalf: 5000, plain: 0, setup: 2000, attack: 3500, goal: 8600, chance: 2200, drama: 3500, penalty: 4500 };
+const SCENE_MS = { coach: 4000, handshake: 3800, embrace: 5600, substitution: 2600, kickoff: 5000, secondHalf: 5000, plain: 0, setup: 2000, attack: 3500, goal: 6800, chance: 2200, drama: 3500, penalty: 4500 };
 /** Po skoku na akci stojí její první snímek, než se rozběhne (ať je vidět, kam se skočilo). */
 const CUE_MS = 700;
 

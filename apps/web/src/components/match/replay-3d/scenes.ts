@@ -88,8 +88,8 @@ export interface Scene {
   replay: { from: number; to: number } | null;
   /** Vlastní kamera scény (představení trenérů); jinak scénu točí televizní kamera z tribuny. */
   camera?: CameraKey[];
-  /** Scéna se po skončení přehrává znovu od začátku (závěr zápasu). */
-  loop?: true;
+  /** Scéna se po skončení přehrává znovu od tohohle času (závěr zápasu). */
+  loop?: number;
 }
 interface Point3 extends Point { y: number }
 /** Kde kamera v čase `t` stojí a kam míří. Mezi klíči jede rovnoměrně, s `ease` se rozjede a dojede; na klíč s `cut` se střihne. */
@@ -783,10 +783,11 @@ export class Replay {
   }
 
   /**
-   * Konec zápasu ve třech záběrech se střihem mezi nimi, jako v televizi:
-   * 1. závěrečný hvizd, vítězové zvedají ruce a poražení klesají na trávník;
-   * 2. po zápase: unavení hráči sedí a leží na trávě, soupeři k nim chodí a podávají jim ruku;
-   * 3. vítězové slaví v hloučku, poražení odcházejí ke střídačkám (při remíze třetí záběr není).
+   * Konec zápasu v jednom záběru, bez střihů:
+   * 1. závěrečný hvizd, vítězové zvedají ruce a kdo je na dně, klesá na trávník;
+   * 2. podání rukou: většinou jde vítěz za poraženým, občas poražený za vítězem a někteří si ruku nepodají;
+   * 3. vítězové se seběhnou do hloučku a skáčou, poražení odcházejí ke střídačkám (při remíze třetí část není).
+   * Záznam ho pak přehrává dokola od podání rukou.
    */
   finale(): Scene {
     if (this.closing) return this.closing;
@@ -795,60 +796,88 @@ export class Replay {
     // Při remíze „hostují“ domácí: chodí za soupeři, ale nikdo neslaví.
     const up: Side = winner ?? "home", down = other(up);
     const figures = (side: Side) => roster[side].map((x) => x.figure);
+    /** Kdy začíná podávání rukou a kdy vítězové běží slavit. */
+    const meet = 3.5, party = meet + 8;
 
     // 1. Hvizd.
     const ball = { x: 0, z: 4 };
     const spot = this.playSpot("home");
     st.layout(ball, (slot, side) => spot(slot, side, ball), new Map([[this.referee, { x: -4, z: 0 }]]), [{ x: -4, z: 0, r: 2.5 }]);
     st.pose(this.referee, "armUp", 1.6, 0.2);
+
+    // Kdo komu podá ruku: nejbližší soupeř, na kterého ještě nikdo nejde. Většinou jde vítěz za poraženým, občas
+    // poražený za vítězem. Ruku si nepodají ti, kdo to k sobě mají daleko, nemají chuť, nebo by si při tom stoupli
+    // do někoho dalšího.
+    const free = new Set(figures(down));
+    const taken = SIDES.flatMap((side) => figures(side).map((figure) => ({ figure, ...st.pos(figure) })));
+    const handshakes = figures(up).flatMap((mine) => {
+      const theirs = [...free].sort((a, b) => dist(st.pos(a), st.pos(mine)) - dist(st.pos(b), st.pos(mine)))[0];
+      if (theirs === undefined) return [];
+      free.delete(theirs);
+      const mood = st.rng();
+      const [walker, host] = mood < 0.35 ? [theirs, mine] : [mine, theirs];
+      // Příchozí se zastaví na dosah ruky před tím druhým.
+      const to = toward(st.pos(host), st.pos(walker), 1.3);
+      if (mood < 0.1 || dist(st.pos(theirs), st.pos(mine)) > 22 || taken.some((p) => p.figure !== walker && p.figure !== host && dist(p, to) < 1)) return [];
+      taken.push({ figure: walker, ...to });
+      return [{ walker, host, to }];
+    });
+    const walkers = new Set(handshakes.map((h) => h.walker));
+
     if (winner) {
-      figures(up).forEach((f, n) => { st.pose(f, "celebrate", Infinity, 0.9 + (n % 4) * 0.1); [1.6, 2.5].forEach((at) => st.jump(f, at + (n % 3) * 0.2)); });
+      figures(up).forEach((f, n) => {
+        const from = 0.9 + (n % 4) * 0.1;
+        st.pose(f, "celebrate", meet - from, from);
+        [1.6, 2.5].forEach((at) => st.jump(f, at + (n % 3) * 0.2));
+      });
       st.coach(up, "joy", 0.9);
       st.coach(down, "upset", 1.2);
     }
-    // Kdo je na dně, klekne si nebo si lehne.
-    const tired = (side: Side) => figures(side).forEach((f, n) => { if (n % 3 !== 2) st.pose(f, n % 3 ? "slide" : "down", Infinity, 1 + (n % 5) * 0.25); });
-    tired(down);
-    if (!winner) tired(up);
-    st.wait(3.5);
+    // Kdo je na dně, klekne si nebo si lehne (poražení do odchodu); kdo jde podat ruku, zůstane stát.
+    const grounded = new Set<number>();
+    for (const side of winner ? [down] : SIDES) {
+      figures(side).forEach((f, n) => {
+        if (n % 3 === 2 || walkers.has(f)) return;
+        const from = 1 + (n % 5) * 0.25;
+        st.pose(f, n % 3 ? "slide" : "down", winner ? party - from : Infinity, from);
+        grounded.add(f);
+      });
+    }
+    st.wait(meet);
 
-    // 2. Po zápase: každý z poražených má své místo na trávě, někdo ze soupeřů za ním přijde a podá mu ruku.
-    // Místa jsou rozházená (kousek náhody), ne v řadách.
-    const rests = figures(down).map((_, n): Point => ({ x: -10 + (n % 4) * 6 + (Math.floor(n / 4) % 2) * 3 + (st.rng() - 0.5) * 1.6, z: -12 + Math.floor(n / 4) * 9 + (st.rng() - 0.5) * 2.4 }));
-    const fixed = new Map<number, Point>([[this.referee, { x: -17, z: 12 }]]);
-    figures(down).forEach((f, n) => fixed.set(f, rests[n]));
-    // Kdo ze soupeřů nemá protějšek (poražení dohrávali v méně), stojí opodál.
-    figures(up).forEach((f, n) => fixed.set(f, rests[n] ? { x: rests[n].x + 2.6, z: rests[n].z + 3.2 } : { x: -8 + (n - rests.length) * 3, z: 14.5 }));
-    st.layout({ x: 0, z: -3 }, () => { throw new Error("V závěrečné scéně má každý své místo"); }, fixed);
-    figures(down).forEach((f, n) => { if (n % 3 !== 2) st.pose(f, n % 3 ? "slide" : "down"); });
-    figures(up).forEach((f, n) => {
-      if (!rests[n]) return;
-      const wait = 0.4 + (n % 4) * 0.6;
-      st.go(f, { x: rests[n].x + 0.9, z: rests[n].z + 1 }, 1.6, wait);
-      st.pose(f, "armUp", 1.2, wait + 1.6);
-      // Kdo stojí, ruku podá taky; kdo sedí nebo leží, tomu ji soupeř podá dolů.
-      if (n % 3 === 2) st.pose(figures(down)[n], "armUp", 1.2, wait + 1.6);
+    // 2. Podání rukou.
+    handshakes.forEach(({ walker, host, to }, n) => {
+      const at = st.pos(host), wait = 0.2 + (n % 4) * 0.3, walk = Math.max(1, dist(st.pos(walker), to) / 4);
+      st.go(walker, to, walk, wait);
+      st.pose(walker, "shake", 1.2, wait + walk);
+      // Kdo stojí, udělá krok vstříc a ruku podá taky; kdo sedí nebo leží, tomu ji soupeř podá dolů.
+      if (grounded.has(host)) return;
+      st.go(host, toward(at, to, 0.3), 0.3, wait + walk - 0.3);
+      st.pose(host, "shake", 1.2, wait + walk);
     });
-    st.wait(6);
+    st.wait(party - meet);
 
     if (winner) {
-      // 3. Vítězové skáčou v hloučku před hlavní tribunou, poražení odcházejí ke střídačkám.
+      // 3. Vítězové se seběhnou do hloučku před hlavní tribunou, poražení odcházejí ke střídačkám.
       const fwd = attackSign(winner), huddle = { x: 5, z: -fwd * 8 };
-      const last = new Map<number, Point>([[this.referee, { x: -13, z: -fwd * 3 }]]);
-      figures(up).forEach((f, n) => {
-        const angle = (n / figures(up).length) * Math.PI * 2;
-        last.set(f, { x: huddle.x + Math.sin(angle) * (2 + (n % 2)), z: huddle.z + Math.cos(angle) * (2 + (n % 2)) });
+      figures(up).forEach((f, n, all) => {
+        const angle = (n / all.length) * Math.PI * 2;
+        const to = { x: huddle.x + Math.sin(angle) * (2 + (n % 2)), z: huddle.z + Math.cos(angle) * (2 + (n % 2)) };
+        const run = Math.max(1.5, dist(st.pos(f), to) / 6.5);
+        st.go(f, to, run);
+        st.pose(f, "celebrate", Infinity, run);
+        [0.5, 1.4, 2.3].forEach((at) => st.jump(f, run + at + (n % 3) * 0.15));
       });
-      figures(down).forEach((f, n) => last.set(f, { x: -2 - (n % 4) * 2.8 + (st.rng() - 0.5) * 1.4, z: fwd * 6 + (Math.floor(n / 4) - 1) * 3.6 + (st.rng() - 0.5) * 1.8 }));
-      st.layout(huddle, () => { throw new Error("V závěrečné scéně má každý své místo"); }, last);
-      figures(up).forEach((f, n) => { st.pose(f, "celebrate"); [0.6, 1.5, 2.4, 3.3, 4.2, 5.1].forEach((at) => st.jump(f, at + (n % 3) * 0.15)); });
       st.coach(up, "joy", 0.5);
-      // Zastaví se před lajnou, kde stojí trenéři.
-      figures(down).forEach((f) => st.go(f, { x: Math.max(BENCH_X + 1.5, st.pos(f).x - 9), z: st.pos(f).z }, 5.6, 0.2));
-      st.go(this.referee, { x: -19, z: -fwd * 3 }, 5);
-      st.wait(6);
+      // Každý má u lajny své místo, ať se tam nesejdou na sobě.
+      figures(down).sort((a, b) => st.pos(a).z - st.pos(b).z).forEach((f, n, all) => {
+        const to = { x: BENCH_X + 1.5 + (n % 2) * 1.4, z: (n - (all.length - 1) / 2) * 1.6 };
+        st.go(f, to, clamp(dist(st.pos(f), to) / 4, 3, 7.4), 0.3 + (n % 3) * 0.3);
+      });
+      st.go(this.referee, { x: BENCH_X + 1, z: -fwd * 14 }, 5);
+      st.wait(8.5);
     }
-    this.closing = { clip: st.finish(), start: 0, split: 0, end: st.t, focus: [], card: null, replay: null, loop: true };
+    this.closing = { clip: st.finish(), start: 0, split: 0, end: st.t, focus: [], card: null, replay: null, loop: meet };
     return this.closing;
   }
 

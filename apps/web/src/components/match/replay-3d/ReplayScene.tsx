@@ -41,8 +41,8 @@ const CAMERA = { x: HALF_W + 26, y: 13, fov: 26, pan: 9 };
 const CAMERA_AIM_X = -4.6;
 /** Pohled z výšky: celý stadion z ptačí perspektivy, kamera stojí a nic se neořezává. */
 const OVERVIEW = { x: HALF_W + 46, y: 56, fov: 40 };
-/** Opakovaný záběr gólu přijde až po oslavě: zakončení ještě jednou, na poloviční rychlost, ať je vidět, co se stalo. */
-const REPLAY = { after: 3.6, seconds: 5 };
+/** Opakovaný záběr gólu přijde až po oslavě: zakončení ještě jednou a o něco pomaleji, ať je vidět, co se stalo. */
+const REPLAY = { after: 3.6, seconds: 3.2 };
 /** Scéna nekreslí nic za bližší postranní čárou: kamera stojí tam, kde má stadion hlavní tribunu. */
 const CLIP_PLANES = [new THREE.Plane(new THREE.Vector3(-1, 0, 0), HALF_W + 1.2)];
 /** Střih se prolíná: přes nový záběr ještě tolik sekund doznívá poslední snímek toho starého. */
@@ -205,8 +205,9 @@ export function ReplayScene({ replay, kits, snow, overview, step, frame: root, v
       Object.assign(p, { play, elapsed: seamless ? p.t - first : 0 });
     }
     const { scene, attack } = play;
-    // Závěr zápasu (`loop`) se přehrává dokola.
-    const elapsed = p.elapsed = hold ? 0 : (p.elapsed + dt * rate) % (play.scene.loop ? play.scene.end - play.scene.start : Infinity);
+    // Závěr zápasu se přehrává dokola: na konci scény se vrátí na `loop`.
+    const ran = p.elapsed + dt * rate;
+    const elapsed = p.elapsed = hold ? 0 : scene.loop !== undefined && ran >= scene.end - scene.start ? ran - (scene.end - scene.loop) : ran;
     // Gól: po chvíli oslavy se zakončení zpomaleně zopakuje, pak oslava pokračuje.
     const again = !attack && scene.replay ? scene.replay : null;
     const replaying = again !== null && elapsed >= REPLAY.after && elapsed < REPLAY.after + REPLAY.seconds;
