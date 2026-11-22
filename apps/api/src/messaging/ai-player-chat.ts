@@ -22,7 +22,7 @@ import { weightTalkPrompt } from "../season/weight-talk";
 import { memoryPromptLines, type OfferStance } from "./player-memory";
 import { STOCK_PHRASES_RULE, generateWithoutRepeats, ownLinesPromptBlock } from "./repetition";
 import { GeminiUnavailableError } from "./model-errors";
-import { ATTENDANCE_PLEDGE_RULE, ATTENDANCE_PLEDGE_SCHEMA, parseAttendancePledge, type RawAttendancePledge } from "./attendance-pledge";
+import { ATTENDANCE_PLEDGE_RULE, ATTENDANCE_PLEDGE_SCHEMA, absencePersuasionLine, parseAttendancePledge, type RawAttendancePledge } from "./attendance-pledge";
 import { requestRule } from "./coach-rules";
 
 
@@ -257,6 +257,11 @@ export function buildUpcomingAbsenceFacts(p: PlayerSnapshot): string {
     : `Trenérovi jsi do skupiny zápasu poslal omluvenku: „${a.text}“.`;
   // Skutečný důvod z losu (kocovina za „strejda slavil padesát“): podle povahy ho přizná, nebo ne.
   const truth = fixed ? "" : excuseTruthLine(a.reason, p);
+  // Omluvenku drží, dokud ho trenér rozumně nepřemluví (attendance-pledge.ts); nemoc, zranění ani stopku ne.
+  const persuasion = fixed ? null : absencePersuasionLine(a, p);
+  if (persuasion) {
+    return `- Na ${match} NEPŘIJDEŠ. ${why}${truth ? ` ${truth}` : ""} Víš o tom a trenér to ví taky. ${persuasion} NIKDY netvrď, že nevíš, o čem trenér mluví, ani že ses neomluvil.`;
+  }
   const keep = HIDDEN_ABSENCE_TRUTH[a.reason] && !fixed
     ? ""
     : " Když se tě na to ptá nebo tě přemlouvá, drž se své omluvenky: klidně ji rozveď, omluv se nebo řekni, že tě to mrzí.";

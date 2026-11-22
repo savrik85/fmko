@@ -319,6 +319,40 @@ export function pledgePromptLines(player: Pick<PlayerSnapshot, "trainingPledge" 
   return lines;
 }
 
+// ─── Přemluvení omluveného ──────────────────────────────────────────────────
+
+/** Omluvenky, které přemluvit nejde: nemoc, incident (výslech, soud). Zranění a stopka řeší volající. */
+const HARD_ABSENCE_REASONS = new Set(["Zdraví", "Po obvinění", "Zranění", "Stopka za karty", "Osobní volno"]);
+/** Omluvenka z textu vážná, i když los dal „Osobní“: nemoc, nemocnice, pohřeb, porod. */
+const HARD_ABSENCE_TEXT_RE = /(nemoc|nemocn|doktor|l[eé]ka[rř]|operac|hore[cč]k|ch[rř]ipk|ang[ií]n|poh[rř]eb|um[rř]el|zem[rř]el|porod|rodi[lč]k)/i;
+/** Jak snadno se dá rozmluvit podle důvodu (squad-talk.ts `PERSUADE_BASE`: kocovina a výmluvy snadno, práce těžko). */
+const PERSUADE_EASE: Record<string, number> = {
+  "": 2, Kocovina: 2, Alkohol: 2, "Jiné": 2, Celebrita: 1, Doprava: 1, "Osobní": 1, "Práce": 0, Dluhy: 0, "Bez řidičáku": 0, "Bez práce": 1,
+};
+
+/**
+ * Hráč s omluvenkou na zítřek ji drží, dokud ho trenér rozumně nepřemluví (podle důvodu, povahy
+ * a vztahu); pak slíbí, že přijde, a slib omluvenku přepíše (`answerInMatchGroup`). Prompt dřív
+ * psal „drž se omluvenky, NIKDY netvrď, že přijdeš“ proti „když tě přemluví, řekni, že přijdeš“:
+ * Jelínek ani Přibyl (E2E 22. 11.) se nedali přemluvit ani jednou ze sedmi pokusů.
+ * Null = přemluvit nejde (nemoc, pohřeb, zranění, stopka, výslech).
+ */
+export function absencePersuasionLine(
+  a: { reason: string; text: string }, p: Pick<PlayerSnapshot, "discipline" | "coachRelationship">,
+): string | null {
+  if (HARD_ABSENCE_REASONS.has(a.reason) || HARD_ABSENCE_TEXT_RE.test(a.text)) return null;
+  let ease = PERSUADE_EASE[a.reason] ?? 1;
+  if (p.coachRelationship >= 60 || p.discipline >= 70) ease++;
+  if (p.coachRelationship < 35) ease--;
+  const how = ease >= 2
+    ? "Když tě trenér rozumně přemluví (potřebuje tě, nabídne řešení, vezme zpátky volno), dáš se přemluvit."
+    : ease === 1
+      ? "Přemluvit se necháš, jen když ti trenér nabídne rozumné řešení nebo tě opravdu nutně potřebuje."
+      : "Přemluvit se skoro nedáš: musel by ti nabídnout opravdu dobré řešení.";
+  return `${how} Dokud tě nepřemluví, drž se omluvenky a netvrď, že přijdeš. `
+    + "Když tě přemluví, řekni mu jasně, že nakonec přijdeš: hra to vezme jako slib a omluvenka padá.";
+}
+
 /** `life_context` z řádku hráče jako objekt; nečitelný JSON se zaloguje a bere jako prázdný. */
 export function lifeOf(raw: unknown): Record<string, unknown> {
   if (typeof raw !== "string" || raw === "") return {};
