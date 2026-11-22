@@ -980,12 +980,12 @@ matchesRouter.get("/matches/:id", async (c) => {
     } catch (e) { logger.warn({ module: "matches" }, "merge squad numbers", e); }
   }
   // Dresy a vzhled hráčů pro 3D záznam zápasu.
-  const kits = await loadMatchLook(c.env.DB, { teamId: row.home_team_id as string | null, fallbackColor: row.home_color as string | null },
+  const look = await loadMatchLook(c.env.DB, { teamId: row.home_team_id as string | null, fallbackColor: row.home_color as string | null },
     { teamId: row.away_team_id as string | null, fallbackColor: row.away_color as string | null }, homeLineup, awayLineup);
 
   return c.json({
     ...row,
-    ...kits,
+    ...look,
     events: JSON.parse((row.events as string) ?? "[]"),
     commentary: JSON.parse((row.commentary as string) ?? "[]"),
     player_ratings: JSON.parse((row.player_ratings as string) ?? "{}"),
@@ -1049,12 +1049,12 @@ matchesRouter.get("/cup-matches/:id", async (c) => {
     } catch (e) { logger.warn({ module: "matches" }, "merge cup squad numbers", e); }
   }
   // Velkoklub nemá řádek v teams: dres v barvě z cup_teams.
-  const kits = await loadMatchLook(c.env.DB, { teamId: row.home_real_id as string | null, fallbackColor: row.home_color as string | null },
+  const look = await loadMatchLook(c.env.DB, { teamId: row.home_real_id as string | null, fallbackColor: row.home_color as string | null },
     { teamId: row.away_real_id as string | null, fallbackColor: row.away_color as string | null }, homeLineup, awayLineup);
 
   return c.json({
     ...row,
-    ...kits,
+    ...look,
     id: row.id,
     isCup: true,
     round: null,

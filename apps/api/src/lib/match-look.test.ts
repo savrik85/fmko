@@ -12,13 +12,15 @@ type TeamRow = {
   away_socks_color?: string | null;
 };
 type PlayerRow = { id: string; avatar: string | null; physical: string | null };
+type ManagerRow = { team_id: string; name: string; avatar: string; motivation: number };
 
-/** Malá náhrada D1: tabulky teams a players v paměti, filtr podle id z bind(). */
-function fakeDb(teams: TeamRow[], players: PlayerRow[] = []): D1Database {
+/** Malá náhrada D1: tabulky teams, players a managers v paměti, filtr podle id z bind(). */
+function fakeDb(teams: TeamRow[], players: PlayerRow[] = [], managers: ManagerRow[] = []): D1Database {
   return {
     prepare: (sql: string) => ({
       bind: (...ids: string[]) => ({
         all: async () => {
+          if (sql.includes("FROM managers")) return { results: managers.filter((m) => ids.includes(m.team_id)) };
           const source: Array<{ id: string }> = sql.includes("FROM teams")
             ? teams.map((t) => ({
                 secondary_color: null, home_shorts_color: null, home_socks_color: null,
@@ -58,6 +60,7 @@ describe("dresy v zápase", () => {
     expect(kits).toEqual({
       home_kit: { shirt: "#1E5AA8", shorts: "#FFFFFF", socks: "#1E5AA8" },
       away_kit: { shirt: "#F2C200", shorts: "#222222", socks: "#F2C200" },
+      home_coach: null, away_coach: null,
     });
   });
 
@@ -91,12 +94,23 @@ describe("dresy v zápase", () => {
     expect(kits).toEqual({
       home_kit: { shirt: "#2D5F2D", shorts: "#2D5F2D", socks: "#2D5F2D" },
       away_kit: { shirt: "#D94032", shorts: "#D94032", socks: "#D94032" },
+      home_coach: null, away_coach: null,
     });
   });
 
   it("pohárový klub bez řádku v teams hraje v barvě z cup_teams", async () => {
     const kits = await loadMatchLook(fakeDb([HOME]), { teamId: "h" }, { teamId: null, fallbackColor: "#7A1F5C" }, null, null);
     expect(kits.away_kit).toEqual({ shirt: "#7A1F5C", shorts: "#7A1F5C", socks: "#7A1F5C" });
+  });
+});
+
+describe("trenéři u lajny", () => {
+  it("trenér je manažer klubu se svou motivací a vzhledem; klub bez manažera trenéra nemá", async () => {
+    const avatar = JSON.stringify({ body: { color: "#c68642" }, hair: { id: "short-bald", color: "#000000" } });
+    const db = fakeDb([HOME, { id: "a", primary_color: "#D94032" }], [], [{ team_id: "h", name: "Karel Hromada", avatar, motivation: 85 }]);
+    const look = await loadMatchLook(db, { teamId: "h" }, { teamId: "a" }, null, null);
+    expect(look.home_coach).toEqual({ name: "Karel Hromada", motivation: 85, skinColor: "#c68642", hairColor: null });
+    expect(look.away_coach).toBeNull();
   });
 });
 

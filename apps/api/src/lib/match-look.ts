@@ -1,5 +1,5 @@
 /**
- * Vzhled hráčů a dresy pro 3D záznam zápasu (detail ligového, pohárového i turnajového zápasu).
+ * Vzhled hráčů, dresy a trenéři pro 3D záznam zápasu (detail ligového, pohárového i turnajového zápasu).
  */
 
 export interface PlayerLook {
@@ -16,6 +16,22 @@ export interface MatchKit {
   shirt: string;
   shorts: string;
   socks: string;
+}
+
+/** Trenér u lajny = manažer klubu. Podle `motivation` (1–100) záznam pozná, jak moc zápas prožívá. */
+export interface MatchCoach {
+  name: string;
+  motivation: number;
+  skinColor?: string;
+  hairColor?: string | null;
+}
+
+export interface MatchLook {
+  home_kit: MatchKit;
+  away_kit: MatchKit;
+  /** null = klub manažera nemá (velkoklub v poháru). */
+  home_coach: MatchCoach | null;
+  away_coach: MatchCoach | null;
 }
 
 interface TeamKitRow {
@@ -105,8 +121,8 @@ function awayKit(team: TeamKitRow | undefined, fallback: string, homeShirt: stri
 }
 
 /**
- * Dresy obou klubů a vzhled hráčů pro 3D záznam. Vzhled (pleť, vlasy, výška) doplní
- * přímo do hráčů v sestavách; bere se aktuální, jako číslo dresu.
+ * Dresy a trenéři obou klubů a vzhled hráčů pro 3D záznam. Vzhled (pleť, vlasy, výška) doplní
+ * přímo do hráčů v sestavách; vzhled i trenér se berou aktuální, jako číslo dresu.
  */
 export async function loadMatchLook(
   db: D1Database,
@@ -114,7 +130,7 @@ export async function loadMatchLook(
   away: MatchSide,
   homeLineup: LineupLike,
   awayLineup: LineupLike,
-): Promise<{ home_kit: MatchKit; away_kit: MatchKit }> {
+): Promise<MatchLook> {
   const teamIds = [home.teamId, away.teamId].filter((id): id is string => !!id);
   const teams = teamIds.length === 0 ? [] : (await db.prepare(
     `SELECT id, primary_color, secondary_color, home_shorts_color, home_socks_color,
@@ -125,6 +141,16 @@ export async function loadMatchLook(
   const awayTeam = teams.find((t) => t.id === away.teamId);
   const home_kit = homeKit(homeTeam, home.fallbackColor || DEFAULT_HOME_COLOR);
   const away_kit = awayKit(awayTeam, away.fallbackColor || DEFAULT_AWAY_COLOR, home_kit.shirt);
+
+  const managers = teamIds.length === 0 ? [] : (await db.prepare(
+    `SELECT team_id, name, avatar, motivation FROM managers WHERE team_id IN (${teamIds.map(() => "?").join(",")})`,
+  ).bind(...teamIds).all<{ team_id: string; name: string; avatar: string; motivation: number }>()).results;
+  const coachOf = (teamId: string | null): MatchCoach | null => {
+    const row = managers.find((m) => m.team_id === teamId);
+    if (!row) return null;
+    const { skinColor, hairColor } = playerLook({ avatar: row.avatar, physical: null });
+    return { name: row.name, motivation: row.motivation, skinColor, hairColor };
+  };
 
   const players = [homeLineup, awayLineup].flatMap((ld) => (ld ? [...(ld.starters ?? []), ...(ld.subs ?? [])] : []));
   const ids = [...new Set(players.map((p) => p.id).filter(Boolean))];
@@ -137,5 +163,5 @@ export async function loadMatchLook(
       if (row) Object.assign(p, playerLook(row));
     }
   }
-  return { home_kit, away_kit };
+  return { home_kit, away_kit, home_coach: coachOf(home.teamId), away_coach: coachOf(away.teamId) };
 }
