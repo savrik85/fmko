@@ -155,11 +155,12 @@ describe("omluvenka na dnešní zápas", () => {
     expect(loadPlayerSnapshot(row("starter"), excused).upcomingAbsence).toBeUndefined();
   });
 
-  it("hráč se omluvenky drží a netvrdí, že je fit a přijde", () => {
+  it("hráč se omluvenky drží, nepopírá ji, a přijde, jen když ho trenér přemluví", () => {
     const fact = buildUpcomingAbsenceFacts(loadPlayerSnapshot(row("outside"), excused));
     expect(fact).toContain("Na dnešní zápas proti FK Dřevostroj Radhostice NEPŘIJDEŠ.");
     expect(fact).toContain("„Došel mi benzín uprostřed lesa, jdu pěšky na pumpu“");
-    expect(fact).toContain("NIKDY netvrď, že přijdeš, že jsi doma a fit");
+    expect(fact).toContain("NIKDY netvrď, že nevíš, o čem trenér mluví");
+    expect(fact).toContain("Dokud tě nepřemluví, drž se omluvenky a netvrď, že přijdeš.");
     const prompt = buildSystemPrompt(loadPlayerSnapshot(row("outside"), excused), { teamName: "FC GRW Chlumany" });
     expect(prompt).toContain(fact);
   });
@@ -187,7 +188,9 @@ describe("skutečný důvod omluvenky", () => {
     expect(honest).toContain("přiznáš to: stydíš se a trochu se vymlouváš");
     expect(honest).not.toContain("drž se své omluvenky");
     expect(honest).toContain("To, že jsi na zápas nepřišel, nikdy nepopírej.");
-    expect(honest).toContain("NIKDY netvrď, že přijdeš");
+    // Kocovina se rozmluvit dá (E2E 22. 11.: 0 ze 7 přemluvení, prompt to zakazoval).
+    expect(honest).not.toContain("NIKDY netvrď, že přijdeš");
+    expect(honest).toContain("Když tě přemluví, řekni mu jasně, že nakonec přijdeš");
   });
 
   it("neukázněný se drží výmluvy; povaha rozhoduje pokaždé stejně", () => {
@@ -203,9 +206,28 @@ describe("skutečný důvod omluvenky", () => {
     const work = lastMatch({ upcomingAbsences: new Map([["outside", { reason: "Osobní", text: "Jedeme do Německa nakoupit Lidl", when: "dnes" as const, opponent: null }]]) });
     const fact = buildUpcomingAbsenceFacts(loadPlayerSnapshot(row("outside"), work));
     expect(fact).toContain("Omluvenka je pravdivá");
-    expect(fact).toContain("drž se své omluvenky");
+    expect(fact).toContain("drž se omluvenky");
     const unknown = lastMatch({ upcomingAbsences: new Map([["outside", { reason: "", text: "Mám noční", when: "dnes" as const, opponent: null }]]) });
     expect(buildUpcomingAbsenceFacts(loadPlayerSnapshot(row("outside"), unknown))).not.toMatch(/Pravda je|pravdivá/);
+  });
+
+  it("přemluvení (Jelínek, Přibyl, E2E 22. 11.): podle důvodu, povahy a vztahu; nemoc, zranění a stopka ne", () => {
+    const snapWith = (reason: string, text: string, personality: object, relationship: number) => loadPlayerSnapshot(
+      { ...row("outside"), personality: JSON.stringify(personality), coach_relationship: relationship },
+      lastMatch({ upcomingAbsences: new Map([["outside", { reason, text, when: "zítra" as const, opponent: "FK Löffler Hradčany" }]]) }),
+    );
+    // Volno, které si vyžádal trenér (slib „nepřijdu“), trenér zase vezme zpátky.
+    const jelinek = buildUpcomingAbsenceFacts(snapWith("", "Tentokrát beze mě, trenér o tom ví. Ať to klapne.", { discipline: 60 }, 60));
+    expect(jelinek).toContain("dáš se přemluvit");
+    expect(jelinek).not.toContain("NIKDY netvrď, že přijdeš");
+    // Brambory s tátou: dá se, ale jen s rozumným řešením; se špatným vztahem skoro ne.
+    expect(buildUpcomingAbsenceFacts(snapWith("Osobní", "Pomáhám tátovi s bramborama", { discipline: 50 }, 50))).toContain("rozumné řešení");
+    expect(buildUpcomingAbsenceFacts(snapWith("Práce", "Mám noční", { discipline: 30 }, 20))).toContain("Přemluvit se skoro nedáš");
+    for (const [reason, text] of [["Zdraví", "Mám horečku"], ["Osobní", "Babička má pohřeb"], ["Zranění", ""], ["Stopka za karty", ""]]) {
+      const fact = buildUpcomingAbsenceFacts(snapWith(reason, text, { discipline: 90 }, 90));
+      expect(fact, reason + text).toContain("NIKDY netvrď, že přijdeš");
+      expect(fact, reason + text).not.toContain("přemluv");
+    }
   });
 
   it("po zápase: omluvenka s pravdou, vyřazení za trest není omluvenka", () => {

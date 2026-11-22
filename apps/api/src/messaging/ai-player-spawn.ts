@@ -297,7 +297,8 @@ async function squadChatAbsences(db: D1Database, teamId: string, now: Date, game
     `SELECT m.sender_id, m.body, json_extract(m.metadata, '$.calendarId') AS cal, json_extract(m.metadata, '$.response') AS response, c.title
        FROM messages m JOIN conversations c ON c.id = m.conversation_id
       WHERE c.team_id = ? AND c.type = 'squad_group' AND m.sender_type = 'player'
-        AND (json_extract(m.metadata, '$.response') = 'no' OR json_extract(m.metadata, '$.persuaded') = 1)
+        AND (json_extract(m.metadata, '$.response') = 'no' OR json_extract(m.metadata, '$.persuaded') = 1
+             OR json_extract(m.metadata, '$.timing') = 'pledge')
         AND substr(m.sent_at, 1, 10) >= ?
       ORDER BY julianday(m.sent_at) DESC LIMIT 60`,
   ).bind(teamId, since).all<{ sender_id: string; body: string; cal: string | null; response: string | null; title: string | null }>()
@@ -322,7 +323,8 @@ async function squadChatAbsences(db: D1Database, teamId: string, now: Date, game
   const out = new Map<string, UpcomingAbsence>();
   const calOf = new Map<string, string>();
   // Nejnovější odpověď hráče k danému zápasu rozhoduje: trenér ho v kabině přemluvil
-  // (squad-talk.ts) = na ten zápas přijde. Omluvenka na jiný zápas platí dál.
+  // (squad-talk.ts) nebo v SMS (slib „přijdu“, timing pledge) = na ten zápas přijde.
+  // Omluvenka na jiný zápas platí dál.
   const decided = new Set<string>();
   for (const r of rows.results) {
     const key = `${r.sender_id}|${r.cal ?? ""}`;

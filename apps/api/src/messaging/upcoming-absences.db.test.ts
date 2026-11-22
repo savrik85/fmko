@@ -99,4 +99,14 @@ describe("omluvenky z kabiny", () => {
   it("omluvenka, kterou los nezná, skutečný důvod nemá: hráč zná jen svou výmluvu", async () => {
     expect((await loadUpcomingAbsences(db, "t-chl", now))?.get("kratochvil")?.reason).toBe("");
   });
+
+  it("trenér ho v SMS přemluvil („přijdu“ ze slibu do kabiny): omluvenka v chatu už neplatí", async () => {
+    // Přibyl / Jelínek (E2E 22. 11.): slib „přijdu“ zapíše do kabiny zápasu odpověď „yes“ s timing pledge.
+    await db.prepare("INSERT INTO messages VALUES (?, ?, 'player', ?, ?, ?, ?)")
+      .bind("m7", "g-today", "vesely", "Strejda slavil padesát", JSON.stringify({ type: "attendance", response: "no", timing: "match_day", calendarId: "cal-today" }), "2026-11-08T03:16:00Z").run();
+    expect((await loadUpcomingAbsences(db, "t-chl", now))?.has("vesely")).toBe(true);
+    await db.prepare("INSERT INTO messages VALUES (?, ?, 'player', ?, ?, ?, ?)")
+      .bind("m8", "g-today", "vesely", "Trenér mě ukecal, přijdu.", JSON.stringify({ type: "attendance", response: "yes", timing: "pledge", calendarId: "cal-today" }), "2026-11-08T10:40:00Z").run();
+    expect((await loadUpcomingAbsences(db, "t-chl", now))?.has("vesely")).toBe(false);
+  });
 });
