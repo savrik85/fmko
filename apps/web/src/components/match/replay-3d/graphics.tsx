@@ -16,7 +16,8 @@ interface GraphicsProps {
 }
 
 const RESULTS: Record<ShotResult, string> = { goal: "GÓÓÓL!", saved: "CHYTIL BRANKÁŘ!", post: "TYČ!", bar: "BŘEVNO!", wide: "VEDLE!", over: "NAD BRÁNU!", blocked: "ZBLOKOVÁNO!" };
-const TONES = { goal: "bg-green-500 text-white", danger: "bg-orange-500 text-white", miss: "bg-red-500 text-white", yellow: "bg-yellow-400 text-gray-900", red: "bg-red-600 text-white", info: "bg-white text-gray-900" };
+// Červené pole má jen nápis opakovaného záběru (ReplayChip), ať se s ním nápis akce neplete; červená karta je červeným písmem.
+const TONES = { goal: "bg-green-500 text-white", danger: "bg-orange-500 text-white", miss: "bg-slate-600 text-white", yellow: "bg-yellow-400 text-gray-900", red: "bg-white text-red-600", info: "bg-white text-gray-900" };
 interface Label { text: string; tag?: string; sub?: string; tone: keyof typeof TONES }
 /** Tmavá plocha televizní grafiky, stejná jako výsledková tabule 2D záznamu. */
 const PANEL = "bg-[#0a0a0a]/90 text-white";
