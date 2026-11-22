@@ -4,7 +4,7 @@
  * E2E 22. 11. (Sedlecký, Akcent): na „Ty peníze zaplatíš, rozumíš?“ hra rozhodla „odmítl
  * napravit (šance 78 %)“, odpověď spadla do retry a na druhou výzvu „zaplatíš to, nebo ne?“
  * hráč napsal „Trenére, jo, zaplatím to. Dám to zítra.“ Nezapsalo se nic: trenér četl slib,
- * za kterým ve hře nic nebylo. Fakt „Nechce se ti a vymlouváš se“ ve znalostech model přešel.
+ * za kterým ve hře nic nebylo. Fakt o odmítnutí ve znalostech model přešel.
  *
  * Teď stejně jako u přemlouvání (messaging/persuasion.ts): restitution.ts rozhodnutí uloží do
  * `life_context.amendsDecision` a model dostane pevný pokyn „Rozhodl ses: …“. Rozhodnutí padá
@@ -46,8 +46,12 @@ export function amendsDecisionFromLife(life: Record<string, unknown>, now: Date 
 export function amendsDecisionLine(d: AmendsDecision): string {
   switch (d.outcome) {
     case "refused":
-      return `- Trenér po tobě chce, ať to ${d.asked}. Rozhodl ses: NEUDĚLÁŠ to. Vymluv se po svém a nic neslibuj: `
-        + "nepiš, že to vrátíš, zaplatíš nebo opravíš, ani kdy. Netvrď, že je to vyřízené.";
+      // Kohoutek (E2E 22. 11.): „Vymluv se po svém“ model bral jako „zapři“ a usvědčený pachatel
+      // psal „nikdy jsem nic neukradl“. Odmítnutí se ukládá jen odhalenému: čin je dokázaný.
+      return `- Trenér po tobě chce, ať to ${d.asked}. Rozhodl ses: NEUDĚLÁŠ to. Na to, že jsi to byl ty, se přišlo, `
+        + "takže čin nezapírej: nepiš, že jsi nic neudělal, nevzal ani nerozbil, ani že jde o omyl. "
+        + "Odmítáš jen napravit to, co po tobě chce: řekni po svém, proč to nejde nebo proč nechceš (nemáš teď peníze ani čas, nechce se ti), "
+        + "a nic neslibuj: nepiš, že to vrátíš, zaplatíš nebo opravíš, ani kdy. Netvrď, že je to vyřízené.";
     case "returned":
       return "- Trenér tě přemluvil a ty jsi to klubu VRÁTIL, už je to zpátky. Mluv o tom jako o hotové věci, nepiš, že to teprve vrátíš.";
     case "paid":

@@ -306,7 +306,7 @@ async function decideRestitution(
         ? "Trenér po tobě chtěl, ať to opravíš. Odmítl jsi to, tak to sám od sebe neslibuj."
         : closedIncident
           ? "Trenér po tobě chtěl, ať to vrátíš. Odmítl jsi to, tak vrácení sám od sebe neslibuj."
-          : "Trenér po tobě chce, ať to vrátíš nebo zaplatíš. Nechce se ti a vymlouváš se.");
+          : "Trenér po tobě chce, ať to vrátíš nebo zaplatíš. Nechce se ti to napravit, ale nezapíráš, že jsi to byl ty.");
     }
     logger.info({ module: M, teamId: o.teamId }, `pachatel ${o.playerId} odmítl napravit ${inc.id} (šance ${chance} %)`);
     return { outcome: { outcome: "refused", incidentId: inc.id }, asked, revealed };
