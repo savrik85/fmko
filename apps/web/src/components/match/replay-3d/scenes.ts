@@ -32,7 +32,7 @@ export const REPLAY = { after: 3.6, seconds: 3.2 };
 export type Side = "home" | "away";
 const SIDES = ["home", "away"] as const;
 type Role = "GK" | "DEF" | "MID" | "FWD";
-type Pose = "down" | "diveLeft" | "diveRight" | "celebrate" | "armUp" | "slide" | "shake" | "hug" | "sit" | "rest";
+type Pose = "down" | "diveLeft" | "diveRight" | "celebrate" | "armUp" | "slide" | "shake" | "hug" | "sit" | "rest" | "sitUp";
 export type ShotResult = "goal" | "saved" | "post" | "bar" | "wide" | "over" | "blocked";
 type CardColor = "yellow" | "red";
 
@@ -862,8 +862,14 @@ export class Replay {
       const at = st.pos(host), wait = 0.2 + (n % 4) * 0.3, walk = Math.max(1, dist(st.pos(walker), to) / 1.6);
       st.go(walker, to, walk, wait);
       st.pose(walker, "shake", 1.2, wait + walk);
-      // Kdo stojí, udělá krok vstříc a ruku podá taky; kdo sedí nebo leží, tomu ji soupeř podá dolů.
-      if (grounded.has(host)) return;
+      // Kdo stojí, udělá krok vstříc a ruku podá taky; kdo sedí nebo leží, tomu ji soupeř podá dolů a poodejde,
+      // ať si pak nesedá do něj.
+      if (grounded.has(host)) {
+        const aside = toward(to, at, -1.8);
+        if (taken.some((p) => p.figure !== walker && dist(p, aside) < 1)) return;
+        taken.push({ figure: walker, ...aside });
+        return st.go(walker, aside, 1.4, wait + walk + 1.3);
+      }
       st.go(host, toward(at, to, 0.3), 0.3, wait + walk - 0.3);
       st.pose(host, "shake", 1.2, wait + walk);
     });
@@ -871,9 +877,8 @@ export class Replay {
     // na trávník, po průměrném v klidu odejde, po slabém zmizí rychle.
     const grade = this.input.refereeGrade;
     let drive: Scene["drive"];
-    if (grade !== null && grade <= 2.2) {
-      st.pose(this.referee, "rest", Infinity, 2);
-    } else {
+    const stays = grade !== null && grade <= 2.2;
+    if (!stays) {
       // Odchází doprava (tam, kde mají střídačku hosté): podél lajny do rohu, přes zábradlí u hřiště a přes plot areálu,
       // až zmizí i z pohledu z paneláku. Za chvíli odjede autem po cestě za plotem. `hop` = přeskok na konci úseku.
       const right = Math.sign(st.bench("away").z), hurry = grade !== null && grade > 3;
@@ -895,7 +900,7 @@ export class Replay {
     }
     st.wait(calm - meet);
 
-    // 3. Klid po zápase, beze spěchu.
+    // 3. Klid po zápase, beze spěchu. `settled` = kdy sedí nebo leží poslední hráč.
     let settled = 0;
     for (const side of SIDES) {
       const bench = st.bench(side);
@@ -905,17 +910,23 @@ export class Replay {
       standing.forEach((f, n) => {
         if (n < seats) {
           const to = { x: BENCH_X - SEATS.behind, z: bench.z + (taken + n - (SEATS.count - 1) / 2) * SEATS.step };
-          const wait = n * 2, walk = dist(st.pos(f), to) / 1.4;
+          // Kdo šel podat ruku, ještě dochází.
+          const wait = n * 2 + (walkers.has(f) ? 4 : 0), walk = dist(st.pos(f), to) / 1.4;
           st.go(f, to, walk, wait);
           st.pose(f, "sit", Infinity, wait + walk);
           settled = Math.max(settled, wait + walk);
         } else {
           // Ostatní si postupně sednou na trávník nebo si lehnou: stát nezůstane nikdo.
-          st.pose(f, n % 3 ? "rest" : "down", Infinity, 1 + n * 0.8);
+          // Kdo šel podat ruku, sedne si (vleže by mohl skončit přes toho, komu ji podal).
+          const walker = walkers.has(f), from = 1 + n * 0.8 + (walker ? 4 : 0);
+          st.pose(f, walker || n % 3 ? "rest" : "down", Infinity, from);
+          settled = Math.max(settled, from);
         }
       });
     }
-    st.wait(Math.max(settled + 1, drive ? drive.to + 0.5 - st.t : 0));
+    // Rozhodčí, který zůstal, stojí uprostřed a sedne si až poslední, zpříma.
+    if (stays) st.pose(this.referee, "sitUp", Infinity, settled + 1.5);
+    st.wait(Math.max(settled + 3, drive ? drive.to + 0.5 - st.t : 0));
     this.closing = { clip: st.finish(), start: 0, split: 0, end: st.t, focus: [], card: null, replay: null, drive };
     return this.closing;
   }
