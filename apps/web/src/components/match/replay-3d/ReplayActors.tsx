@@ -32,7 +32,6 @@ const CAMERA = {
   wide: { offset: new THREE.Vector3(19, 28, 0), fov: 42, follow: 0.55 },
   tall: { offset: new THREE.Vector3(0, 34, 31), fov: 54, follow: 0.35 },
 };
-const FOLLOW_BANNERS = new Set(["injury", "sub", "red", "yellow"]);
 
 interface PartDef {
   id: string;
@@ -136,9 +135,10 @@ export function ReplayActors({ plan, clock }: { plan: ReplayPlan; clock: ReplayC
       s.z = f.z;
       if (dt > 0) s.speed = THREE.MathUtils.lerp(s.speed, step / dt, Math.min(1, dt * 8));
       s.phase += step * 1.7;
-      // Čelem po směru běhu, stojící hráč čelem k míči.
-      const faceX = s.speed > 0.8 ? dx : frame.ballX - s.x;
-      const faceZ = s.speed > 0.8 ? dz : frame.ballZ - s.z;
+      // Čelem po směru běhu; stojící a padající brankář čelem k míči (padá do strany, ne do sítě).
+      const toBall = s.speed <= 0.8 || f.pose === "diveLeft" || f.pose === "diveRight";
+      const faceX = toBall ? frame.ballX - s.x : dx;
+      const faceZ = toBall ? frame.ballZ - s.z : dz;
       if (Math.abs(faceX) + Math.abs(faceZ) > 0.01) {
         const diff = Math.atan2(faceX, faceZ) - s.yaw;
         s.yaw += Math.atan2(Math.sin(diff), Math.cos(diff)) * Math.min(1, dt * 7);
@@ -199,11 +199,10 @@ export function ReplayActors({ plan, clock }: { plan: ReplayPlan; clock: ReplayC
 
     // Kamera plynule za míčem, po skoku v čase hned na místě; u zranění, karty a střídání jen na hráče, jinak mezi míč a hráče z titulku.
     const cam = tall ? CAMERA.tall : CAMERA.wide;
-    const who = focus[0];
-    const mix = who === undefined ? 0 : caption?.banner && FOLLOW_BANNERS.has(caption.banner) ? 1 : 0.5;
-    const fx = who === undefined ? frame.ballX : THREE.MathUtils.lerp(frame.ballX, states[who].x, mix);
-    const fz = who === undefined ? frame.ballZ : THREE.MathUtils.lerp(frame.ballZ, states[who].z, mix);
-    const wanted = vTmp.set(fx * (who === undefined ? cam.follow : 0.9), 0, THREE.MathUtils.clamp(fz, -HALF_L + (tall ? 16 : 15), HALF_L - (tall ? 11 : 15)));
+    // Kamera míří doprostřed mezi míč a hráče z titulku (ne přímo za hráčem, jinak by se zdálo, že stojí).
+    const fx = (frame.ballX + focus.reduce((sum, i) => sum + states[i].x, 0)) / (focus.length + 1);
+    const fz = (frame.ballZ + focus.reduce((sum, i) => sum + states[i].z, 0)) / (focus.length + 1);
+    const wanted = vTmp.set(fx * (focus.length ? 0.9 : cam.follow), 0, THREE.MathUtils.clamp(fz, -HALF_L + (tall ? 16 : 15), HALF_L - (tall ? 11 : 15)));
     if (!look.current || look.current.distanceTo(wanted) > 30) look.current = wanted.clone();
     else look.current.lerp(wanted, 1 - Math.exp(-Math.min(delta, 0.1) * 2.2));
     camera.position.copy(look.current).add(cam.offset);
