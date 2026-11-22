@@ -21,6 +21,8 @@ export interface ReplayProgress {
   halfTime: boolean;
   finished: boolean;
   paused: boolean;
+  /** Po skoku na akci: událost, jejíž scéna má chvíli stát na prvním snímku. */
+  cue: number | null;
   fast: boolean;
   homeGoals: number;
   awayGoals: number;
@@ -43,7 +45,7 @@ export function Replay3D({ detail, events, progress, onReady }: {
   /** Scéna se poprvé vykreslila; 2D záznam do té doby čeká s výkopem. */
   onReady: () => void;
 }) {
-  const { idx, flash, kickoff, halfTime, finished, paused, fast, homeGoals, awayGoals } = progress;
+  const { idx, flash, kickoff, halfTime, finished, paused, cue, fast, homeGoals, awayGoals } = progress;
   const homeName = detail.home_name as string, awayName = detail.away_name as string;
   const kits = useMemo(() => ({ home: detail.home_kit as ReplayKit, away: detail.away_kit as ReplayKit }), [detail]);
   const pens = typeof detail.home_pens === "number" && typeof detail.away_pens === "number" && detail.home_pens + detail.away_pens > 0 ? { home: detail.home_pens, away: detail.away_pens } : null;
@@ -55,10 +57,12 @@ export function Replay3D({ detail, events, progress, onReady }: {
   }), [detail, events, homeName, awayName, kits, margin]);
 
   // Krok 2D záznamu → scéna: „ŠANCE!“ je útočná fáze události, která teprve přijde, jinak běží poslední ukázaná událost.
-  const attack = flash === "attacking";
-  const still = kickoff !== null || halfTime || (idx === 0 && !attack);
-  const scene = useMemo(() => (finished ? replay.finale() : still ? replay.kickoff(idx) : replay.scene(attack ? idx : idx - 1)), [replay, finished, still, attack, idx]);
-  const started = useMemo(() => ({ scene, attack, startedAt: performance.now() }), [scene, attack]);
+  // Po skoku stojí scéna cílové akce na prvním snímku (u šance na začátku útoku).
+  const shot = flash === "attacking";
+  const still = cue === null && (kickoff !== null || halfTime || (idx === 0 && !shot));
+  const scene = useMemo(() => (cue !== null ? replay.scene(cue) : finished ? replay.finale() : still ? replay.kickoff(idx) : replay.scene(shot ? idx : idx - 1)), [replay, cue, finished, still, shot, idx]);
+  const attack = cue !== null ? scene.split > scene.start : shot;
+  const started = useMemo(() => ({ scene, attack, startedAt: performance.now() }), [scene, attack, cue !== null]); // eslint-disable-line react-hooks/exhaustive-deps
   const step = useRef<ReplayStep>({ ...started, rate: 1 });
   /** Jen při vývoji: scéna zastavená pro snímek obrazovky (window.__replay3d.freeze). */
   const frozen = useRef<ReplayStep | null>(null);
@@ -66,7 +70,7 @@ export function Replay3D({ detail, events, progress, onReady }: {
   // Pauza zastaví scénu tam, kde zrovna je.
   const pausedAt = useMemo(() => (paused ? ((performance.now() - started.startedAt) / 1000) * rate : undefined), [paused, started, rate]);
   // O přestávce stojí týmy připravené na výkop druhého poločasu.
-  step.current = frozen.current ?? { ...started, rate, hold: halfTime ? 0 : pausedAt };
+  step.current = frozen.current ?? { ...started, rate, hold: halfTime || cue !== null ? 0 : pausedAt };
   useEffect(() => {
     if (process.env.NODE_ENV !== "development") return;
     const freeze = (index: number, attackBeat: boolean, seconds: number) => {
@@ -92,7 +96,7 @@ export function Replay3D({ detail, events, progress, onReady }: {
 
   const [fullscreen, setFullscreen] = useState(false);
   const camBadge = useRef<HTMLDivElement>(null);
-  const event = attack ? events[idx] : events[idx - 1];
+  const event = cue !== null ? events[cue] : attack ? events[idx] : events[idx - 1];
   const attendance = detail.attendance as number | null;
   const graphics = { detail, events, idx, event: still || finished ? undefined : event, attack, result: scene.result };
   const fixedLabel = finished ? { text: "KONEC ZÁPASU", sub: `${detail.home_score} : ${detail.away_score}${pens ? ` (pen. ${pens.home}:${pens.away})` : ""}`, tone: "info" as const }

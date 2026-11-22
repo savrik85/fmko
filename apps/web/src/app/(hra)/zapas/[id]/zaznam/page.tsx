@@ -144,17 +144,23 @@ export default function MatchReplayPage() {
   const [paused, setPaused] = useState(false);
   const run = useRef(0);
   const starts = useMemo(() => (match ? actionStarts(match.events) : []), [match]);
+  /** Po skoku: akce, jejíž první snímek se půl vteřiny drží, než se rozběhne (ať je vidět, kam se skočilo). */
+  const [cue, setCue] = useState<number | null>(null);
+  const jumped = useRef(false);
   const jumpTo = (k: number) => {
     if (!match) return;
-    run.current++;
+    const gen = ++run.current;
     animating.current = false;
+    jumped.current = true;
     const before = match.events.slice(0, k);
     setHg(before.filter((e) => e.type === "goal" && e.teamId === 1).length);
     setAg(before.filter((e) => e.type === "goal" && e.teamId !== 1).length);
     setFlash(null); setFlashEvent(null); setKickoff(null); setHtPause(false); setFinished(false); setPaused(false);
-    setHtDone((before[k - 1]?.minute ?? 0) > 45);
+    // Skok rovnou do druhého poločasu přestávku nespouští.
+    setHtDone((match.events[k]?.minute ?? 0) > 45);
     setIdx(k);
-    setTick((t) => t + 1);
+    setCue(k);
+    setTimeout(() => { if (gen !== run.current) return; setCue(null); setTick((t) => t + 1); }, 500);
   };
   /** Událost, která se právě hraje (při „ŠANCE!“ ta, která teprve přijde). */
   const playing = flash === "attacking" ? idx : idx - 1;
@@ -259,8 +265,11 @@ export default function MatchReplayPage() {
 
   // Auto-advance
   useEffect(() => {
-    if (!match || !started.current || finished || htPause || paused || animating.current) return;
+    if (!match || !started.current || finished || htPause || paused || cue !== null || animating.current) return;
     const gen = run.current;
+    // Hned po skoku se na předchozí událost nečeká, akce začne rovnou.
+    const afterJump = jumped.current;
+    jumped.current = false;
     if (idx >= match.events.length) { setFinished(true); setHg(match.home_score); setAg(match.away_score); markSeen(); return; }
     if (speed === "instant") {
       let h = 0, a = 0;
@@ -323,9 +332,9 @@ export default function MatchReplayPage() {
     }
 
     // Čekání patří právě ukázané události (idx - 1); ve 3D se u události bez scény nečeká, ani po výkopu.
-    const t = setTimeout(() => { setIdx((i) => i + 1); }, view3d && scened && (idx === 0 || !scened[idx - 1]) ? 0 : SPEED_MS[speed]);
+    const t = setTimeout(() => { setIdx((i) => i + 1); }, afterJump || (view3d && scened && (idx === 0 || !scened[idx - 1])) ? 0 : SPEED_MS[speed]);
     return () => clearTimeout(t);
-  }, [match, idx, speed, finished, htPause, htDone, tick, markSeen, view3d, scened, paused]);
+  }, [match, idx, speed, finished, htPause, htDone, tick, markSeen, view3d, scened, paused, cue]);
 
   if (loading) return <div className="flex items-center justify-center min-h-[60vh]"><Spinner /></div>;
   if (!match || match.events.length === 0) return (
@@ -573,7 +582,7 @@ export default function MatchReplayPage() {
             <>
               {view3d && (
                 <Replay3D detail={match.detail} events={match.events} onReady={() => setReady3d(true)}
-                  progress={{ idx, flash, kickoff, halfTime: htPause, finished, paused, fast: speed === "fast", homeGoals: hg, awayGoals: ag }} />
+                  progress={{ idx, flash, kickoff, halfTime: htPause, finished, paused, cue, fast: speed === "fast", homeGoals: hg, awayGoals: ag }} />
               )}
               <button onClick={switchView} title={view3d ? "Přepnout na 2D záznam" : "Přepnout na 3D záznam"}
                 className="absolute top-2 left-2 z-30 h-8 px-2.5 rounded-lg bg-black/60 hover:bg-black/80 text-white text-xs font-heading font-bold">{view3d ? "2D" : "3D"}</button>
