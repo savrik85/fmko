@@ -9,7 +9,7 @@ import { PositionBadge } from "@/components/ui/position-badge";
 import { bestTextOn } from "@/lib/team-color";
 import type { BadgePattern } from "@/components/ui";
 import { clientOnly } from "@/components/client-only";
-import { actionStarts, scenedEvents, shootoutEvents } from "@/components/match/replay-3d/scenes";
+import { actionStarts, scenedEvents, shootoutEvents, type ReplayKit } from "@/components/match/replay-3d/scenes";
 
 // 3D záznam se stáhne, až když ho hráč má zapnutý.
 const Replay3D = clientOnly(() => import("@/components/match/replay-3d/Replay3D").then((m) => m.Replay3D));
@@ -383,6 +383,8 @@ export default function MatchReplayPage() {
   const hc = match.home_color;
   const ac = match.away_color;
   const activeTeamColor = cur ? (cur.teamId === 1 ? hc : ac) : "#666";
+  // Dres v záhlaví a barva týmu u hřiště jsou podle dresů, ve kterých se hrálo (hosté mohli nastoupit ve venkovních).
+  const homeKit = match.detail.home_kit as ReplayKit, awayKit = match.detail.away_kit as ReplayKit;
 
   return (
     <div className="max-w-4xl mx-auto px-3 py-2 space-y-1.5">
@@ -393,7 +395,7 @@ export default function MatchReplayPage() {
           <div className="flex flex-col sm:flex-row items-center sm:gap-2 gap-2 flex-1 min-w-0">
             <div className="flex items-center gap-2">
               <BadgePreview primary={hc} secondary={match.home_secondary} pattern={match.home_badge as BadgePattern} initials={ini(match.home_name)} size={36} />
-              <JerseyPreview primary={hc} secondary={match.home_secondary} size={28} />
+              <JerseyPreview primary={homeKit.shirt} secondary={homeKit.shorts} size={28} />
             </div>
             <span className="font-heading font-bold text-white text-xs sm:text-lg text-center sm:text-left break-words leading-tight">{match.home_name}</span>
           </div>
@@ -410,7 +412,7 @@ export default function MatchReplayPage() {
           </div>
           <div className="flex flex-col sm:flex-row items-center sm:gap-2 gap-2 flex-1 min-w-0 sm:justify-end">
             <div className="flex items-center gap-2 sm:order-last">
-              <JerseyPreview primary={ac} secondary={match.away_secondary} size={28} />
+              <JerseyPreview primary={awayKit.shirt} secondary={awayKit.shorts} size={28} />
               <BadgePreview primary={ac} secondary={match.away_secondary} pattern={match.away_badge as BadgePattern} initials={ini(match.away_name)} size={36} />
             </div>
             <span className="font-heading font-bold text-white text-xs sm:text-lg text-center sm:text-right break-words leading-tight">{match.away_name}</span>
@@ -631,8 +633,8 @@ export default function MatchReplayPage() {
           </div>
 
           {/* Team color side bars */}
-          <div className="absolute left-0 top-0 bottom-0 w-1.5" style={{ backgroundColor: hc }} />
-          <div className="absolute right-0 top-0 bottom-0 w-1.5" style={{ backgroundColor: ac }} />
+          <div className="absolute left-0 top-0 bottom-0 w-1.5" style={{ backgroundColor: homeKit.shirt }} />
+          <div className="absolute right-0 top-0 bottom-0 w-1.5" style={{ backgroundColor: awayKit.shirt }} />
 
           {/* GOAL: full overlay with CSS animation */}
           {flash === "goal" && (
@@ -731,20 +733,20 @@ export default function MatchReplayPage() {
         {/* Team labels under pitch */}
         <div className="flex justify-between px-4 pt-2">
           <div className="flex items-center gap-2">
-            <div className="w-3 h-3 rounded-tight" style={{ backgroundColor: hc }} />
+            <div className="w-3 h-3 rounded-tight" style={{ backgroundColor: homeKit.shirt }} />
             <span className="font-heading font-bold text-white text-sm">{match.home_name}</span>
           </div>
           <div className="flex items-center gap-2">
             <span className="font-heading font-bold text-white text-sm">{match.away_name}</span>
-            <div className="w-3 h-3 rounded-tight" style={{ backgroundColor: ac }} />
+            <div className="w-3 h-3 rounded-tight" style={{ backgroundColor: awayKit.shirt }} />
           </div>
         </div>
 
         {/* Stats under pitch */}
         <div className="px-4 pb-3 space-y-1">
-          <StatBar label="Střely" home={st.hs} away={st.as} hc={hc} ac={ac} />
-          <StatBar label="Fauly" home={st.hf} away={st.af} hc={hc} ac={ac} />
-          {(st.hc > 0 || st.ac > 0) && <StatBar label="Karty" home={st.hc} away={st.ac} hc={hc} ac={ac} />}
+          <StatBar label="Střely" home={st.hs} away={st.as} hc={homeKit.shirt} ac={awayKit.shirt} />
+          <StatBar label="Fauly" home={st.hf} away={st.af} hc={homeKit.shirt} ac={awayKit.shirt} />
+          {(st.hc > 0 || st.ac > 0) && <StatBar label="Karty" home={st.hc} away={st.ac} hc={homeKit.shirt} ac={awayKit.shirt} />}
         </div>
       </div>
 

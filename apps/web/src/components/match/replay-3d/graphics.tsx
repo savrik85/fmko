@@ -2,7 +2,7 @@
 
 import { FaceAvatar } from "@/components/players/face-avatar";
 import { bestTextOn } from "@/lib/team-color";
-import type { ReplayEvent, ReplayPlayer, ShotResult } from "./scenes";
+import type { ReplayEvent, ReplayKit, ReplayPlayer, ShotResult } from "./scenes";
 
 interface Lineup { starters: ReplayPlayer[]; subs: ReplayPlayer[] }
 /** Co se právě hraje: událost (při „ŠANCE“ ta, která teprve přijde) a její pořadí v zápase. */
@@ -23,7 +23,8 @@ export interface Label { text: string; tag?: string; sub?: string; tone: keyof t
 const PANEL = "bg-[#0a0a0a]/90 text-white";
 
 const teamName = (detail: Record<string, unknown>, e: ReplayEvent) => (e.teamId === 1 ? detail.home_name : detail.away_name) as string;
-const teamColor = (detail: Record<string, unknown>, e: ReplayEvent) => (e.teamId === 1 ? detail.home_color : detail.away_color) as string;
+/** Barva týmu v grafice je barva dresu, ve kterém hraje. */
+const kitColor = (detail: Record<string, unknown>, side: "home" | "away") => (detail[`${side}_kit`] as ReplayKit).shirt;
 const onColor = (color: string) => (bestTextOn(color) === "light" ? "#fff" : "#111827");
 const playerOf = (detail: Record<string, unknown>, e: ReplayEvent): ReplayPlayer | undefined => {
   const lineup = detail[e.teamId === 1 ? "home_lineup_data" : "away_lineup_data"] as Lineup;
@@ -38,9 +39,9 @@ function chanceOrigin(events: ReplayEvent[], index: number): string | undefined 
 }
 
 /**
- * Nápis nahoře v obraze. Šance má jeden nápis od rozehrání po střelu („ŠANCE“ a z čeho vznikla), pak výsledek.
- * Roh, standardka ani faul vlastní nápis nemají: 2D záznam je vystřídá šancí nebo kartou během okamžiku a nedal
- * by se přečíst. Jméno hráče je v nápisu jen tam, kde dole není titulek s hráčem.
+ * Nápis nahoře v obraze. Šance má jeden nápis od rozehrání (roh, standardka) po střelu: „ŠANCE“ a z čeho
+ * vznikla; pak výsledek. Faul před kartou nápis nemá. Jméno hráče je v nápisu jen tam, kde dole není titulek
+ * s hráčem.
  */
 function labelOf({ detail, events, index, event, attack, result }: GraphicsProps): Label | null {
   if (!event) return null;
@@ -93,7 +94,7 @@ function scorers(events: ReplayEvent[], index: number, teamId: number): string {
 export function EventCard({ detail, events, index, event, attack }: GraphicsProps) {
   if (!event || attack || !["goal", "card", "injury", "substitution"].includes(event.type)) return null;
   const player = playerOf(detail, event);
-  const color = teamColor(detail, event);
+  const color = kitColor(detail, event.teamId === 1 ? "home" : "away");
   const goals = events.slice(0, index + 1).filter((e) => e.type === "goal" && e.playerName === event.playerName && e.teamId === event.teamId).length;
   // „Střídání: X za Y“, u vyloučeného brankáře „… ven jde Y“.
   const out = event.description.match(/(?: za | ven jde )([^,]+)$/)?.[1];
@@ -137,9 +138,9 @@ export function ScoreBug({ detail, homeGoals, awayGoals, minute }: { detail: Rec
   return (
     <div className="absolute top-2 left-2 z-30 pointer-events-none">
       <div className={`flex items-stretch gap-2 h-9 sm:h-11 rounded-lg overflow-hidden shadow-xl font-heading ${PANEL}`}>
-        {team(detail.home_name as string, detail.home_color as string, homeGoals, false)}
+        {team(detail.home_name as string, kitColor(detail, "home"), homeGoals, false)}
         <span className="self-center text-white/40 font-[900]">:</span>
-        {team(detail.away_name as string, detail.away_color as string, awayGoals, true)}
+        {team(detail.away_name as string, kitColor(detail, "away"), awayGoals, true)}
         {minute !== undefined && <span className="self-center px-3 border-l border-white/20 text-white/70 font-bold text-sm tabular-nums">{minute}&apos;</span>}
       </div>
     </div>
