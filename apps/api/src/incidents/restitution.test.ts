@@ -173,6 +173,8 @@ describe("vrácení po uzavřeném incidentu (Turek a poháry, 23.–24. 10.)", 
     const bodies = (await db.prepare("SELECT sender_type, body FROM messages ORDER BY rowid").all<{ sender_type: string; body: string }>()).results;
     expect(bodies.find((m) => m.sender_type === "player")?.body).toContain("poháry z vitríny");
     expect(bodies.find((m) => m.sender_type === "system")?.body).toMatch(/^✋ Pepa Průšvih vrátil, co vzal/);
+    // E2E 22. 11. (Šimek): „(Poháry z vitríny): poháry z vitríny“ zdvojeně.
+    expect(bodies.find((m) => m.sender_type === "system")?.body).toBe("✋ Pepa Průšvih vrátil, co vzal (Poháry z vitríny).");
     expect((await db.prepare("SELECT status FROM coach_commitments").first<{ status: string }>())?.status).toBe("kept");
     expect((await db.prepare("SELECT fact FROM club_incident_knowledge").first<{ fact: string }>())?.fact).toContain("opravdu vrátil");
     // Úkol už je vyřízený.
@@ -298,7 +300,7 @@ describe("Turek a poháry podle kopie produ 22. 11. (C3a)", () => {
     expect(await db.prepare("SELECT trophy_case FROM equipment WHERE team_id = ?").bind(TEAM).first()).toEqual({ trophy_case: 2 });
     expect(await db.prepare("SELECT recovered FROM club_incidents").first()).toEqual({ recovered: 1 });
     const kustod = (await db.prepare("SELECT body FROM messages WHERE sender_type = 'system'").first<{ body: string }>())?.body;
-    expect(kustod).toContain("poháry z vitríny");
+    expect(kustod).toContain("vrátil, co vzal (Poháry z vitríny).");
     expect(kustod).toContain("prodal do zastavárny");
   });
 });

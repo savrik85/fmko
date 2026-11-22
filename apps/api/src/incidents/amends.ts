@@ -363,7 +363,9 @@ export async function settleAmendsTask(db: D1Database, r: AmendsTaskRow, now: Da
         seed: r.id, metadata: { ...smsIncidentu(inc.id), amends: task, delivered: true },
       }).catch((e) => logger.warn({ module: M }, `SMS o vrácení ${r.id}`, e));
       const sale = resold > 0 ? ` Klub už měl náhradu, vrácené prodal do zastavárny za ${resold.toLocaleString("cs-CZ")} Kč.` : "";
-      await sendIncidentSystemSms(db, r.team_id, SMS_ROLE_KUSTOD, `✋ ${name} vrátil, co vzal (${title}): ${what}.${sale}`, smsIncidentu(inc.id))
+      // Co vrátil, jen když to neříká už název incidentu: „(Poháry z vitríny): poháry z vitríny“ (E2E 22. 11.).
+      const detail = what.toLowerCase() === title.toLowerCase() ? "" : `: ${what}`;
+      await sendIncidentSystemSms(db, r.team_id, SMS_ROLE_KUSTOD, `✋ ${name} vrátil, co vzal (${title})${detail}.${sale}`, smsIncidentu(inc.id))
         .catch((e) => logger.warn({ module: M }, `kustod o vrácení ${r.id}`, e));
     }
     logger.info({ module: M, teamId: r.team_id }, `${name} vrátil ${inc.id}: ${what}`);
