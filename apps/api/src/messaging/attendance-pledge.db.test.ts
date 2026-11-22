@@ -249,6 +249,35 @@ describe("slib k zápasu a kabina zápasu", () => {
   });
 });
 
+describe("kabina zápasu bez doslovných kopií (Jitona, E2E 22. 11.)", () => {
+  // Filip i Tůma „Nakonec dorazím, domluvil jsem se s trenérem.“, Veselý i Marek „Změna plánu, přijdu, kluci.“
+  it("4 hráči přemluvení za sebou v jedné kabině nemají dvě stejné věty", async () => {
+    const ids = ["f1550185", "6be7bd77", "6b0fd5fe", "56c64d42"];
+    await db.batch([
+      db.prepare("INSERT INTO conversations (id, team_id, type, title, created_at) VALUES ('g1', 'club', 'squad_group', '⚽ vs Hradčany', '2026-11-21')"),
+      db.prepare(`INSERT INTO messages (id, conversation_id, sender_type, sender_id, sender_name, body, metadata, sent_at) VALUES
+        ('a1', 'g1', 'user', 'club', 'Trenér', 'Kdo může?', '{"type":"match_announce","calendarId":"cal1"}', '2026-11-21T03:00:00Z')`),
+      ...ids.flatMap((id, i) => [
+        db.prepare("INSERT INTO players (id, team_id, first_name, last_name, nationality, life_context, coach_relationship) VALUES (?, 'club', ?, 'Hráč', 'CZ', '{}', 60)").bind(id, `Hráč${i}`),
+        db.prepare("INSERT INTO conversations (id, team_id, type, title, participant_id, created_at) VALUES (?, 'club', 'player', ?, ?, '2026-11-01')").bind(`c-${id}`, `Hráč${i}`, id),
+        db.prepare(`INSERT INTO messages (id, conversation_id, sender_type, sender_id, sender_name, body, metadata, sent_at)
+          VALUES (?, 'g1', 'player', ?, ?, 'Nemůžu, mám kocovinu.', '{"type":"attendance","response":"no","calendarId":"cal1"}', ?)`)
+          .bind(`x-${id}`, id, `Hráč${i}`, `2026-11-21T03:00:${10 + i}Z`),
+      ]),
+    ]);
+    for (const [i, id] of ids.entries()) {
+      await recordAttendancePledge(db, {
+        clubTeamId: "club", convId: `c-${id}`, playerId: id, playerFirstName: `Hráč${i}`, pledge: { event: "match", intent: "attend", when: "next" },
+        now: new Date(Date.parse("2026-11-21T07:00:00Z") + i * 60_000),
+      });
+    }
+    const said = (await db.prepare("SELECT body FROM messages WHERE conversation_id = 'g1' AND json_extract(metadata, '$.timing') = 'pledge'").all<{ body: string }>()).results.map((r) => r.body);
+    expect(said).toHaveLength(4);
+    expect(new Set(said).size).toBe(4);
+    for (const body of said) expect(MATCH_ATTEND_PLEDGE_TEXTS).toContain(body);
+  });
+});
+
 describe("ranní vyhodnocení", () => {
   const setPledge = (p: Record<string, unknown>) =>
     db.prepare("UPDATE players SET life_context = json_set(life_context, '$.trainingPledge', json(?), '$.absence', json(?)) WHERE id = 'p1'")

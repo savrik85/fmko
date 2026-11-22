@@ -18,6 +18,16 @@ const ATTENDANCE_YES = [
   "Přijdu rovnou z práce",
   "Budu tam, klidně od začátku",
   "Ano, těším se",
+  "Jdu do toho",
+  "Budu tam včas",
+  "Jo, přijedu",
+  "Hlásím se, jsem k dispozici",
+  "Jasný, jdu hrát",
+  "Nohy jsou v pohodě, budu",
+  "Přijdu, už se těším",
+  "Beru, budu tam",
+  "Jo, dorazím i s kopačkama",
+  "Tady, jsem připravenej",
 ];
 
 const ATTENDANCE_LATE = [
@@ -41,17 +51,38 @@ const ATTENDANCE_NO = [
   "Nepočítej se mnou, rozhodil jsem si koleno",
 ];
 
-/** Vygeneruje docházkovou zprávu pro hráče */
+/**
+ * Věta z poolu podle losu, a když ji v téhle kabině už někdo napsal (`used`), nejbližší další,
+ * kterou ještě ne. Los se volá pořád jednou, ať se nezmění, co dál vychází ze stejného semínka.
+ */
+function pickUnused(pool: readonly string[], rng: Rng, used?: Set<string>): string {
+  const start = rng.int(0, pool.length - 1);
+  if (!used) return pool[start];
+  for (let k = 0; k < pool.length; k++) {
+    const text = pool[(start + k) % pool.length];
+    if (!used.has(text)) {
+      used.add(text);
+      return text;
+    }
+  }
+  return pool[start];
+}
+
+/**
+ * Vygeneruje docházkovou zprávu pro hráče. `used`: věty, které v kabině zápasu už padly
+ * (sdílená sada pro celou kabinu), ať tam dva hráči nenapíšou totéž.
+ */
 export function generateAttendanceMessage(
   playerName: string,
   available: boolean,
   condition: number,
   rng: Rng,
+  used?: Set<string>,
 ): { senderName: string; body: string; metadata: { type: "attendance"; response: "yes" | "no" | "late" } } {
   if (!available) {
     return {
       senderName: playerName,
-      body: ATTENDANCE_NO[rng.int(0, ATTENDANCE_NO.length - 1)],
+      body: pickUnused(ATTENDANCE_NO, rng, used),
       metadata: { type: "attendance", response: "no" },
     };
   }
@@ -59,13 +90,13 @@ export function generateAttendanceMessage(
   if (rng.int(0, 100) < 15) {
     return {
       senderName: playerName,
-      body: ATTENDANCE_LATE[rng.int(0, ATTENDANCE_LATE.length - 1)],
+      body: pickUnused(ATTENDANCE_LATE, rng, used),
       metadata: { type: "attendance", response: "late" },
     };
   }
   return {
     senderName: playerName,
-    body: ATTENDANCE_YES[rng.int(0, ATTENDANCE_YES.length - 1)],
+    body: pickUnused(ATTENDANCE_YES, rng, used),
     metadata: { type: "attendance", response: "yes" },
   };
 }
