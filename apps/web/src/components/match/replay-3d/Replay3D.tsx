@@ -7,13 +7,13 @@ import { builtExtensionsOf } from "@/components/stadium/stadium-3d/stand-levels"
 import type { WeatherType } from "@/components/stadium/stadium-3d/constants";
 import { venueExtensions, venueFacilities } from "@/app/(hra)/turnaj/venue-scene";
 import { ReplayScene, type ReplayStep } from "./ReplayScene";
-import { CoachCard, EventCard, EventLabel, ScoreBug } from "./graphics";
-import { Replay, type ReplayCoach, type ReplayEvent, type ReplayKit, type ReplayPlayer } from "./scenes";
+import { CoachCard, EventCard, EventLabel, initials, ScoreBug } from "./graphics";
+import { Replay, shootoutScore, type ReplayCoach, type ReplayEvent, type ReplayKit, type ReplayLineup } from "./scenes";
 
 const Stadium3D = clientOnly(() => import("@/components/stadium/stadium-3d/Stadium3D").then((m) => m.Stadium3D));
 
 /** Stav záznamu (zaznam/page.tsx); 3D kreslí totéž, co právě ukazuje on. */
-export interface ReplayProgress {
+interface ReplayProgress {
   /** Kolikrát se záznam pustil od začátku (tlačítko „předchozí“ až na úvod). */
   take: number;
   /** Kolik událostí už záznam ukázal. */
@@ -33,14 +33,11 @@ export interface ReplayProgress {
   awayGoals: number;
 }
 
-interface StoredLineup { starters: ReplayPlayer[]; subs: ReplayPlayer[] }
 interface StadiumData {
   capacity?: number;
   facilities: Record<string, number>;
   standExtensions?: { slots: { slot: string; built?: { kind: string; level: number } | null }[] };
 }
-
-const initials = (name: string) => name.split(" ").map((w) => w[0]).filter(Boolean).slice(0, 2).join("").toUpperCase();
 
 /** 3D záznam zápasu na stadionu domácích, řízený stavem záznamu. Vyplní rodiče, do kterého se vloží. */
 export function Replay3D({ detail, events, progress, onReady }: {
@@ -51,15 +48,15 @@ export function Replay3D({ detail, events, progress, onReady }: {
   onReady: () => void;
 }) {
   const { take, idx, flash, intro, kickoff, halfTime, finished, paused, cue, fast, homeGoals, awayGoals } = progress;
-  const homeName = detail.home_name as string, awayName = detail.away_name as string;
+  const homeName = detail.home_name as string;
   const kits = useMemo(() => ({ home: detail.home_kit as ReplayKit, away: detail.away_kit as ReplayKit }), [detail]);
-  const pens = typeof detail.home_pens === "number" && typeof detail.away_pens === "number" && detail.home_pens + detail.away_pens > 0 ? { home: detail.home_pens, away: detail.away_pens } : null;
+  const pens = shootoutScore(detail);
   const margin = (detail.home_score as number) - (detail.away_score as number) || (pens ? pens.home - pens.away : 0);
   const replay = useMemo(() => new Replay({
     matchId: detail.id as string, events, winner: margin > 0 ? "home" : margin < 0 ? "away" : null,
-    home: { name: homeName, kit: kits.home, coach: detail.home_coach as ReplayCoach | null, ...(detail.home_lineup_data as StoredLineup) },
-    away: { name: awayName, kit: kits.away, coach: detail.away_coach as ReplayCoach | null, ...(detail.away_lineup_data as StoredLineup) },
-  }), [detail, events, homeName, awayName, kits, margin]);
+    home: { coach: detail.home_coach as ReplayCoach | null, ...(detail.home_lineup_data as ReplayLineup) },
+    away: { coach: detail.away_coach as ReplayCoach | null, ...(detail.away_lineup_data as ReplayLineup) },
+  }), [detail, events, margin]);
 
   // Krok záznamu → záběr: „ŠANCE“ je útočná fáze události, která teprve přijde; jinak je v obraze poslední akce
   // (nebo výkop) a běží dál. Po skoku stojí cílová akce na prvním snímku (u šance na začátku útoku).
@@ -71,8 +68,8 @@ export function Replay3D({ detail, events, progress, onReady }: {
   // Skok začíná nový záběr, i když míří na akci, která zrovna běží.
   const play = useMemo(() => ({ scene, attack }), [scene, attack, cue !== null, take]); // eslint-disable-line react-hooks/exhaustive-deps
   // O přestávce stojí týmy připravené na výkop druhého poločasu.
-  const step = useRef<ReplayStep>({ play, rate: 1 });
-  step.current = { play, rate: fast ? 2 : 1, hold: halfTime || cue !== null ? 0 : undefined };
+  const step = useRef<ReplayStep>({ play, rate: 1, hold: false });
+  step.current = { play, rate: fast ? 2 : 1, hold: halfTime || cue !== null };
 
   // Stadion domácích; turnaj se hraje na hřišti z losu a velkoklub z poháru stadion ve hře nemá.
   const venue = detail.isTournament === true ? (detail.venue as { capacity?: number; look?: Record<string, unknown> } | null) : null;
@@ -104,7 +101,7 @@ export function Replay3D({ detail, events, progress, onReady }: {
   const event = cue === null && (intro !== null || kickoff !== null || halfTime || finished) ? undefined : events[index];
   const coachSide = intro === "home" || intro === "away" ? intro : null;
   const attendance = detail.attendance as number | null;
-  const graphics = { detail, events, index, event, attack, result: scene.result };
+  const graphics = { detail, events, index, event, attack };
   const fixedLabel = finished && !over ? { text: "KONEC ZÁPASU", sub: finalScore, tone: "info" as const }
     : coachSide ? { text: coachSide === "home" ? "TRENÉR DOMÁCÍCH" : "TRENÉR HOSTŮ", tone: "info" as const }
     : kickoff ? { text: "VÝKOP", sub: kickoff === "2nd" ? "2. poločas" : undefined, tone: "info" as const } : undefined;

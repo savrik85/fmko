@@ -3,32 +3,30 @@
 import { FaceAvatar } from "@/components/players/face-avatar";
 import { bestTextOn } from "@/lib/team-color";
 import type { ReactNode } from "react";
-import type { ReplayCoach, ReplayEvent, ReplayKit, ReplayPlayer, ShotResult } from "./scenes";
+import { chanceResult, substitutedOut, type ReplayCoach, type ReplayEvent, type ReplayKit, type ReplayLineup, type ReplayPlayer, type ShotResult } from "./scenes";
 
-interface Lineup { starters: ReplayPlayer[]; subs: ReplayPlayer[] }
 /** Co se právě hraje: událost (při „ŠANCE“ ta, která teprve přijde) a její pořadí v zápase. */
-export interface GraphicsProps {
+interface GraphicsProps {
   detail: Record<string, unknown>;
   events: ReplayEvent[];
   index: number;
   event: ReplayEvent | undefined;
   attack: boolean;
-  /** Výsledek střely ve scéně (šance). */
-  result: ShotResult | null;
 }
 
 const RESULTS: Record<ShotResult, string> = { goal: "GÓÓÓL!", saved: "CHYTIL BRANKÁŘ!", post: "TYČ!", bar: "BŘEVNO!", wide: "VEDLE!", over: "NAD BRÁNU!", blocked: "ZBLOKOVÁNO!" };
 const TONES = { goal: "bg-green-500 text-white", danger: "bg-orange-500 text-white", miss: "bg-red-500 text-white", yellow: "bg-yellow-400 text-gray-900", red: "bg-red-600 text-white", info: "bg-white text-gray-900" };
-export interface Label { text: string; tag?: string; sub?: string; tone: keyof typeof TONES }
+interface Label { text: string; tag?: string; sub?: string; tone: keyof typeof TONES }
 /** Tmavá plocha televizní grafiky, stejná jako výsledková tabule 2D záznamu. */
 const PANEL = "bg-[#0a0a0a]/90 text-white";
 
+export const initials = (name: string) => name.split(" ").map((w) => w[0]).filter(Boolean).slice(0, 2).join("").toUpperCase();
 const teamName = (detail: Record<string, unknown>, e: ReplayEvent) => (e.teamId === 1 ? detail.home_name : detail.away_name) as string;
 /** Barva týmu v grafice je barva dresu, ve kterém hraje. */
 const kitColor = (detail: Record<string, unknown>, side: "home" | "away") => (detail[`${side}_kit`] as ReplayKit).shirt;
 const onColor = (color: string) => (bestTextOn(color) === "light" ? "#fff" : "#111827");
 const playerOf = (detail: Record<string, unknown>, e: ReplayEvent): ReplayPlayer | undefined => {
-  const lineup = detail[e.teamId === 1 ? "home_lineup_data" : "away_lineup_data"] as Lineup;
+  const lineup = detail[e.teamId === 1 ? "home_lineup_data" : "away_lineup_data"] as ReplayLineup;
   return [...lineup.starters, ...lineup.subs].find((p) => p.name === e.playerName);
 };
 
@@ -44,7 +42,7 @@ function chanceOrigin(events: ReplayEvent[], index: number): string | undefined 
  * vznikla; pak výsledek. Faul před kartou nápis nemá. Jméno hráče je v nápisu jen tam, kde dole není titulek
  * s hráčem.
  */
-function labelOf({ detail, events, index, event, attack, result }: GraphicsProps): Label | null {
+function labelOf({ detail, events, index, event, attack }: GraphicsProps): Label | null {
   if (!event) return null;
   if (event.detail?.startsWith("shootout:")) return { text: "ROZSTŘEL", tag: event.detail === "shootout:goal" ? "GÓL" : "NEDAL", sub: teamName(detail, event), tone: event.detail === "shootout:goal" ? "goal" : "miss" };
   if (event.type === "corner" || event.type === "freekick" || (attack && event.source !== "penalty")) return { text: "ŠANCE", tag: chanceOrigin(events, index), sub: teamName(detail, event), tone: "danger" };
@@ -52,7 +50,10 @@ function labelOf({ detail, events, index, event, attack, result }: GraphicsProps
   switch (event.type) {
     case "goal": return { text: RESULTS.goal, sub: teamName(detail, event), tone: "goal" };
     // U výsledku je řečeno, čí jméno to je: samotné „VEDLE! Novák“ se dalo číst i jako jméno brankáře.
-    case "chance": return { text: event.detail?.startsWith("penalty_") && result !== "saved" ? "NEPROMĚNIL!" : RESULTS[result ?? "wide"], sub: `${event.detail === "header_missed" ? "hlavičkoval" : "střílel"} ${event.playerName}`, tone: "miss" };
+    case "chance": {
+      const result = chanceResult(event);
+      return { text: event.detail?.startsWith("penalty_") && result !== "saved" ? "NEPROMĚNIL!" : RESULTS[result], sub: `${event.detail === "header_missed" ? "hlavičkoval" : "střílel"} ${event.playerName}`, tone: "miss" };
+    }
     case "card": return { text: event.detail === "red" ? "ČERVENÁ KARTA" : "ŽLUTÁ KARTA", sub: teamName(detail, event), tone: event.detail === "red" ? "red" : "yellow" };
     case "injury": return { text: "ZRANĚNÍ", sub: teamName(detail, event), tone: "miss" };
     case "substitution": return { text: "STŘÍDÁNÍ", sub: teamName(detail, event), tone: "info" };
@@ -97,10 +98,8 @@ export function EventCard({ detail, events, index, event, attack }: GraphicsProp
   const player = playerOf(detail, event);
   const color = kitColor(detail, event.teamId === 1 ? "home" : "away");
   const goals = events.slice(0, index + 1).filter((e) => e.type === "goal" && e.playerName === event.playerName && e.teamId === event.teamId).length;
-  // „Střídání: X za Y“, u vyloučeného brankáře „… ven jde Y“.
-  const out = event.description.match(/(?: za | ven jde )([^,]+)$/)?.[1];
   const note = event.type === "goal" ? `${goals}. gól v zápase`
-    : event.type === "substitution" ? `↓ ${out}`
+    : event.type === "substitution" ? `↓ ${substitutedOut(event)}`
     : event.type === "injury" ? event.detail
     : null;
   const board = event.type === "goal" ? [1, 2].map((teamId) => scorers(events, index, teamId)).filter(Boolean).join("   —   ") : null;
@@ -133,7 +132,7 @@ function LowerThird({ color, name, avatar, title, note, board, badge }: {
     <div className="absolute bottom-2 inset-x-2 z-30 pointer-events-none">
       <div className="flex items-stretch h-11 sm:h-16 rounded-lg overflow-hidden shadow-xl font-heading animate-in fade-in slide-in-from-bottom-2 duration-300">
         <div className="shrink-0 w-11 sm:w-16 overflow-hidden flex items-end justify-center font-[900] text-lg" style={{ backgroundColor: color, color: onColor(color) }}>
-          {avatar ? <FaceAvatar faceConfig={avatar} size={50} className="scale-[0.7] sm:scale-100 origin-bottom" /> : <span className="self-center">{name.split(" ").map((w) => w[0]).slice(0, 2).join("")}</span>}
+          {avatar ? <FaceAvatar faceConfig={avatar} size={50} className="scale-[0.7] sm:scale-100 origin-bottom" /> : <span className="self-center">{initials(name)}</span>}
         </div>
         <div className="flex-1 min-w-0 flex flex-col">
           <div className={`flex-1 flex items-center px-3 min-w-0 ${PANEL}`}>

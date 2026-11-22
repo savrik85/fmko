@@ -4,10 +4,10 @@ import { useEffect, useMemo, useRef, type RefObject } from "react";
 import * as THREE from "three";
 import { addAfterEffect, useFrame, useThree } from "@react-three/fiber";
 import { PITCH_SURFACE_Y } from "@/components/stadium/stadium-3d/constants";
-import { HALF_W, sampleClip, sceneTime, type Clip, type Figure, type Frame, type Replay, type ReplayKit, type Scene } from "./scenes";
+import { emptyFrame, HALF_W, sampleClip, sceneTime, type Clip, type Figure, type Replay, type ReplayKit, type Scene } from "./scenes";
 
 /** Záběr: scéna a její část. Nový objekt znamená hrát od začátku, i když jde o tutéž scénu (skok zpět na její začátek). */
-export interface ReplayPlay {
+interface ReplayPlay {
   scene: Scene;
   /** Útočná fáze šance (záznam ukazuje „ŠANCE“), jinak zbytek scény. */
   attack: boolean;
@@ -18,8 +18,8 @@ export interface ReplayStep {
   play: ReplayPlay;
   /** „Rychle“ přehrává scény dvakrát rychleji. */
   rate: number;
-  /** Záběr se v tomhle čase od svého začátku zastaví (stojící první snímek po skoku na akci). */
-  hold?: number;
+  /** Záběr stojí na svém prvním snímku (po skoku na akci, o přestávce). */
+  hold: boolean;
 }
 
 const REFEREE_KIT: ReplayKit = { shirt: "#111827", shorts: "#111827", socks: "#111827" };
@@ -124,8 +124,8 @@ export function ReplayScene({ replay, kits, snow, overview, step, replayBadge, v
 }) {
   const count = replay.figures.length;
   /** Obraz o kousek dál v klipu: po střihu z něj postavy vezmou rychlost a směr. */
-  const ahead = useMemo<Frame>(() => ({ figures: replay.figures.map(() => ({ visible: false, x: 0, y: 0, z: 0, pose: null })), ballX: 0, ballY: 0, ballZ: 0, cuts: 0 }), [replay]);
-  const frame = useMemo<Frame>(() => ({ figures: replay.figures.map(() => ({ visible: false, x: 0, y: 0, z: 0, pose: null })), ballX: 0, ballY: 0, ballZ: 0, cuts: 0 }), [replay]);
+  const ahead = useMemo(() => emptyFrame(count), [count]);
+  const frame = useMemo(() => emptyFrame(count), [count]);
   const states = useMemo<FigureState[]>(() => replay.figures.map(() => ({ x: 0, z: 0, yaw: 0, phase: 0, speed: 0 })), [replay]);
   const keepers = useMemo(() => keeperShirts(kits.home, kits.away), [kits]);
   const shadowGeometry = useMemo(() => new THREE.CircleGeometry(0.5, 16).rotateX(-Math.PI / 2), []);
@@ -167,13 +167,14 @@ export function ReplayScene({ replay, kits, snow, overview, step, replayBadge, v
     target.style.opacity = "1";
     Object.assign(b, { wanted: false, taken: true, left: DISSOLVE });
   }), [gl, veil]);
-  // Zastavená scéna (pauza) se nekreslí; po změně velikosti plátna (celá obrazovka) by zůstala prázdná.
+  // Zastavená scéna (pauza) se nekreslí; po změně velikosti plátna (celá obrazovka) by zůstala prázdná a po
+  // přepnutí pohledu stará.
   const size = useThree((s) => s.size);
   const get = useThree((s) => s.get);
   useEffect(() => {
     const state = get();
     if (state.frameloop === "never") state.advance(state.clock.elapsedTime);
-  }, [size, get]);
+  }, [size, overview, get]);
 
   const paint = (clip: Clip) => {
     PARTS.forEach((part, p) => {
@@ -194,7 +195,7 @@ export function ReplayScene({ replay, kits, snow, overview, step, replayBadge, v
       drawn.current = true;
       onReady();
     }
-    const { play, rate, hold = Infinity } = step.current;
+    const { play, rate, hold } = step.current;
     const dt = Math.min(delta, 0.1);
     const p = playback.current;
     if (p.play !== play) {
@@ -204,7 +205,7 @@ export function ReplayScene({ replay, kits, snow, overview, step, replayBadge, v
       Object.assign(p, { play, elapsed: seamless ? p.t - first : 0 });
     }
     const { scene, attack } = play;
-    const elapsed = p.elapsed = Math.min(p.elapsed + dt * rate, hold);
+    const elapsed = p.elapsed = hold ? 0 : p.elapsed + dt * rate;
     // Gól: po chvíli oslavy se zakončení zpomaleně zopakuje, pak oslava pokračuje.
     const again = !attack && scene.replay ? scene.replay : null;
     const replaying = again !== null && elapsed >= REPLAY.after && elapsed < REPLAY.after + REPLAY.seconds;
@@ -300,7 +301,7 @@ export function ReplayScene({ replay, kits, snow, overview, step, replayBadge, v
           joints.hip[k].makeTranslation(BODY.hip[0] * side, BODY.hip[1], 0).multiply(mTmp.makeRotationX(thigh));
           joints.knee[k].copy(joints.hip[k]).multiply(mTmp.makeTranslation(0, -BODY.knee, 0)).multiply(mTmp.makeRotationX(knee));
           // Ruka: v běhu proti noze s ohnutým loktem; při oslavě zdvižená šikmo vzhůru, při výskoku na hlavičku jen
-          // pokrčená před tělem; natažená nahoru je při skoku brankáře a rozhodčímu (ten zvedá jen pravou).
+          // pokrčená před tělem; natažená nahoru je při skoku brankáře a se zdviženou paží (`armUp`, jen pravá).
           const raised = armsUp || (f.pose === "armUp" && k === 0);
           // Podání ruky: pravá v pase před tělem, potřásá se v lokti (oba ve stejném rytmu, ruce zůstávají u sebe).
           const shaking = f.pose === "shake" && k === 0;

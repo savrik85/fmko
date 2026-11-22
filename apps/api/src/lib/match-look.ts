@@ -124,7 +124,8 @@ function homeKit(team: TeamKitRow | undefined, fallback: string): MatchKit {
 
 /**
  * Hosté: uložená venkovní sada, domácí sada, sekundární barva, bílá, černá — první,
- * která se dost liší od dresu domácích. Když žádná, hrají v poslední (černé).
+ * která se dost liší od dresu domácích. Bílá a černá jsou od sebe dál než dvojnásobek
+ * MIN_KIT_DISTANCE, takže aspoň jedna z nich vyhoví vždy.
  */
 function awayKit(team: TeamKitRow | undefined, fallback: string, homeShirt: string): MatchKit {
   const candidates: MatchKit[] = [];
@@ -135,7 +136,7 @@ function awayKit(team: TeamKitRow | undefined, fallback: string, homeShirt: stri
   candidates.push(homeKit(team, fallback));
   if (team?.secondary_color) candidates.push(solidKit(team.secondary_color));
   candidates.push(solidKit(WHITE), solidKit(BLACK));
-  return candidates.find((kit) => colorDistance(kit.shirt, homeShirt) > MIN_KIT_DISTANCE) ?? candidates[candidates.length - 1];
+  return candidates.find((kit) => colorDistance(kit.shirt, homeShirt) > MIN_KIT_DISTANCE)!;
 }
 
 /** Bilance klubu v soutěži před tímhle zápasem. */
