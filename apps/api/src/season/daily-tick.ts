@@ -350,26 +350,13 @@ export async function executeDailyTick(
   ).all();
 
   // Týmy, které dnes hrají — v den zápasu se netrénuje. Jedním dotazem přes
-  // všechny soutěže, ať to není per tým: liga a přátelák žijí v matches,
-  // pohár v cup_matches přes cup_teams.
+  // všechny soutěže, ať to není per tým (liga, přátelák i pohár, season/match-days.ts;
+  // stejně to bere slib docházky na trénink).
   const matchDayTeams = new Set<string>();
   {
     const den = effectiveDate.toISOString().slice(0, 10);
-    const rows = await env.DB.prepare(
-      `SELECT m.home_team_id AS team_id FROM matches m
-         LEFT JOIN season_calendar sc ON sc.id = m.calendar_id
-        WHERE substr(COALESCE(sc.scheduled_at, m.created_at), 1, 10) = ?
-       UNION
-       SELECT m.away_team_id FROM matches m
-         LEFT JOIN season_calendar sc ON sc.id = m.calendar_id
-        WHERE substr(COALESCE(sc.scheduled_at, m.created_at), 1, 10) = ?
-       UNION
-       SELECT ct.team_id FROM cup_matches cm
-         JOIN cup_teams ct ON ct.id IN (cm.home_cup_team_id, cm.away_cup_team_id)
-        WHERE ct.team_id IS NOT NULL AND substr(cm.scheduled_at, 1, 10) = ?`
-    ).bind(den, den, den).all<{ team_id: string | null }>()
-      .catch((e) => { logger.warn({ module: "daily-tick" }, "load match-day teams", e); return { results: [] }; });
-    for (const r of rows.results) if (r.team_id) matchDayTeams.add(r.team_id);
+    const { loadTeamMatchDays } = await import("./match-days");
+    for (const r of await loadTeamMatchDays(env.DB, { from: den, to: den })) matchDayTeams.add(r.teamId);
     if (matchDayTeams.size > 0) {
       logger.info({ module: "daily-tick" }, `match day: ${matchDayTeams.size} týmů dnes hraje, trénink jim odpadá`);
     }

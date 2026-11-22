@@ -24,13 +24,15 @@ beforeAll(async () => {
     "CREATE TABLE messages (id TEXT PRIMARY KEY, conversation_id TEXT, sender_type TEXT, sender_id TEXT, sender_name TEXT, body TEXT, metadata TEXT, sent_at TEXT, read INTEGER DEFAULT 0)",
     "CREATE TABLE coach_relation_log (id INTEGER PRIMARY KEY AUTOINCREMENT, player_id TEXT, team_id TEXT, old_value INTEGER, new_value INTEGER, delta INTEGER, raw_delta INTEGER, source TEXT, description TEXT, reference_id TEXT, game_date TEXT, created_at TEXT)",
     "CREATE TABLE coach_commitments (id TEXT PRIMARY KEY, team_id TEXT, player_id TEXT, conversation_id TEXT, kind TEXT, status TEXT, made_at TEXT, due_at TEXT, resolved_at TEXT, quote TEXT, details TEXT, last_reminder_key TEXT)",
+    "CREATE TABLE cup_teams (id TEXT PRIMARY KEY, team_id TEXT)",
+    "CREATE TABLE cup_matches (id TEXT PRIMARY KEY, home_cup_team_id TEXT, away_cup_team_id TEXT, scheduled_at TEXT)",
   ]) await db.prepare(sql).run();
 }, 30_000);
 
 afterAll(async () => { await miniflare.dispose(); });
 
 beforeEach(async () => {
-  for (const t of ["teams", "players", "season_calendar", "matches", "conversations", "messages", "coach_relation_log", "coach_commitments"]) {
+  for (const t of ["teams", "players", "season_calendar", "matches", "conversations", "messages", "coach_relation_log", "coach_commitments", "cup_teams", "cup_matches"]) {
     await db.prepare(`DELETE FROM ${t}`).run();
   }
   await db.batch([
@@ -138,6 +140,21 @@ describe("zápis slibu z odpovědi hráče", () => {
     expect((await life()).trainingPledge.intent).toBe("skip");
     await recordAttendancePledge(db, { clubTeamId: "club", convId: "c1", playerId: "p1", playerFirstName: "Petr", pledge: { event: "training", intent: "attend", when: "tue" } });
     expect((await life()).trainingPledge).toMatchObject({ intent: "attend", from: "2026-11-24" });
+  });
+
+  // Přetest 3 (Procházka): 📝 „přijde na trénink v sobotu 28. 11.“, v sobotu byl pohár a trénink
+  // se nekonal. Slib bral zápasy jen z ligy, tick trénink ruší i kvůli poháru a přáteláku.
+  it("v den poháru ani přáteláku se netrénuje: slib jde na nejbližší trénink, který se koná", async () => {
+    await db.batch([
+      db.prepare("INSERT INTO cup_teams VALUES ('ct1', 'club'), ('ct2', 'rival')"),
+      db.prepare("INSERT INTO cup_matches VALUES ('cm1', 'ct1', 'ct2', '2026-11-20T16:00:00.000Z')"),
+    ]);
+    expect(await recordAttendancePledge(db, { clubTeamId: "club", convId: "c1", playerId: "p1", playerFirstName: "Petr", pledge: { event: "training", intent: "attend", when: "fri" } }))
+      .toMatchObject({ from: "2026-11-24", until: "2026-11-24" });
+    // Přátelák v úterý 24. 11.: v okně slibu (7 dní) už žádný trénink není, nic se nezapíše.
+    await db.prepare("INSERT INTO matches VALUES ('f1', NULL, 'club', 'rival', 'scheduled', '2026-11-24T16:00:00.000Z')").run();
+    expect(await recordAttendancePledge(db, { clubTeamId: "club", convId: "c1", playerId: "p1", playerFirstName: "Petr", pledge: { event: "training", intent: "skip", when: "next" } }))
+      .toBeNull();
   });
 
   it("tým netrénuje: nic se nezapíše ani nepíše", async () => {
