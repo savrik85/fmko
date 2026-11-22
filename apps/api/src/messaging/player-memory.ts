@@ -174,8 +174,9 @@ export function marketListingLine(l: { kind: "transfer" | "loan"; since: string 
 /** Řádky do promptu podle toho, co `loadChatMemory` zjistil. Prázdné pole = nic. */
 export function memoryPromptLines(player: PlayerSnapshot): string[] {
   const lines: string[] = [];
-  if (player.drunkVoiceRecently) {
-    lines.push("- Nedávno jsi trenérovi poslal OPILOU hlasovku z hospody (je v historii). Když ti to vyčte, nezapírej, že jsi pil. Klidně se omluv nebo to zlehči.");
+  // Ve vlákně z hospody to řekne scénář (pub-night.ts): v hospodě pořád sedí, nebo „ráno potom“.
+  if (player.drunkVoiceRecently && !player.atPub && !player.pubMorningAfter) {
+    lines.push("- Nedávno jsi trenérovi z hospody poslal OPILOU hlasovku nebo zprávu (je v historii). Teď jsi střízlivý. Když na ni přijde řeč, nezapírej, že jsi pil: podle povahy se stydíš, zlehčuješ, nebo si za tím stojíš.");
   }
   if (player.missedCall) {
     lines.push(`- V posledních dnech jsi trenérovi ${player.missedCall.count > 1 ? `${player.missedCall.count}× ` : ""}volal a nevzal to. Volal jsi, protože tým prohrává a ty máš blbou náladu. Když se na to ptá, víš o tom.`);
