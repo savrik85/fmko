@@ -526,6 +526,36 @@ describe("poslední zpráva vlákna nepřebije odpověď na otázku (E2E 22. 11.
     expect(finalTurnHint(undefined)).not.toContain("—");
   });
 
+  // E2E 22. 11. (ráno po hlasovce, 3 výměny): prostřední tah 0/4 na otázku neodpověděl,
+  // Doležal na „Jak to vidíš s klukama v kabině?“ psal „dneska jsem se vyspal, hlava mě trochu
+  // bolí“. Pokyn s otázkou dostával jen poslední tah.
+  it("prostřední tah: když se trenér ptá, dostane taky „NEJDŘÍV mu na to odpověz“ s jeho otázkou", async () => {
+    const { pubThreadScenario } = await import("./pub-night");
+    const morning = pubThreadScenario(getScenarioById("pub_voice")!, "2026-11-21T23:40:00.000Z", new Date("2026-11-22T18:53:00.000Z")).scenario;
+    vi.mocked(generateText).mockClear();
+    vi.mocked(generateText).mockResolvedValueOnce(JSON.stringify({ body: "Kluci drží spolu, trenére.", conversation_complete: false }));
+    await generateReply({}, hrac(), [
+      { sender: "coach", body: "Ahoj, jak se máš?" },
+      { sender: "player", body: "trochu mě bolí hlava 🍺😁" },
+      { sender: "coach", body: "Jak to vidíš s klukama v kabině?" },
+    ], morning, tym, false);
+    const prompt = String(vi.mocked(generateText).mock.calls[0][1]);
+    expect(prompt).toContain("NEJDŘÍV mu na to odpověz");
+    expect(prompt).toContain("„Jak to vidíš s klukama v kabině?“");
+    expect(prompt).not.toContain("TOTO JE TVOJE POSLEDNÍ ZPRÁVA");
+
+    // Rozhovor od trenéra (Šimánek: „Co říkáš na naši formu?“) stejně, bez otázky nic.
+    vi.mocked(generateText).mockClear();
+    vi.mocked(generateText).mockResolvedValueOnce(JSON.stringify({ body: "Forma je dobrá.", conversation_complete: false, relationship_delta: 0, morale_delta: 0, summary: "Trenér se ptal." }));
+    await generateCoachInitiatedReply({}, hrac(), tym, [{ sender: "coach", body: "Co říkáš na naši formu?" }], false);
+    expect(String(vi.mocked(generateText).mock.calls[0][1])).toContain("NEJDŘÍV mu na to odpověz");
+    expect(String(vi.mocked(generateText).mock.calls[0][1])).toContain("„Co říkáš na naši formu?“");
+    vi.mocked(generateText).mockClear();
+    vi.mocked(generateText).mockResolvedValueOnce(JSON.stringify({ body: "Díky.", conversation_complete: false }));
+    await generateReply({}, hrac(), [{ sender: "coach", body: "Tak se měj." }], morning, tym, false);
+    expect(String(vi.mocked(generateText).mock.calls[0][1])).not.toContain("NEJDŘÍV mu na to odpověz");
+  });
+
   it("bez otázky jen uzavře; rozhovor od trenéra se při poslední zprávě taky nejdřív odpoví", async () => {
     vi.mocked(generateText).mockClear();
     vi.mocked(generateText).mockResolvedValueOnce(JSON.stringify({ body: "Díky, trenére, mějte se.", conversation_complete: true }));

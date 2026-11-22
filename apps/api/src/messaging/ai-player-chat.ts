@@ -798,12 +798,32 @@ function lastCoachMessage(history: readonly ThreadMessage[]): string | undefined
  * trenér ptá, je odpověď na jeho otázku hlavní a rozloučení až po ní.
  */
 export function finalTurnHint(lastCoach: string | undefined): string {
-  const question = lastCoach && lastCoach.includes("?") ? lastCoach.replace(/\s+/g, " ").trim().slice(0, 200) : null;
+  const question = coachQuestion(lastCoach);
   return question
-    ? `TOTO JE TVOJE POSLEDNÍ ZPRÁVA. Trenér se tě ptá („${question}“): NEJDŘÍV mu na to odpověz, to je v té zprávě hlavní. `
+    ? `TOTO JE TVOJE POSLEDNÍ ZPRÁVA. ${answerFirstLine(question)} `
       + "Teprve potom rozhovor krátce uzavři (poděkuj, rozluč se). Sám se už na nic nového neptej. Pole `conversation_complete` MUSÍ být true."
     : "TOTO JE TVOJE POSLEDNÍ ZPRÁVA. Zareaguj na to, co ti trenér napsal, a rozhovor uzavři (poděkuj, smiř se, rozluč se, "
       + "nebo prásknout dveřmi, když tě trenér naštval). Žádné nové otázky. Pole `conversation_complete` MUSÍ být true.";
+}
+
+/** Otázka v poslední zprávě trenéra (celá zpráva, jeden řádek, nejvýš 200 znaků), jinak null. */
+function coachQuestion(lastCoach: string | undefined): string | null {
+  return lastCoach && lastCoach.includes("?") ? lastCoach.replace(/\s+/g, " ").trim().slice(0, 200) : null;
+}
+
+function answerFirstLine(question: string): string {
+  return `Trenér se tě ptá („${question}“): NEJDŘÍV mu na to odpověz, to je v té zprávě hlavní.`;
+}
+
+/**
+ * Pokyn k tahu, který vlákno neuzavírá: když se trenér ptá, odpověď na jeho otázku je hlavní,
+ * stejně jako u poslední zprávy (`finalTurnHint`). Ráno po hlasovce (E2E 22. 11.) prostřední
+ * tah 0/4 na otázku neodpověděl a hráč se vracel ke kocovině: slabé „když se trenér ptá na
+ * něco jiného, odpověz na to“ v popisu scénáře (pub-night.ts) model přešel. Bez otázky nic.
+ */
+export function midTurnHint(lastCoach: string | undefined): string {
+  const question = coachQuestion(lastCoach);
+  return question ? `${answerFirstLine(question)} Na dřívější téma se vrať, jen když na otázku navazuje.` : "";
 }
 
 export interface ReplyResult {
@@ -841,7 +861,7 @@ export async function generateReply(
   const histText = formatHistory(history, player.firstName);
   const flags = replyFlagFields(player);
 
-  const closingHint = isFinalTurn ? finalTurnHint(lastCoachMessage(history)) : "";
+  const closingHint = isFinalTurn ? finalTurnHint(lastCoachMessage(history)) : midTurnHint(lastCoachMessage(history));
 
   const contextLine = team.lastMatchResult ? ` Poslední zápas: ${team.lastMatchResult}.` : "";
   const prompt0 = [
@@ -1139,7 +1159,8 @@ export async function generateCoachInitiatedReply(
     "",
     isFinalTurn
       ? finalTurnHint(lastCoachMessage(history))
-      : "conversation_complete dej true, když je téma vyčerpané (trenér se jen zeptal a ty jsi odpověděl). False jen když máš na co konkrétního navázat.",
+      : [midTurnHint(lastCoachMessage(history)), "conversation_complete dej true, když je téma vyčerpané (trenér se jen zeptal a ty jsi odpověděl). False jen když máš na co konkrétního navázat."]
+        .filter(Boolean).join("\n"),
     "",
     "Když dáš conversation_complete = true, zhodnoť i dopad z tvého pohledu. Hodnoť JEN POSLEDNÍ zprávu trenéra (a to, co jsi na ni odpověděl). Starší repliky v historii se už započítaly dřív, nezapočítávej je znovu:",
     `- relationship_delta (-${COACH_CHAT_MAX_RELATION}..+${COACH_CHAT_MAX_RELATION}): jak se změnil tvůj vztah k trenérovi. Omluva, pochvala, zájem o tebe, pozvání na pivo, splněný slib → kladně. Urážka, výhrůžka, výsměch, přehlížení → záporně. Obyčejný pozdrav nebo pár slov o ničem → 0.`,
