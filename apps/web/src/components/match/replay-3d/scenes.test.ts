@@ -14,8 +14,9 @@ const event = (minute: number, type: string, teamId: 1 | 2, slot: number, extra:
 };
 const input = (events: ReplayEvent[]): ReplayInput => ({
   matchId: "test", events, winner: "home",
-  home: { name: "Domácí", kit, starters: squad("H"), subs: [{ id: "hs", name: "Sub 1", position: "MID" }] },
-  away: { name: "Hosté", kit, starters: squad("A"), subs: [] },
+  // Domácí trenér je sopka, hostující kliďas.
+  home: { name: "Domácí", kit, starters: squad("H"), subs: [{ id: "hs", name: "Sub 1", position: "MID" }], coach: { name: "Trenér D", motivation: 90 } },
+  away: { name: "Hosté", kit, starters: squad("A"), subs: [], coach: { name: "Trenér H", motivation: 25 } },
 });
 
 /** Projde scénu po 1/30 s a vrátí, co je na ní špatně. */
@@ -81,6 +82,19 @@ describe("scény 3D záznamu", () => {
     expect(checkAll(replay, all, "test")).toEqual([]);
   });
 
+  it("po přestávce si týmy vymění strany, střídačky ne", () => {
+    const frame: Frame = { figures: replay.figures.map(() => ({ visible: false, x: 0, y: 0, z: 0, pose: null })), ballX: 0, ballY: 0, ballZ: 0, cuts: 0 };
+    const keeper = replay.figures.findIndex((f) => f.player.name === "H 0"), coach = replay.figures.findIndex((f) => f.coach && f.team === "home");
+    const at = (scene: Scene) => { sampleClip(scene.clip, scene.start, frame); return [Math.sign(frame.figures[keeper].z), Math.sign(frame.figures[coach].z)]; };
+    // Domácí brankář hájí v prvním poločase bránu na kladné z, ve druhém na záporné; trenér stojí pořád u své střídačky.
+    expect(at(replay.kickoff(0))).toEqual([1, -1]);
+    expect(at(replay.scene(1))).toEqual([1, -1]);
+    const secondHalf = all.findIndex((e) => e.minute > 45);
+    expect(at(replay.kickoff(secondHalf))).toEqual([-1, -1]);
+    expect(at(replay.scene(secondHalf))).toEqual([-1, -1]);
+    expect(at(replay.finale())).toEqual([-1, -1]);
+  });
+
   it("útok končí ve chvíli, kdy míč doletí k bráně, a gól je v síti", () => {
     const goal = replay.scene(1);
     const frame: Frame = { figures: replay.figures.map(() => ({ visible: false, x: 0, y: 0, z: 0, pose: null })), ballX: 0, ballY: 0, ballZ: 0, cuts: 0 };
@@ -107,7 +121,8 @@ describe("scény 3D záznamu", () => {
     sampleClip(last.clip, last.start, frame);
     const visible = (name: string) => frame.figures[replay.figures.findIndex((f) => f.player.name === name)].visible;
     expect([visible("H 2"), visible("H 5"), visible("Sub 1"), visible("Rozhodčí")]).toEqual([false, false, true, true]);
-    expect(frame.figures.filter((f) => f.visible).length).toBe(10 + 11 + 1);
+    // Deset domácích (jeden vyloučený), jedenáct hostů, rozhodčí a dva trenéři.
+    expect(frame.figures.filter((f) => f.visible).length).toBe(10 + 11 + 1 + 2);
   });
 
   it("scénu mají jen důležité akce; ostatní události obraz nemění", () => {
@@ -155,7 +170,8 @@ describe.skipIf(!dump)("zápasy z místní databáze", () => {
       try {
         const replay = new Replay({
           matchId: m.id, events, winner: m.home_score > m.away_score ? "home" : m.home_score < m.away_score ? "away" : null,
-          home: { name: "Domácí", kit, ...m.home_lineup_data }, away: { name: "Hosté", kit, ...m.away_lineup_data },
+          home: { name: "Domácí", kit, coach: { name: "Trenér D", motivation: 95 }, ...m.home_lineup_data },
+          away: { name: "Hosté", kit, coach: { name: "Trenér H", motivation: 60 }, ...m.away_lineup_data },
         });
         found.push(...checkAll(replay, events, `${m.kind} ${m.id.slice(0, 8)}`));
       } catch (e) {

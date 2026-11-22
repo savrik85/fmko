@@ -8,7 +8,7 @@ import type { WeatherType } from "@/components/stadium/stadium-3d/constants";
 import { venueExtensions, venueFacilities } from "@/app/(hra)/turnaj/venue-scene";
 import { ReplayScene, type ReplayStep } from "./ReplayScene";
 import { EventCard, EventLabel, ScoreBug } from "./graphics";
-import { Replay, type ReplayEvent, type ReplayKit, type ReplayPlayer } from "./scenes";
+import { Replay, type ReplayCoach, type ReplayEvent, type ReplayKit, type ReplayPlayer } from "./scenes";
 
 const Stadium3D = clientOnly(() => import("@/components/stadium/stadium-3d/Stadium3D").then((m) => m.Stadium3D));
 
@@ -38,12 +38,12 @@ interface StadiumData {
 
 const initials = (name: string) => name.split(" ").map((w) => w[0]).filter(Boolean).slice(0, 2).join("").toUpperCase();
 
-/** 3D záznam zápasu na stadionu domácích, řízený stavem 2D záznamu. Vyplní rodiče, do kterého se vloží. */
+/** 3D záznam zápasu na stadionu domácích, řízený stavem záznamu. Vyplní rodiče, do kterého se vloží. */
 export function Replay3D({ detail, events, progress, onReady }: {
   detail: Record<string, unknown>;
   events: ReplayEvent[];
   progress: ReplayProgress;
-  /** Scéna se poprvé vykreslila; 2D záznam do té doby čeká s výkopem. */
+  /** Scéna se poprvé vykreslila; záznam do té doby čeká s výkopem. */
   onReady: () => void;
 }) {
   const { idx, flash, kickoff, halfTime, finished, paused, cue, fast, homeGoals, awayGoals } = progress;
@@ -53,8 +53,8 @@ export function Replay3D({ detail, events, progress, onReady }: {
   const margin = (detail.home_score as number) - (detail.away_score as number) || (pens ? pens.home - pens.away : 0);
   const replay = useMemo(() => new Replay({
     matchId: detail.id as string, events, winner: margin > 0 ? "home" : margin < 0 ? "away" : null,
-    home: { name: homeName, kit: kits.home, ...(detail.home_lineup_data as StoredLineup) },
-    away: { name: awayName, kit: kits.away, ...(detail.away_lineup_data as StoredLineup) },
+    home: { name: homeName, kit: kits.home, coach: detail.home_coach as ReplayCoach | null, ...(detail.home_lineup_data as StoredLineup) },
+    away: { name: awayName, kit: kits.away, coach: detail.away_coach as ReplayCoach | null, ...(detail.away_lineup_data as StoredLineup) },
   }), [detail, events, homeName, awayName, kits, margin]);
 
   // Krok záznamu → záběr: „ŠANCE“ je útočná fáze události, která teprve přijde; jinak je v obraze poslední akce
@@ -66,20 +66,9 @@ export function Replay3D({ detail, events, progress, onReady }: {
   const attack = cue !== null ? scene.split > scene.start : shot;
   // Skok začíná nový záběr, i když míří na akci, která zrovna běží.
   const play = useMemo(() => ({ scene, attack }), [scene, attack, cue !== null]); // eslint-disable-line react-hooks/exhaustive-deps
-  /** Jen při vývoji: scéna zastavená pro snímek obrazovky (window.__replay3d.freeze). */
-  const frozen = useRef<ReplayStep | null>(null);
   // O přestávce stojí týmy připravené na výkop druhého poločasu.
   const step = useRef<ReplayStep>({ play, rate: 1 });
-  step.current = frozen.current ?? { play, rate: fast ? 2 : 1, hold: halfTime || cue !== null ? 0 : undefined };
-  useEffect(() => {
-    if (process.env.NODE_ENV !== "development") return;
-    const freeze = (index: number, attackBeat: boolean, seconds: number) => {
-      // Poslední vteřina se přehraje, ať mají hráči krok a natočení jako při sledování.
-      frozen.current = { play: { scene: index === -2 ? replay.finale() : index < 0 ? replay.kickoff(0) : replay.scene(index), attack: attackBeat, from: Math.max(0, seconds - 1) }, rate: 1, hold: seconds };
-      step.current = frozen.current;
-    };
-    Object.assign(window, { __replay3d: { replay, freeze } });
-  }, [replay]);
+  step.current = { play, rate: fast ? 2 : 1, hold: halfTime || cue !== null ? 0 : undefined };
 
   // Stadion domácích; turnaj se hraje na hřišti z losu a velkoklub z poháru stadion ve hře nemá.
   const venue = detail.isTournament === true ? (detail.venue as { capacity?: number; look?: Record<string, unknown> } | null) : null;
@@ -103,8 +92,8 @@ export function Replay3D({ detail, events, progress, onReady }: {
     return () => clearTimeout(timer);
   }, [finished, replay, fast]);
   const finalScore = `${detail.home_score} : ${detail.away_score}${pens ? ` (pen. ${pens.home}:${pens.away})` : ""}`;
-  const camBadge = useRef<HTMLDivElement>(null);
-  const shade = useRef<HTMLDivElement>(null);
+  const replayBadge = useRef<HTMLDivElement>(null);
+  const veil = useRef<HTMLCanvasElement>(null);
   // Výkop, přestávka a konec zápasu grafiku události nemají.
   const event = cue === null && (kickoff !== null || halfTime || finished) ? undefined : events[index];
   const attendance = detail.attendance as number | null;
@@ -136,15 +125,15 @@ export function Replay3D({ detail, events, progress, onReady }: {
         frozen={paused}
         // Pohled „z tribuny“ nemá rozostření okrajů, které stadion používá u pohledů z dálky.
         initialViewpoint="main_stand"
-        replay={<ReplayScene replay={replay} kits={kits} snow={detail.weather === "snow"} step={step} camBadge={camBadge} shade={shade} onReady={onReady} />}
+        replay={<ReplayScene replay={replay} kits={kits} snow={detail.weather === "snow"} step={step} replayBadge={replayBadge} veil={veil} onReady={onReady} />}
       />
-      {/* Střih se prolíná přes černou (scéna si průhlednost řídí sama); grafika zůstává nad ní. */}
-      <div ref={shade} style={{ opacity: 0 }} className="absolute inset-0 z-10 bg-black pointer-events-none" />
+      {/* Při střihu tu doznívá poslední snímek starého záběru (kreslí a zprůhledňuje ho scéna); grafika zůstává nad ním. */}
+      <canvas ref={veil} style={{ opacity: 0 }} className="absolute inset-0 z-10 w-full h-full pointer-events-none" />
 
       <EventLabel {...graphics} override={fixedLabel} />
       <EventCard {...graphics} />
       {/* Opakovaný záběr gólu: rámeček kolem obrazu a nápis (scéna ho zapíná sama). */}
-      <div ref={camBadge} style={{ display: "none" }} className="absolute inset-0 z-30 pointer-events-none border-4 border-white/70">
+      <div ref={replayBadge} style={{ display: "none" }} className="absolute inset-0 z-30 pointer-events-none border-4 border-white/70">
         <div className="absolute top-11 sm:top-14 left-1/2 -translate-x-1/2 px-4 py-1 rounded-lg bg-red-600 text-white text-sm sm:text-lg font-heading font-[900] tracking-widest whitespace-nowrap shadow-lg">↺ OPAKOVANÝ ZÁBĚR</div>
       </div>
       {curtain && (
