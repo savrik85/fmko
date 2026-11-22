@@ -173,7 +173,7 @@ function lowerFirst(s: string): string {
  * Hrdlička (Kávoviny) zapíral 21. 11. a model se pak držel vlastní historie i proti pokynu
  * „nezapírej“: 4 ze 4 zapřel, s větou „dřív jsi zapíral, to už neplatí“ 3 ze 3 přiznal (E2E 22. 11.).
  */
-const DENIAL_RE = /\b(neukradl|nevzal|nebral|nerozbil|neudelal jsem|nebyl jsem to|to jsem nebyl|ja to nebyl|to nebylo ode me|nemam s tim nic|o nicem nevim)\b/;
+const DENIAL_RE = /\b(neukradl|nevzal|nebral|nerozbil|neudelal jsem|nebyl jsem to|to jsem nebyl|ja to nebyl|to nebylo ode me|nemam s tim nic|o nicem nevim|nevim o cem mluvis|nic nevim o (zadn\w*|tom|tem)|(je|bude) to (nejakej |nejaky )?omyl)\b/;
 
 export function deniesOffence(text: string): boolean {
   return DENIAL_RE.test(text.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase());

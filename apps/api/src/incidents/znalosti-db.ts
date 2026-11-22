@@ -41,6 +41,11 @@ export async function zapisZnalosti(
  * Platná znalost = stejná sezóna a buď `until` ještě nevypršel, nebo jde o kádr, svědka,
  * kamaráda či rivala u incidentu, který není uzavřený nebo se uzavřel nejvýš před týdnem.
  * Jméno pachatele jen u odhaleného.
+ *
+ * Vlastní provalený průšvih (pachatel, odhalený nebo přiznaný) platí i z minulé sezóny, dokud
+ * nevyprší jeho `until` (60 dní). Napravit ho jde stejně dlouho (restitution.ts) bez ohledu na
+ * sezónu. Kohoutek (Klamovka, E2E 22. 11.): vloupání ze sezóny 2, v promptu chybělo, model znal
+ * jen cizí nevyřešené vloupání a na „Ty věci vrátíš?“ 3× zapřel.
  */
 const DOTAZ_ZNALOSTI = `
   SELECT k.incident_id, k.role, k.fact, k.interrogation,
@@ -51,7 +56,10 @@ const DOTAZ_ZNALOSTI = `
     JOIN club_incidents i ON i.id = k.incident_id
     LEFT JOIN players p ON p.id = i.culprit_player_id AND i.culprit_revealed = 1
     LEFT JOIN departed_players d ON d.id = i.culprit_player_id AND i.culprit_revealed = 1
-   WHERE k.player_id = ? AND k.team_id = ? AND k.season_number = ?
+   WHERE k.player_id = ? AND k.team_id = ?
+     AND (k.season_number = ?
+          OR (k.role = 'pachatel' AND k.until >= ? AND i.category != 'zivotni' AND i.status != 'hrozi'
+              AND (i.culprit_revealed = 1 OR k.interrogation = 'priznal')))
      AND COALESCE(i.resolution, '') != 'bez_skody'
      AND (k.until >= ?
           OR (k.role IN ('kadr', 'svedek', 'kamarad', 'rival')
@@ -72,7 +80,7 @@ export async function nactiZnalostiHrace(
   const dnes = tym.game_date;
 
   const rows = await db.prepare(DOTAZ_ZNALOSTI)
-    .bind(opts.playerId, opts.teamId, tym.sezona, dnes, gameExpiry(dnes, -ZNALOST_PO_UZAVRENI_DNI))
+    .bind(opts.playerId, opts.teamId, tym.sezona, dnes, dnes, gameExpiry(dnes, -ZNALOST_PO_UZAVRENI_DNI))
     .all<RadekZnalostiDb>()
     .catch((e) => { logger.warn({ module: M }, `znalosti hráče ${opts.playerId}`, e); return null; });
   if (!rows) return undefined;

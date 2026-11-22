@@ -30,6 +30,7 @@ import {
   dueWords, recordAmendsTask, repairableLosses, replacedLosses, returnableLosses, returnLosses, type AmendsTask,
 } from "./amends";
 import type { Ztrata } from "./typy";
+import { stolenWhat } from "./znalosti";
 import { incidentNamedInText } from "./tema";
 import { stopaNaHrace } from "./vysetrovani";
 import type { AmendsDecision } from "./amends-decision";
@@ -101,6 +102,8 @@ export type RestitutionOutcome = (
 
 interface IncidentRow {
   id: string; kind: string; category: string; status: string; loss: string | null; culprit_revealed: number;
+  /** Herní den incidentu: pokyn rozhodnutí říká, kdy to udělal. */
+  game_date: string;
 }
 
 /**
@@ -139,7 +142,7 @@ async function amendableIncident(
   db: D1Database, o: { teamId: string; playerId: string; gameDate: string; text?: string; topicIncidentId?: string | null },
 ): Promise<{ inc: IncidentRow; open: boolean } | null> {
   const rows = await db.prepare(
-    `SELECT id, kind, category, status, loss, culprit_revealed, recovered, resolution, resolved_on FROM club_incidents
+    `SELECT id, kind, category, status, loss, culprit_revealed, recovered, resolution, resolved_on, game_date FROM club_incidents
       WHERE team_id = ? AND culprit_type = 'hrac' AND culprit_player_id = ? AND category IN ('kradez', 'poskozeni')
         AND (status IN ('otevreny', 'policie')
              OR (status = 'uzavreny' AND julianday(substr(resolved_on, 1, 10)) >= julianday(substr(?, 1, 10)) - ?))
@@ -219,10 +222,11 @@ function askedVerb(request: ReadonlySet<AmendsRequest>, plan: AmendsPlan): strin
  */
 async function saveDecision(
   db: D1Database, o: { playerId: string; now?: Date }, r: RestitutionOutcome, asked: string, revealed: boolean,
+  offence: AmendsDecision["offence"],
 ): Promise<void> {
   if (r.outcome === "refused" && !revealed) return;
   const decision: AmendsDecision = {
-    incidentId: r.incidentId, outcome: r.outcome, asked, at: (o.now ?? new Date()).toISOString(),
+    incidentId: r.incidentId, outcome: r.outcome, asked, at: (o.now ?? new Date()).toISOString(), offence,
     ...(r.outcome === "promised" ? { task: r.task, dueText: dueWords(r.dueOn) } : {}),
   };
   await db.prepare(
@@ -257,14 +261,33 @@ export async function tryRestitution(
   },
 ): Promise<RestitutionOutcome | null> {
   const r = await decideRestitution(db, o);
-  if (r) await saveDecision(db, o, r.outcome, r.asked, r.revealed);
+  if (r) await saveDecision(db, o, r.outcome, r.asked, r.revealed, offenceOf(r.inc, o.gameDate));
   return r?.outcome ?? null;
+}
+
+/** Herní den „15. 10.“ z ISO data. */
+function dayMonth(isoDay: string): string {
+  const [, m, d] = isoDay.slice(0, 10).split("-").map(Number);
+  return `${d}. ${m}.`;
+}
+
+/** Kdy se čin stal, slovy do pokynu: „dnes (22. 11.)“, „včera (21. 11.)“, „před 45 dny (15. 10.)“. */
+function offenceWhen(incidentDay: string, gameDate: string): string {
+  const days = Math.max(0, Math.round((Date.parse(gameDate.slice(0, 10)) - Date.parse(incidentDay.slice(0, 10))) / 86_400_000));
+  const rel = days === 0 ? "dnes" : days === 1 ? "včera" : `před ${days} dny`;
+  return `${rel} (${dayMonth(incidentDay)})`;
+}
+
+/** Čin do pokynu rozhodnutí (amends-decision.ts): název, kdy a u krádeže co vzal. */
+function offenceOf(inc: IncidentRow, gameDate: string): AmendsDecision["offence"] {
+  const loot = inc.category === "kradez" ? stolenWhat(inc.kind, nactiZtraty(inc.loss)) : "";
+  return { title: nazevIncidentu(inc.kind), when: offenceWhen(inc.game_date, gameDate), ...(loot ? { loot } : {}) };
 }
 
 async function decideRestitution(
   db: D1Database,
   o: { teamId: string; playerId: string; text: string; gameDate: string; topicIncidentId?: string | null },
-): Promise<{ outcome: RestitutionOutcome; asked: string; revealed: boolean } | null> {
+): Promise<{ outcome: RestitutionOutcome; asked: string; revealed: boolean; inc: IncidentRow } | null> {
   const request = amendsRequestOf(o.text);
   if (request.size === 0) return null;
   const found = await amendableIncident(db, o);
@@ -289,7 +312,7 @@ async function decideRestitution(
 
   // Už se rozhodlo (dřív téhož dne nebo jindy): stejné rozhodnutí, žádný nový los.
   if (!(await markRestitutionTried(db, inc.id, o.playerId, o.teamId))) {
-    return { outcome: await priorDecision(db, inc.id, o.playerId), asked, revealed };
+    return { outcome: await priorDecision(db, inc.id, o.playerId), asked, revealed, inc };
   }
 
   const player = await nactiHraceKadru(db, o.teamId, o.playerId);
@@ -309,12 +332,12 @@ async function decideRestitution(
           : "Trenér po tobě chce, ať to vrátíš nebo zaplatíš. Nechce se ti to napravit, ale nezapíráš, že jsi to byl ty.");
     }
     logger.info({ module: M, teamId: o.teamId }, `pachatel ${o.playerId} odmítl napravit ${inc.id} (šance ${chance} %)`);
-    return { outcome: { outcome: "refused", incidentId: inc.id }, asked, revealed };
+    return { outcome: { outcome: "refused", incidentId: inc.id }, asked, revealed, inc };
   }
 
   if (plan === "task_return" || plan === "task_repair") {
     const promised = await promiseAmends(db, o, inc, plan);
-    return promised ? { outcome: promised, asked, revealed: true } : null;
+    return promised ? { outcome: promised, asked, revealed: true, inc } : null;
   }
 
   const name = `${player.krestni} ${player.prijmeni}`;
@@ -351,7 +374,7 @@ async function decideRestitution(
   await sendIncidentSystemSms(db, o.teamId, SMS_ROLE_KUSTOD, body, smsIncidentu(inc.id))
     .catch((e) => logger.warn({ module: M }, `SMS po vrácení ${inc.id}`, e));
   logger.info({ module: M, teamId: o.teamId }, `pachatel ${o.playerId} ${outcome} ${inc.id}: ${total} Kč`);
-  return { outcome: { outcome, amount: total, incidentId: inc.id }, asked, revealed: true };
+  return { outcome: { outcome, amount: total, incidentId: inc.id }, asked, revealed: true, inc };
 }
 
 /**

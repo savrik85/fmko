@@ -28,6 +28,11 @@ export interface AmendsDecision {
   /** U slibu: úkol a lhůta slovy („nejpozději v sobotu 14. 11.“). */
   task?: "task_return" | "task_repair";
   dueText?: string;
+  /**
+   * Čin, o který jde: název, kdy („před 45 dny (15. 10.)“) a co vzal. Rozhodnutí se ukládá jen
+   * odhalenému pachateli (nebo tomu, kdo se tím přiznal), jmenovat čin tedy nic neprozradí.
+   */
+  offence?: { title: string; when: string; loot?: string };
   /** Kdy hra rozhodla (ISO), podle toho pokyn vyprší. */
   at: string;
 }
@@ -42,23 +47,39 @@ export function amendsDecisionFromLife(life: Record<string, unknown>, now: Date 
   return d as AmendsDecision;
 }
 
+/**
+ * „Tohle jsi udělal ty: Vloupání do skladu, před 45 dny (15. 10.). Vzal jsi: tréninkové pomůcky.“
+ * Kohoutek (Klamovka, E2E 22. 11.): vloupání z minulé sezóny, pokyn říkal jen „na to, že jsi
+ * to byl ty, se přišlo“ a model znal z promptu jen cizí nevyřešené vloupání. Odmítl a 3× zapřel:
+ * „nic nevím o žádnym vykradenym skladu, asi to bude nějakej omyl“.
+ */
+function offenceText(d: AmendsDecision): string {
+  if (!d.offence) return "";
+  const loot = d.offence.loot ? ` Vzal jsi: ${d.offence.loot}.` : "";
+  return `Tohle jsi udělal ty: ${d.offence.title}, ${d.offence.when}.${loot} `;
+}
+
 /** Pevný pokyn do promptu podle rozhodnutí hry. */
 export function amendsDecisionLine(d: AmendsDecision): string {
+  return `- ${offenceText(d)}${decisionText(d)}`;
+}
+
+function decisionText(d: AmendsDecision): string {
   switch (d.outcome) {
     case "refused":
       // Kohoutek (E2E 22. 11.): „Vymluv se po svém“ model bral jako „zapři“ a usvědčený pachatel
       // psal „nikdy jsem nic neukradl“. Odmítnutí se ukládá jen odhalenému: čin je dokázaný.
-      return `- Trenér po tobě chce, ať to ${d.asked}. Rozhodl ses: NEUDĚLÁŠ to. Na to, že jsi to byl ty, se přišlo, `
+      return `Trenér po tobě chce, ať to ${d.asked}. Rozhodl ses: NEUDĚLÁŠ to. Na to, že jsi to byl ty, se přišlo, `
         + "takže čin nezapírej: nepiš, že jsi nic neudělal, nevzal ani nerozbil, ani že jde o omyl. "
         + "Odmítáš jen napravit to, co po tobě chce: řekni po svém, proč to nejde nebo proč nechceš (nemáš teď peníze ani čas, nechce se ti), "
         + "a nic neslibuj: nepiš, že to vrátíš, zaplatíš nebo opravíš, ani kdy. Netvrď, že je to vyřízené.";
     case "returned":
-      return "- Trenér tě přemluvil a ty jsi to klubu VRÁTIL, už je to zpátky. Mluv o tom jako o hotové věci, nepiš, že to teprve vrátíš.";
+      return "Trenér tě přemluvil a ty jsi to klubu VRÁTIL, už je to zpátky. Mluv o tom jako o hotové věci, nepiš, že to teprve vrátíš.";
     case "paid":
-      return "- Trenér tě přemluvil a škodu jsi ZAPLATIL ze svého, je to vyřízené. Mluv o tom jako o hotové věci, nepiš, že to teprve zaplatíš.";
+      return "Trenér tě přemluvil a škodu jsi ZAPLATIL ze svého, je to vyřízené. Mluv o tom jako o hotové věci, nepiš, že to teprve zaplatíš.";
     case "promised":
       return d.task === "task_repair"
-        ? `- Trenér chce, ať to opravíš. Rozhodl ses: OPRAVÍŠ to s brigádou ${d.dueText ?? "do dvou dnů"}. Řekni mu to jasně a jiný termín si nevymýšlej.`
-        : `- Trenér chce, ať to vrátíš. Rozhodl ses: VRÁTÍŠ to ${d.dueText ?? "do dvou dnů"}. Řekni mu to jasně a jiný termín si nevymýšlej.`;
+        ? `Trenér chce, ať to opravíš. Rozhodl ses: OPRAVÍŠ to s brigádou ${d.dueText ?? "do dvou dnů"}. Řekni mu to jasně a jiný termín si nevymýšlej.`
+        : `Trenér chce, ať to vrátíš. Rozhodl ses: VRÁTÍŠ to ${d.dueText ?? "do dvou dnů"}. Řekni mu to jasně a jiný termín si nevymýšlej.`;
   }
 }
