@@ -33,6 +33,19 @@ describe("hospoda jen ten večer a noc", () => {
     expect(r.scenario.description).not.toContain("máš v sobě dost piv");
   });
 
+  // E2E 22. 11.: 5 ze 7 prvních odpovědí začínalo „(Trenére,) včera jsem…“ i k otázce na krádež
+  // („včera jsem byl fakt namol 😅. Ty dresy jsem opravdu vzal“), jako by kradl včera.
+  it("o včerejšku jen na řeč nebo když k tomu trenér míří, jiné věci s pitím nespojuje", () => {
+    for (const at of [prague(22, 9, 40), prague(24, 12, 0)]) {
+      const d = pubThreadScenario(voice, start.toISOString(), at).scenario.description;
+      expect(d).not.toContain("se odkazuj");
+      expect(d).toContain("jen když na to přijde řeč nebo k tomu trenér míří");
+      expect(d).toContain("Zprávu nezačínej tím, co bylo v hospodě");
+      expect(d).toContain("nespojuj s pitím");
+      expect(d).not.toContain("—");
+    }
+  });
+
   it("druhý den v 21:00 podle běžného kontextu, ne natvrdo v hospodě", () => {
     const r = pubThreadScenario(voice, start.toISOString(), prague(22, 21, 0));
     expect(r.atPub).toBe(false);
