@@ -27,7 +27,7 @@ const CARD_UP = 1.4;
 export type Side = "home" | "away";
 const SIDES = ["home", "away"] as const;
 type Role = "GK" | "DEF" | "MID" | "FWD";
-export type Pose = "down" | "diveLeft" | "diveRight" | "celebrate" | "armUp" | "slide";
+export type Pose = "down" | "diveLeft" | "diveRight" | "celebrate" | "armUp" | "slide" | "shake";
 export type ShotResult = "goal" | "saved" | "post" | "bar" | "wide" | "over" | "blocked";
 type CardColor = "yellow" | "red";
 
@@ -35,7 +35,13 @@ type CardColor = "yellow" | "red";
 export interface ReplayPlayer { id: string; name: string; position: string; skinColor?: string; hairColor?: string | null; height?: number; avatar?: Record<string, unknown> }
 export interface ReplayKit { shirt: string; shorts: string; socks: string }
 /** Trenér klubu (jeho manažer). `motivation` 1–100 říká, jak moc zápas u lajny prožívá. */
-export interface ReplayCoach { name: string; motivation: number; skinColor?: string; hairColor?: string | null }
+export interface ReplayCoach {
+  name: string; motivation: number; skinColor?: string; hairColor?: string | null; avatar?: Record<string, unknown>;
+  /** Bilance týmu v soutěži před zápasem; null = první zápas v soutěži. */
+  record: { played: number; won: number } | null;
+}
+/** Před výkopem (sekundy): představení jednoho trenéra, po obou podání rukou. Stejné délky má krok záznamu (SCENE_MS). */
+const COACH_INTRO = 4, HANDSHAKE = 2.2;
 /** `coach` = null: klub trenéra nemá a u lajny nikdo nestojí. */
 export interface ReplayTeam { name: string; kit: ReplayKit; starters: ReplayPlayer[]; subs: ReplayPlayer[]; coach: ReplayCoach | null }
 /** Událost zápasu, jak ji ukládá engine (detail zápasu z API). */
@@ -413,7 +419,7 @@ class Stage {
     this.scripted = new Set(busy);
   }
   /** Místo trenéra před střídačkou jeho týmu (domácí ji mají na záporné z). Střídačky si týmy o přestávce nemění. */
-  private bench(side: Side): Point {
+  bench(side: Side): Point {
     return { x: BENCH_X - 0.7, z: (side === "home" ? -7.5 : 7.5) * (this.mirror ? -1 : 1) };
   }
 
@@ -527,6 +533,7 @@ export class Replay {
   private readonly scened: boolean[];
   private readonly clips = new Map<number, { clip: Clip; windows: Map<number, Window> }>();
   private readonly scenes = new Map<number, Scene>();
+  private introScene: Scene | null = null;
   private readonly kickoffs = new Map<number, Scene>();
   private closing: Scene | null = null;
 
@@ -624,6 +631,29 @@ export class Replay {
     // Záporný začátek by lastIndexOf počítal od konce pole: před první událostí by vrátil poslední akci zápasu.
     const shown = next > 0 ? this.scened.lastIndexOf(true, next - 1) : -1;
     return shown < kickoff ? this.kickoff(kickoff) : this.scene(shown);
+  }
+
+  /**
+   * Před výkopem: trenéři jdou od střídaček na středový bod, záznam je cestou jednoho po druhém představí,
+   * a podají si ruce. Týmy stojí na svých polovinách.
+   */
+  intro(): Scene {
+    if (this.introScene) return this.introScene;
+    const st = this.stage(this.rosters[0] ?? this.finalRoster, "intro", false);
+    const walk = 2 * COACH_INTRO;
+    const coaches = SIDES.flatMap((side) => {
+      const coach = this.staff.coaches[side];
+      return coach ? [{ figure: coach.figure, from: st.bench(side), to: { x: 0, z: side === "home" ? -0.7 : 0.7 } }] : [];
+    });
+    // Hráči nestojí trenérům v cestě.
+    const paths = coaches.flatMap(({ from, to }) => [0.2, 0.4, 0.6, 0.8].map((s) => ({ x: lerp(from.x, to.x, s), z: lerp(from.z, to.z, s), r: 2.2 })));
+    st.layout({ x: 0, z: 0 }, (slot, sd) => uvToWorld(sd, Math.min(slot.base.u * 0.8, 0.42), slot.base.v), new Map([[this.referee, { x: -4, z: 0 }]]), [{ x: 0, z: 0, r: 6 }, ...paths]);
+    for (const { figure, to } of coaches) {
+      st.go(figure, to, walk);
+      if (coaches.length === 2) st.pose(figure, "shake", HANDSHAKE, walk);
+    }
+    st.t = walk + HANDSHAKE;
+    return this.introScene = { clip: st.finish(), start: 0, split: 0, end: st.t, focus: [], card: null, result: null, replay: null };
   }
 
   /**

@@ -284,8 +284,10 @@ export function ReplayScene({ replay, kits, snow, step, replayBadge, veil, onRea
           // Ruka: v běhu proti noze s ohnutým loktem; při oslavě zdvižená šikmo vzhůru, při výskoku na hlavičku jen
           // pokrčená před tělem; natažená nahoru je při skoku brankáře a rozhodčímu (ten zvedá jen pravou).
           const raised = armsUp || (f.pose === "armUp" && k === 0);
-          const arm = cheering ? 2.4 + Math.sin(now * 9 + i) * 0.15 : raised ? Math.PI - 0.25 : f.y > 0.05 ? 0.9 : swing * 0.8 * run + Math.sin(now * 1.3 + i * 2.1) * 0.05;
-          const elbow = cheering ? -0.5 : raised ? -0.15 : f.y > 0.05 ? -0.9 : -(0.25 + 1.1 * run);
+          // Podání ruky: pravá natažená před tělo a potřásá.
+          const shaking = f.pose === "shake" && k === 0;
+          const arm = shaking ? 1.25 + Math.sin(now * 11) * 0.12 : cheering ? 2.4 + Math.sin(now * 9 + i) * 0.15 : raised ? Math.PI - 0.25 : f.y > 0.05 ? 0.9 : swing * 0.8 * run + Math.sin(now * 1.3 + i * 2.1) * 0.05;
+          const elbow = shaking ? -0.25 : cheering ? -0.5 : raised ? -0.15 : f.y > 0.05 ? -0.9 : -(0.25 + 1.1 * run);
           joints.shoulder[k].makeTranslation(BODY.shoulder[0] * side, BODY.shoulder[1], 0).multiply(mTmp.makeRotationX(arm));
           joints.elbow[k].copy(joints.shoulder[k]).multiply(mTmp.makeTranslation(0, -BODY.elbow, 0)).multiply(mTmp.makeRotationX(elbow));
         }

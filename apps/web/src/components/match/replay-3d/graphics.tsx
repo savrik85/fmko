@@ -2,7 +2,7 @@
 
 import { FaceAvatar } from "@/components/players/face-avatar";
 import { bestTextOn } from "@/lib/team-color";
-import type { ReplayEvent, ReplayKit, ReplayPlayer, ShotResult } from "./scenes";
+import type { ReplayCoach, ReplayEvent, ReplayKit, ReplayPlayer, ShotResult } from "./scenes";
 
 interface Lineup { starters: ReplayPlayer[]; subs: ReplayPlayer[] }
 /** Co se právě hraje: událost (při „ŠANCE“ ta, která teprve přijde) a její pořadí v zápase. */
@@ -103,15 +103,30 @@ export function EventCard({ detail, events, index, event, attack }: GraphicsProp
     : event.type === "injury" ? event.detail
     : null;
   const board = event.type === "goal" ? [1, 2].map((teamId) => scorers(events, index, teamId)).filter(Boolean).join("   —   ") : null;
+  return <LowerThird key={index} color={color} name={event.playerName} avatar={player?.avatar} title={event.type === "substitution" ? `↑ ${event.playerName}` : event.playerName}
+    note={note} board={board} badge={`${event.minute}'`} />;
+}
+
+/** Představení trenéra před výkopem: obličej, jméno, klub a kolik zápasů soutěže jeho tým zatím vyhrál. */
+export function CoachCard({ detail, side }: { detail: Record<string, unknown>; side: "home" | "away" }) {
+  const coach = detail[`${side}_coach`] as ReplayCoach;
+  return <LowerThird key={side} color={kitColor(detail, side)} name={coach.name} avatar={coach.avatar} title={coach.name}
+    note={`Trenér · ${detail[`${side}_name`]}`} board={coach.record && "výhry / zápasy v soutěži"} badge={coach.record && `${coach.record.won}/${coach.record.played}`} />;
+}
+
+/** Titulek přes spodek obrazu: obličej na barvě klubu, jméno, světlý pruh s poznámkou a pole vpravo. */
+function LowerThird({ color, name, avatar, title, note, board, badge }: {
+  color: string; name: string; avatar: Record<string, unknown> | undefined; title: string; note: string | null | undefined; board: string | null; badge: string | null;
+}) {
   return (
     <div className="absolute bottom-2 left-32 right-2 z-30 pointer-events-none">
-      <div key={index} className="flex items-stretch h-11 sm:h-16 rounded-lg overflow-hidden shadow-xl font-heading animate-in fade-in slide-in-from-bottom-2 duration-300">
+      <div className="flex items-stretch h-11 sm:h-16 rounded-lg overflow-hidden shadow-xl font-heading animate-in fade-in slide-in-from-bottom-2 duration-300">
         <div className="shrink-0 w-11 sm:w-16 overflow-hidden flex items-end justify-center font-[900] text-lg" style={{ backgroundColor: color, color: onColor(color) }}>
-          {player?.avatar ? <FaceAvatar faceConfig={player.avatar} size={50} className="scale-[0.7] sm:scale-100 origin-bottom" /> : <span className="self-center">{event.playerName.split(" ").map((w) => w[0]).slice(0, 2).join("")}</span>}
+          {avatar ? <FaceAvatar faceConfig={avatar} size={50} className="scale-[0.7] sm:scale-100 origin-bottom" /> : <span className="self-center">{name.split(" ").map((w) => w[0]).slice(0, 2).join("")}</span>}
         </div>
         <div className="flex-1 min-w-0 flex flex-col">
           <div className={`flex-1 flex items-center px-3 min-w-0 ${PANEL}`}>
-            <span className="text-sm sm:text-xl font-[900] uppercase tracking-wide truncate">{event.type === "substitution" ? `↑ ${event.playerName}` : event.playerName}</span>
+            <span className="text-sm sm:text-xl font-[900] uppercase tracking-wide truncate">{title}</span>
           </div>
           {note && (
             <div className="flex items-center justify-between gap-3 px-3 h-4 sm:h-6 bg-white/95 text-gray-900 text-[9px] sm:text-xs font-bold uppercase tracking-wider">
@@ -120,7 +135,7 @@ export function EventCard({ detail, events, index, event, attack }: GraphicsProp
             </div>
           )}
         </div>
-        <div className="shrink-0 flex items-center px-3 font-[900] text-sm sm:text-2xl tabular-nums" style={{ backgroundColor: color, color: onColor(color) }}>{event.minute}&apos;</div>
+        {badge && <div className="shrink-0 flex items-center px-3 font-[900] text-sm sm:text-2xl tabular-nums" style={{ backgroundColor: color, color: onColor(color) }}>{badge}</div>}
       </div>
     </div>
   );

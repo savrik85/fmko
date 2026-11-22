@@ -45,7 +45,7 @@ const FLAT_FAST_MS = { ...FLAT_MS, plain: 600, attack: 1800, drama: 2500, penalt
  * šancí nebo kartou (roh, standardka, faul): útok nebo karta na ně navazují bez střihu, proto `setup` a `attack`
  * musí sedět se SETUP a ATTACK ve scenes.ts. Gól končí opakovaným záběrem.
  */
-const SCENE_MS = { kickoff: 5000, secondHalf: 5000, plain: 0, setup: 2000, attack: 3500, goal: 8600, chance: 2200, drama: 3500, penalty: 4500 };
+const SCENE_MS = { coach: 4000, handshake: 2200, kickoff: 5000, secondHalf: 5000, plain: 0, setup: 2000, attack: 3500, goal: 8600, chance: 2200, drama: 3500, penalty: 4500 };
 /** Po skoku na akci stojí její první snímek, než se rozběhne (ať je vidět, kam se skočilo). */
 const CUE_MS = 700;
 
@@ -158,6 +158,8 @@ export default function MatchReplayPage() {
   const [finished, setFinished] = useState(false);
   const [htPause, setHtPause] = useState(false);
   const [htDone, setHtDone] = useState(false);
+  // 3D záznam: před výkopem představení trenérů a podání rukou.
+  const [intro, setIntro] = useState<"home" | "away" | "handshake" | null>(null);
   const [kickoff, setKickoff] = useState<"1st" | "2nd" | null>(null);
   const [flash, setFlash] = useState<"goal" | "card" | "chance" | "attacking" | "injury" | "penalty" | null>(null);
   const [flashEvent, setFlashEvent] = useState<MatchEvent | null>(null);
@@ -190,7 +192,7 @@ export default function MatchReplayPage() {
     const before = match.events.slice(0, k);
     setHg(before.filter((e) => e.type === "goal" && e.teamId === 1).length);
     setAg(before.filter((e) => e.type === "goal" && e.teamId !== 1).length);
-    setFlash(null); setFlashEvent(null); setKickoff(null); setHtPause(false); setFinished(false); setPaused(false);
+    setFlash(null); setFlashEvent(null); setIntro(null); setKickoff(null); setHtPause(false); setFinished(false); setPaused(false);
     // Po „Konec“ by se záznam hned zase přetočil na konec.
     if (speed === "instant") setSpeed("live");
     // Skok rovnou do druhého poločasu přestávku nespouští.
@@ -281,9 +283,21 @@ export default function MatchReplayPage() {
   useEffect(() => {
     if (!match || started.current || (long3d && !ready3d)) return;
     started.current = true;
-    setKickoff("1st");
     animating.current = true;
-    later(stepMs("kickoff"), () => { setKickoff(null); animating.current = false; setTick((t) => t + 1); });
+    // Představí se trenéři, které kluby mají; ruce si podají, jen když jsou oba.
+    const coaches = long3d ? (["home", "away"] as const).filter((side) => match.detail[`${side}_coach`]) : [];
+    const steps = [...coaches, ...(coaches.length === 2 ? (["handshake"] as const) : [])];
+    const run = (n: number) => {
+      if (n < steps.length) {
+        setIntro(steps[n]);
+        later(sceneMs(steps[n] === "handshake" ? "handshake" : "coach"), () => run(n + 1));
+        return;
+      }
+      setIntro(null);
+      setKickoff("1st");
+      later(stepMs("kickoff"), () => { setKickoff(null); animating.current = false; setTick((t) => t + 1); });
+    };
+    run(0);
   }, [!!match, long3d, ready3d]);
 
   // Kickoff 2nd half — auto-dismiss
@@ -301,7 +315,7 @@ export default function MatchReplayPage() {
       cancel();
       animating.current = false;
       setHg(match.home_score); setAg(match.away_score); setIdx(match.events.length); setFinished(true);
-      setKickoff(null); setFlash(null); setFlashEvent(null); setCue(null); setPaused(false); markSeen(); return;
+      setIntro(null); setKickoff(null); setFlash(null); setFlashEvent(null); setCue(null); setPaused(false); markSeen(); return;
     }
     if (animating.current) return;
     // Po skoku se akce rozběhne ve stejném kroku, ve kterém zmizí její stojící snímek.
@@ -620,7 +634,7 @@ export default function MatchReplayPage() {
             <>
               {view3d && (
                 <Replay3D detail={match.detail} events={match.events} onReady={() => setReady3d(true)}
-                  progress={{ idx, flash, kickoff, halfTime: htPause, finished, paused, cue, fast: speed === "fast", homeGoals: hg, awayGoals: ag }} />
+                  progress={{ idx, flash, intro, kickoff, halfTime: htPause, finished, paused, cue, fast: speed === "fast", homeGoals: hg, awayGoals: ag }} />
               )}
               <button onClick={switchView} title={view3d ? "Přepnout na 2D záznam" : "Přepnout na 3D záznam"}
                 className="absolute top-2 left-2 z-30 h-8 px-2.5 rounded-lg bg-black/60 hover:bg-black/80 text-white text-xs font-heading font-bold">{view3d ? "2D" : "3D"}</button>

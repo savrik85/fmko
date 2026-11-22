@@ -7,7 +7,7 @@ import { builtExtensionsOf } from "@/components/stadium/stadium-3d/stand-levels"
 import type { WeatherType } from "@/components/stadium/stadium-3d/constants";
 import { venueExtensions, venueFacilities } from "@/app/(hra)/turnaj/venue-scene";
 import { ReplayScene, type ReplayStep } from "./ReplayScene";
-import { EventCard, EventLabel, ScoreBug } from "./graphics";
+import { CoachCard, EventCard, EventLabel, ScoreBug } from "./graphics";
 import { Replay, type ReplayCoach, type ReplayEvent, type ReplayKit, type ReplayPlayer } from "./scenes";
 
 const Stadium3D = clientOnly(() => import("@/components/stadium/stadium-3d/Stadium3D").then((m) => m.Stadium3D));
@@ -17,6 +17,8 @@ export interface ReplayProgress {
   /** Kolik událostí už záznam ukázal. */
   idx: number;
   flash: "goal" | "card" | "chance" | "attacking" | "injury" | "penalty" | null;
+  /** Před výkopem: představení trenéra domácích, hostů a podání rukou. */
+  intro: "home" | "away" | "handshake" | null;
   kickoff: "1st" | "2nd" | null;
   halfTime: boolean;
   finished: boolean;
@@ -46,7 +48,7 @@ export function Replay3D({ detail, events, progress, onReady }: {
   /** Scéna se poprvé vykreslila; záznam do té doby čeká s výkopem. */
   onReady: () => void;
 }) {
-  const { idx, flash, kickoff, halfTime, finished, paused, cue, fast, homeGoals, awayGoals } = progress;
+  const { idx, flash, intro, kickoff, halfTime, finished, paused, cue, fast, homeGoals, awayGoals } = progress;
   const homeName = detail.home_name as string, awayName = detail.away_name as string;
   const kits = useMemo(() => ({ home: detail.home_kit as ReplayKit, away: detail.away_kit as ReplayKit }), [detail]);
   const pens = typeof detail.home_pens === "number" && typeof detail.away_pens === "number" && detail.home_pens + detail.away_pens > 0 ? { home: detail.home_pens, away: detail.away_pens } : null;
@@ -62,7 +64,7 @@ export function Replay3D({ detail, events, progress, onReady }: {
   const shot = flash === "attacking";
   /** Událost, které patří grafika. */
   const index = cue ?? (shot ? idx : idx - 1);
-  const scene = useMemo(() => (cue !== null ? replay.scene(cue) : finished ? replay.finale() : shot ? replay.scene(idx) : replay.before(idx)), [replay, cue, finished, shot, idx]);
+  const scene = useMemo(() => (cue !== null ? replay.scene(cue) : intro ? replay.intro() : finished ? replay.finale() : shot ? replay.scene(idx) : replay.before(idx)), [replay, cue, intro !== null, finished, shot, idx]); // eslint-disable-line react-hooks/exhaustive-deps
   const attack = cue !== null ? scene.split > scene.start : shot;
   // Skok začíná nový záběr, i když míří na akci, která zrovna běží.
   const play = useMemo(() => ({ scene, attack }), [scene, attack, cue !== null]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -94,11 +96,13 @@ export function Replay3D({ detail, events, progress, onReady }: {
   const finalScore = `${detail.home_score} : ${detail.away_score}${pens ? ` (pen. ${pens.home}:${pens.away})` : ""}`;
   const replayBadge = useRef<HTMLDivElement>(null);
   const veil = useRef<HTMLCanvasElement>(null);
-  // Výkop, přestávka a konec zápasu grafiku události nemají.
-  const event = cue === null && (kickoff !== null || halfTime || finished) ? undefined : events[index];
+  // Představení trenérů, výkop, přestávka a konec zápasu grafiku události nemají.
+  const event = cue === null && (intro !== null || kickoff !== null || halfTime || finished) ? undefined : events[index];
+  const coachSide = intro === "home" || intro === "away" ? intro : null;
   const attendance = detail.attendance as number | null;
   const graphics = { detail, events, index, event, attack, result: scene.result };
   const fixedLabel = finished && !over ? { text: "KONEC ZÁPASU", sub: finalScore, tone: "info" as const }
+    : coachSide ? { text: coachSide === "home" ? "TRENÉR DOMÁCÍCH" : "TRENÉR HOSTŮ", tone: "info" as const }
     : kickoff ? { text: "VÝKOP", sub: kickoff === "2nd" ? "2. poločas" : undefined, tone: "info" as const } : undefined;
 
   // Výkop a konec zápasu mají vlastní scénu; obraz ztmaví přestávka a výsledek po závěrečné scéně.
@@ -132,6 +136,7 @@ export function Replay3D({ detail, events, progress, onReady }: {
 
       <EventLabel {...graphics} override={fixedLabel} />
       <EventCard {...graphics} />
+      {coachSide && <CoachCard detail={detail} side={coachSide} />}
       {/* Opakovaný záběr gólu: rámeček kolem obrazu a nápis (scéna ho zapíná sama). */}
       <div ref={replayBadge} style={{ display: "none" }} className="absolute inset-0 z-30 pointer-events-none border-4 border-white/70">
         <div className="absolute top-11 sm:top-14 left-1/2 -translate-x-1/2 px-4 py-1 rounded-lg bg-red-600 text-white text-sm sm:text-lg font-heading font-[900] tracking-widest whitespace-nowrap shadow-lg">↺ OPAKOVANÝ ZÁBĚR</div>

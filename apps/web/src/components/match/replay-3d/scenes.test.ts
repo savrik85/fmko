@@ -15,8 +15,8 @@ const event = (minute: number, type: string, teamId: 1 | 2, slot: number, extra:
 const input = (events: ReplayEvent[]): ReplayInput => ({
   matchId: "test", events, winner: "home",
   // Domácí trenér je sopka, hostující kliďas.
-  home: { name: "Domácí", kit, starters: squad("H"), subs: [{ id: "hs", name: "Sub 1", position: "MID" }], coach: { name: "Trenér D", motivation: 90 } },
-  away: { name: "Hosté", kit, starters: squad("A"), subs: [], coach: { name: "Trenér H", motivation: 25 } },
+  home: { name: "Domácí", kit, starters: squad("H"), subs: [{ id: "hs", name: "Sub 1", position: "MID" }], coach: { name: "Trenér D", motivation: 90, record: null } },
+  away: { name: "Hosté", kit, starters: squad("A"), subs: [], coach: { name: "Trenér H", motivation: 25, record: null } },
 });
 
 /** Projde scénu po 1/30 s a vrátí, co je na ní špatně. */
@@ -51,7 +51,7 @@ function problems(replay: Replay, scene: Scene, label: string): string[] {
 
 function checkAll(replay: Replay, events: ReplayEvent[], label: string): string[] {
   const scened = scenedEvents(events);
-  return [...problems(replay, replay.kickoff(0), `${label} výkop`), ...problems(replay, replay.kickoff(events.length), `${label} výkop na konci`), ...problems(replay, replay.finale(), `${label} konec`),
+  return [...problems(replay, replay.intro(), `${label} trenéři`), ...problems(replay, replay.kickoff(0), `${label} výkop`), ...problems(replay, replay.kickoff(events.length), `${label} výkop na konci`), ...problems(replay, replay.finale(), `${label} konec`),
     ...events.flatMap((e, i) => (scened[i] ? problems(replay, replay.scene(i), `${label} #${i} ${e.minute}' ${e.type}${e.detail ? `/${e.detail}` : ""}`) : []))];
 }
 
@@ -171,8 +171,8 @@ describe.skipIf(!dump)("zápasy z místní databáze", () => {
       try {
         const replay = new Replay({
           matchId: m.id, events, winner: m.home_score > m.away_score ? "home" : m.home_score < m.away_score ? "away" : null,
-          home: { name: "Domácí", kit, coach: { name: "Trenér D", motivation: 95 }, ...m.home_lineup_data },
-          away: { name: "Hosté", kit, coach: { name: "Trenér H", motivation: 60 }, ...m.away_lineup_data },
+          home: { name: "Domácí", kit, coach: { name: "Trenér D", motivation: 95, record: null }, ...m.home_lineup_data },
+          away: { name: "Hosté", kit, coach: { name: "Trenér H", motivation: 60, record: null }, ...m.away_lineup_data },
         });
         found.push(...checkAll(replay, events, `${m.kind} ${m.id.slice(0, 8)}`));
       } catch (e) {
