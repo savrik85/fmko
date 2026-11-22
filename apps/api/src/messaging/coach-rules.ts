@@ -535,8 +535,8 @@ export async function applyLapsAtTraining(
 }
 
 /**
- * Denní tick po regeneraci kondice: kolečka odběhaná dnes na tréninku ubírají kondici až teď,
- * ať je regenerace nesmaže. Každý záznam jen jednou (`fatigue: applied`). Vrací počet hráčů.
+ * Denní tick po regeneraci kondice a bonusech ze sprch a posilovny (krok `laps-fatigue`):
+ * kolečka odběhaná dnes na tréninku ubírají kondici až teď, ať je přírůstky nesmažou. Každý záznam jen jednou (`fatigue: applied`). Vrací počet hráčů.
  */
 export async function applyPendingLapsFatigue(db: D1Database, gameDay: string): Promise<number> {
   const day = gameDay.slice(0, 10);
