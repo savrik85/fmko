@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   BROKEN_PLEDGE_SMS, COACH_REST_REASONS, MATCH_ATTEND_PLEDGE_TEXTS, MATCH_SKIP_PLEDGE_TEXTS, SKIP_PLEDGE_REASONS,
-  coachGrantsRest, excusedByCoach, matchPledgeOverrides, parseAttendancePledge, pledgeNote, pledgeOutcome, pledgePromptLines, pledgedAttendProb,
+  coachGrantsRest, excusedByCoach, isClearPledge, matchPledgeOverrides, parseAttendancePledge, pledgeNote, pledgeOutcome, pledgePromptLines, pledgedAttendProb,
   resolveTrainingPledge, trainingPledgeIntent, trainingScheduleText, type TrainingPledge,
 } from "./attendance-pledge";
 import { simulateAttendance, trainingWeekdays } from "../season/training";
@@ -192,5 +192,25 @@ describe("texty", () => {
       expect(new Set(pool).size).toBe(pool.length);
       for (const t of pool) expect(t).not.toContain("—");
     }
+  });
+});
+
+// Lokální E2E 22. 11. (C2, Marek): „…takže asi těžko. 🤕“ dostalo 📝 „nepřijde“. Váhání se hlídalo
+// jen ve větě se slovesem docházky a eliptické „asi těžko“, „spíš ne“ sloveso nemají.
+describe("váhání bez slovesa docházky", () => {
+  const coach = "Matěji, v sobotu je trénink. Přijdeš?";
+  it.each([
+    "Zranění mi ještě nezhejtlo, takže asi těžko. 🤕",
+    "Spíš ne, uvidíme, jak skončím v lese.",
+    "Asi ne, trenére.",
+    "Nevím, mám šichtu.",
+    "Možná, záleží na práci.",
+  ])("„%s“ slib není", (reply) => {
+    expect(isClearPledge(reply, coach)).toBe(false);
+  });
+
+  it("jasná odpověď slib je", () => {
+    expect(isClearPledge("Jo, ve středu přijdu.", coach)).toBe(true);
+    expect(isClearPledge("V sobotu nemůžu, mám šichtu do večera.", coach)).toBe(true);
   });
 });

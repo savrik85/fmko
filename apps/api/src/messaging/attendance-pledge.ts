@@ -182,6 +182,12 @@ export function parseAttendancePledge(raw: unknown): RawAttendancePledge | null 
 const ATTEND_WORD_RE = /\b(n?e?prijd\w*|n?e?doraz\w*|n?e?prijed\w*|budu|nebudu|vynech\w*|nemuzu|nemohu|n?e?stihnu|nejdu|jdu|nejedu|jedu|pocitej\w*|dojdu)\b/;
 /** Váhání: „asi“, „možná“, „snad“, „uvidíme“, „nevím“, „zkusím“. */
 const HEDGE_RE = /\b(asi|mozna|snad|uvidime|uvidim|nevim|nejspis|spis|zkusim|pokusim|treba)\b/;
+/**
+ * Váhání, které platí v celé odpovědi, i bez slovesa docházky: „asi těžko“, „spíš ne, uvidíme“
+ * (Marek, E2E 22. 11.: dostal 📝 „nepřijde“). Užší než `HEDGE_RE`: „třeba“ nebo „zkusím“ mimo
+ * větu o docházce o slibu nic neříkají.
+ */
+const REPLY_HEDGE_RE = /\b(asi|spis|nejspis|uvidime|uvidim|mozna|tezko|nevim)\b/;
 /** Hráč sám jmenuje, o co jde (trénink, zápas): k tématu, i když se trenér neptal. */
 const EVENT_WORD_RE = /(tr[eé]nin|z[aá]pas|p[rř][aá]tel[aá]k|utk[aá]n|ma[cč]\b)/i;
 /** Trenér psal o docházce (nebo o volnu): odpověď „nepřijdu“ je k tématu. */
@@ -195,7 +201,7 @@ const COACH_ATTENDANCE_RE = /(tr[eé]nin|z[aá]pas|p[rř][aá]tel[aá]k|doraz|om
  */
 export function isClearPledge(replyBody: string, coachText: string): boolean {
   const plainText = (t: string) => t.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase();
-  const hedged = replyBody.split(/(?<=[.!?…])\s+|\n+/).some((raw) => {
+  const hedged = REPLY_HEDGE_RE.test(plainText(replyBody)) || replyBody.split(/(?<=[.!?…])\s+|\n+/).some((raw) => {
     const sentence = plainText(raw);
     return ATTEND_WORD_RE.test(sentence) && HEDGE_RE.test(sentence);
   });
