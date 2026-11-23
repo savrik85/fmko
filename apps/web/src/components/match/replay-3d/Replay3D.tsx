@@ -9,7 +9,7 @@ import { VideoLoading } from "./VideoLoading";
 import { venueExtensions, venueFacilities } from "@/app/(hra)/turnaj/venue-scene";
 import { ReplayScene, type ReplayStep } from "./ReplayScene";
 import { CoachCard, EventCard, EventLabel, initials, ReplayMark, ScoreBug } from "./graphics";
-import { BANNERS_BOTTOM, BANNERS_INSET, OVERLAY_BUTTON, OVERLAY_FAINT, OVERLAY_GAP, OVERLAY_HIDDEN, OVERLAY_SHOWN_MS } from "./overlay";
+import { BANNERS_BOTTOM, BANNERS_INSET, OVERLAY_BUTTON, OVERLAY_GAP, OVERLAY_HIDDEN, OVERLAY_SHOWN_MS } from "./overlay";
 import { Replay, shootoutScore, sideOf, type ReplayCoach, type ReplayEvent, type ReplayKit, type ReplayLineup } from "./scenes";
 
 /** Šířka okna záznamu, pro kterou je grafika navržená (px); v jiném okně se zmenší nebo zvětší celá, jako obraz videa. */
@@ -129,7 +129,7 @@ function Replay3DView({ detail, events, progress, onReady, onSecondHalf }: Repla
     return () => observer.disconnect();
   }, []);
   const buttonsTop = fit.scale * GRAPHICS_WIDTH * BANNERS_BOTTOM + OVERLAY_GAP, buttonsRight = fit.scale * GRAPHICS_WIDTH * BANNERS_INSET;
-  // Na celé obrazovce jsou tlačítka vidět jen chvíli po pohybu myši nebo klepnutí.
+  // Tlačítka jsou vidět jen chvíli po pohybu myši nad obrazem nebo po klepnutí; když myš obraz opustí, zmizí hned.
   const [stirred, setStirred] = useState(false);
   const calm = useRef<ReturnType<typeof setTimeout>>(undefined);
   const stir = () => {
@@ -138,7 +138,7 @@ function Replay3DView({ detail, events, progress, onReady, onSecondHalf }: Repla
     calm.current = setTimeout(() => setStirred(false), OVERLAY_SHOWN_MS);
   };
   useEffect(() => () => clearTimeout(calm.current), []);
-  const buttonsShown = !fullscreen ? OVERLAY_FAINT : stirred ? "transition-opacity" : OVERLAY_HIDDEN;
+  const buttonsShown = stirred ? "transition-opacity" : OVERLAY_HIDDEN;
   const veil = useRef<HTMLCanvasElement>(null);
   // Představení trenérů, výkop, přestávka a konec zápasu grafiku události nemají. Události bez scény taky ne: roh
   // nebo standardka bez zakončení by jinak na okamžik ukázaly „ŠANCE“ nad obrazem předchozí akce.
@@ -154,7 +154,7 @@ function Replay3DView({ detail, events, progress, onReady, onSecondHalf }: Repla
   const scored = flash === "goal" && cue === null ? sideOf(events[index].teamId) : null;
 
   return (
-    <div ref={frame} onPointerMove={stir} onPointerDown={stir} className={`group/shot bg-black ${fullscreen ? "fixed inset-0 z-50" : "absolute inset-0 z-20"}`}>
+    <div ref={frame} onPointerMove={stir} onPointerDown={stir} onPointerLeave={(e) => { if (e.pointerType === "mouse") setStirred(false); }} className={`group/shot bg-black ${fullscreen ? "fixed inset-0 z-50" : "absolute inset-0 z-20"}`}>
       {stadiumKnown && <Stadium3D
         pitchCondition={(detail.pitch_condition as number | null) ?? 85}
         pitchType={(venue?.look?.pitch_type as string) ?? (detail.pitch_type as string) ?? "natural"}
