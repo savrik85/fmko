@@ -4,7 +4,7 @@ import { FaceAvatar } from "@/components/players/face-avatar";
 import { BadgePreview, type BadgePattern } from "@/components/ui";
 import { bestTextOn } from "@/lib/team-color";
 import { useEffect, useState, type ReactNode } from "react";
-import { chanceResult, sideOf, substitutedOut, type ReplayCoach, type ReplayEvent, type ReplayKit, type ReplayLineup, type ReplayPlayer, type ShotResult, type Side } from "./scenes";
+import { chanceResult, GOAL_TEXT, sideOf, substitutedOut, type ReplayCoach, type ReplayEvent, type ReplayKit, type ReplayLineup, type ReplayPlayer, type ShotResult, type Side } from "./scenes";
 
 /** Co se právě hraje: událost (při „ŠANCE“ ta, která teprve přijde) a její pořadí v zápase. */
 interface GraphicsProps {
@@ -15,7 +15,7 @@ interface GraphicsProps {
   attack: boolean;
 }
 
-const RESULTS: Record<ShotResult, string> = { goal: "GÓÓÓL!", saved: "CHYTIL BRANKÁŘ!", post: "TYČ!", bar: "BŘEVNO!", wide: "VEDLE!", over: "NAD BRÁNU!", blocked: "ZBLOKOVÁNO!" };
+const RESULTS: Record<ShotResult, string> = { goal: GOAL_TEXT, saved: "CHYTIL BRANKÁŘ!", post: "TYČ!", bar: "BŘEVNO!", wide: "VEDLE!", over: "NAD BRÁNU!", blocked: "ZBLOKOVÁNO!" };
 // Červené pole má jen nápis opakovaného záběru (ReplayMark), ať se s ním nápis akce neplete; červená karta je červeným písmem.
 const TONES = { goal: "bg-green-500 text-white", danger: "bg-orange-500 text-white", miss: "bg-slate-600 text-white", yellow: "bg-yellow-400 text-gray-900", red: "bg-white text-red-600", info: "bg-white text-gray-900" };
 interface Label { text: string; tag?: string; sub?: string; tone: keyof typeof TONES }
@@ -83,11 +83,11 @@ export function EventLabel(props: GraphicsProps & { override?: Label }) {
   );
 }
 
-/** Kdo dal góly do události `index` včetně, po hráčích: „Novák 12', 30' · Dvořák 55'“. */
+/** Kdo z týmu dal góly do události `index` včetně, po hráčích: „Novák 12', 30', Dvořák 55'“. */
 function scorers(events: ReplayEvent[], index: number, teamId: number): string {
   const byPlayer = new Map<string, number[]>();
   for (const e of events.slice(0, index + 1)) if (e.type === "goal" && e.teamId === teamId) byPlayer.set(e.playerName, [...(byPlayer.get(e.playerName) ?? []), e.minute]);
-  return [...byPlayer].map(([name, minutes]) => `${name.split(" ").at(-1)} ${minutes.map((m) => `${m}'`).join(", ")}`).join(" · ");
+  return [...byPlayer].map(([name, minutes]) => `${name.split(" ").at(-1)} ${minutes.map((m) => `${m}'`).join(", ")}`).join(", ");
 }
 
 /**
@@ -104,7 +104,7 @@ export function EventCard({ detail, events, index, event, attack }: GraphicsProp
     : event.type === "substitution" ? `↓ ${substitutedOut(event)}`
     : event.type === "injury" ? event.detail
     : null;
-  const board = event.type === "goal" ? [1, 2].map((teamId) => scorers(events, index, teamId)).filter(Boolean).join("   —   ") : null;
+  const board = event.type === "goal" ? [1, 2].map((teamId) => scorers(events, index, teamId)).filter(Boolean).join(" · ") : null;
   return <LowerThird key={index} color={color} name={event.playerName} avatar={player?.avatar} title={event.type === "substitution" ? `↑ ${event.playerName}` : event.playerName}
     note={note} board={board} badge={`${event.minute}'`} />;
 }

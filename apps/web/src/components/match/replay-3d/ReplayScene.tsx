@@ -4,7 +4,7 @@ import { useEffect, useLayoutEffect, useMemo, useRef, type RefObject } from "rea
 import * as THREE from "three";
 import { addAfterEffect, useFrame, useThree } from "@react-three/fiber";
 import { FENCE_BOUNDS, GOAL_NAME, PITCH_SURFACE_Y } from "@/components/stadium/stadium-3d/constants";
-import { emptyFrame, HALF_L, HALF_W, REPLAY, sampleClip, sceneTime, type Clip, type Figure, type Replay, type ReplayKit, type Scene, type Side } from "./scenes";
+import { emptyFrame, GOAL_TEXT, HALF_L, HALF_W, REPLAY, sampleClip, sceneTime, type Clip, type Figure, type Replay, type ReplayKit, type Scene, type Side } from "./scenes";
 
 /** Záběr: scéna a její část. Nový objekt znamená hrát od začátku, i když jde o tutéž scénu (skok zpět na její začátek). */
 interface ReplayPlay {
@@ -25,9 +25,12 @@ export interface ReplayStep {
 /** Co má figura na sobě; vzor dresu mají jen hráči v poli. */
 type Outfit = Pick<ReplayKit, "shirt" | "shorts" | "socks">;
 const REFEREE_KIT: Outfit = { shirt: "#111827", shorts: "#111827", socks: "#111827" };
-/** Trenér má bundu v barvě dresu svého týmu a tmavé kalhoty. */
+/** Trenér má mikinu v barvě dresu svého týmu a tmavé kalhoty. */
 const COACH_TROUSERS = "#1F2937";
-/** Brankář dostane první barvu, která se neplete s dresy obou týmů ani s druhým brankářem. */
+/**
+ * Brankář dostane první barvu, která se neplete s dresy obou týmů, s rozhodčím ani s druhým brankářem.
+ * Když se pletou všechny, tu nejvzdálenější.
+ */
 const KEEPER_PALETTE = ["#FACC15", "#22C55E", "#EC4899", "#F97316", "#A855F7", "#E5E7EB"];
 const CARD_COLORS = { yellow: "#FACC15", red: "#DC2626" };
 /** Postavy jsou o kus větší než skutečnost, ať jsou z televizního pohledu čitelné i v malém okně. */
@@ -58,9 +61,10 @@ const LOOKAHEAD = 0.1;
 
 function keeperShirts(home: ReplayKit, away: ReplayKit): { home: string; away: string } {
   const taken = [home.shirt, away.shirt, REFEREE_KIT.shirt].map((c) => new THREE.Color(c));
+  const distance = (c: THREE.Color) => Math.min(...taken.map((t) => Math.hypot(c.r - t.r, c.g - t.g, c.b - t.b)));
   const pick = () => {
-    const color = KEEPER_PALETTE.map((c) => new THREE.Color(c)).find((c) => taken.every((t) => Math.hypot(c.r - t.r, c.g - t.g, c.b - t.b) > 0.45));
-    if (!color) throw new Error("Pro brankáře nezbyla barva dresu");
+    const colors = KEEPER_PALETTE.map((c) => new THREE.Color(c));
+    const color = colors.find((c) => distance(c) > 0.45) ?? colors.reduce((best, c) => (distance(c) > distance(best) ? c : best));
     taken.push(color);
     return `#${color.getHexString()}`;
   };
@@ -92,7 +96,7 @@ const PARTS: PartDef[] = [
   { id: "boot", geometry: new THREE.BoxGeometry(0.14, 0.11, 0.25).translate(0, 0, 0.05), on: "knee", drop: 0.43, color: (_, __, fig) => (fig.team === "referee" || fig.coach ? "#111111" : "#9CA3AF") },
   { id: "torso", geometry: new THREE.BoxGeometry(0.44, 0.56, 0.25), on: [0, 1.2, 0], drop: 0, color: (_, shirt) => shirt },
   { id: "sleeve", geometry: new THREE.BoxGeometry(0.13, 0.27, 0.14), on: "shoulder", drop: 0.12, color: (_, shirt) => shirt },
-  // Trenér má dlouhý rukáv (mikina nebo bunda).
+  // Trenér má dlouhý rukáv (mikina).
   { id: "forearm", geometry: new THREE.BoxGeometry(0.1, 0.3, 0.11), on: "elbow", drop: 0.14, color: (kit, shirt, fig) => (fig.coach ? shirt : skin(kit, shirt, fig)) },
   { id: "head", geometry: new THREE.SphereGeometry(0.13, 12, 10), on: [0, 1.63, 0], drop: 0, color: skin },
   { id: "hair", geometry: new THREE.BoxGeometry(0.25, 0.09, 0.26), on: [0, 1.73, -0.01], drop: 0, color: (_, __, fig) => fig.player.hairColor ?? null },
@@ -157,6 +161,35 @@ function tintGoal(goal: THREE.Object3D, on: boolean) {
     material.color.set(on ? GOAL_GREEN : material.userData.plain);
   });
 }
+/**
+ * Nápis gólu promítnutý na střed hřiště jako grafika v televizním přenosu: leží na trávníku (hráči po něm běhají)
+ * a čte se z tribuny. `width` je podél hřiště, `depth` napříč; z tribuny se hloubka zkrátí asi na čtvrtinu,
+ * z paneláku míň, takže odtud jsou písmena vyšší.
+ * Objeví se s gólem (`fadeIn` sekund) a zmizí s koncem scény (`fadeOut`).
+ */
+const GOAL_SIGN = { width: 20, depth: 13.5, opacity: 0.8, fadeIn: 0.35, fadeOut: 0.25 };
+/** Kamera stojí na straně +x a dívá se k −x: vpravo v obraze je −z, nahoře −x. */
+const GOAL_SIGN_GEOMETRY = new THREE.PlaneGeometry(GOAL_SIGN.width, GOAL_SIGN.depth)
+  .applyMatrix4(new THREE.Matrix4().makeBasis(new THREE.Vector3(0, 0, -1), new THREE.Vector3(-1, 0, 0), new THREE.Vector3(0, 1, 0)));
+/** Bílý nápis přes celou texturu; zelenou mu dá materiál. Písmo je nadpisové písmo hry. */
+function goalSignTexture(): THREE.CanvasTexture {
+  const canvas = document.createElement("canvas");
+  canvas.width = 1024;
+  canvas.height = 256;
+  const ctx = canvas.getContext("2d")!;
+  ctx.font = `900 200px ${getComputedStyle(document.body).getPropertyValue("--font-heading")}, sans-serif`;
+  ctx.textAlign = "center";
+  ctx.textBaseline = "middle";
+  ctx.fillStyle = "#FFFFFF";
+  const metrics = ctx.measureText(GOAL_TEXT);
+  ctx.translate(canvas.width / 2, canvas.height / 2);
+  ctx.scale((canvas.width - 24) / metrics.width, (canvas.height - 24) / (metrics.actualBoundingBoxAscent + metrics.actualBoundingBoxDescent));
+  ctx.fillText(GOAL_TEXT, 0, (metrics.actualBoundingBoxAscent - metrics.actualBoundingBoxDescent) / 2);
+  const texture = new THREE.CanvasTexture(canvas);
+  texture.colorSpace = THREE.SRGBColorSpace;
+  texture.anisotropy = 8;
+  return texture;
+}
 /** Auto, kterým po zápase odjíždí rozhodčí: jede po cestě za plotem areálu (x) zprava doleva (z), z obrazu ven i při pohledu z paneláku. */
 const CAR_ROAD = { x: -(FENCE_BOUNDS.width / 2 + 4), from: -110, to: 110 };
 
@@ -192,11 +225,6 @@ export function ReplayScene({ replay, kits, snow, overview, step, root, veil, on
   const frame = useMemo(() => emptyFrame(count), [count]);
   const states = useMemo<FigureState[]>(() => replay.figures.map(() => ({ x: 0, z: 0, yaw: 0, phase: 0, speed: 0 })), [replay]);
   const keepers = useMemo(() => keeperShirts(kits.home, kits.away), [kits]);
-  // Trenér má mikinu v barvě klubu; když sněží, tmavší bundu.
-  const coachTops = useMemo(() => {
-    const top = (side: Side) => (snow ? `#${new THREE.Color(kits[side].shirt).multiplyScalar(0.45).getHexString()}` : kits[side].shirt);
-    return { home: top("home"), away: top("away") };
-  }, [kits, snow]);
   const shirts = useMemo(() => {
     const canvas = document.createElement("canvas");
     canvas.width = TILE * Object.keys(SHIRT_TILES).length;
@@ -234,6 +262,11 @@ export function ReplayScene({ replay, kits, snow, overview, step, root, veil, on
   const car = useRef<THREE.Group>(null);
   /** Branka, která je po gólu zelená. */
   const scored = useRef<THREE.Object3D | null>(null);
+  const goalSign = useRef<THREE.Mesh>(null);
+  const goalSignMap = useMemo(goalSignTexture, []);
+  useEffect(() => () => goalSignMap.dispose(), [goalSignMap]);
+  /** Jak moc je nápis gólu na hřišti vidět (0–1). */
+  const goalSignShown = useRef(0);
   const world = useThree((s) => s.scene);
   useEffect(() => () => { if (scored.current) tintGoal(scored.current, false); }, []);
   const camera = useThree((s) => s.camera) as THREE.PerspectiveCamera;
@@ -276,7 +309,7 @@ export function ReplayScene({ replay, kits, snow, overview, step, root, veil, on
       const mesh = meshes.current[p];
       if (!mesh) return;
       replay.figures.forEach((fig, i) => {
-        const kit: Outfit = fig.team === "referee" ? REFEREE_KIT : fig.coach ? { shirt: coachTops[fig.team], shorts: COACH_TROUSERS, socks: COACH_TROUSERS } : kits[fig.team];
+        const kit: Outfit = fig.team === "referee" ? REFEREE_KIT : fig.coach ? { shirt: kits[fig.team].shirt, shorts: COACH_TROUSERS, socks: COACH_TROUSERS } : kits[fig.team];
         const shirt = fig.team !== "referee" && clip.keepers.has(i) ? keepers[fig.team] : kit.shirt;
         // Hráč v poli má dres se vzorem svého týmu: trup bere barvy z textury, rukávy jsou u vzoru „sleeves“ doplňkové.
         const design = fig.team !== "referee" && !fig.coach && !clip.keepers.has(i) ? kits[fig.team] : null;
@@ -444,6 +477,14 @@ export function ReplayScene({ replay, kits, snow, overview, step, root, veil, on
       if (goal) tintGoal(goal, true);
       scored.current = goal;
     }
+    if (goalSign.current) {
+      const shown = goalSignShown.current = THREE.MathUtils.clamp(goalSignShown.current + (inGoal ? dt / GOAL_SIGN.fadeIn : -dt / GOAL_SIGN.fadeOut), 0, 1);
+      const eased = THREE.MathUtils.smoothstep(shown, 0, 1);
+      goalSign.current.visible = shown > 0;
+      (goalSign.current.material as THREE.MeshBasicMaterial).opacity = GOAL_SIGN.opacity * eased;
+      // Při objevení nápis lehce doroste.
+      goalSign.current.scale.setScalar(0.92 + 0.08 * eased);
+    }
     if (car.current) {
       const driving = scene.drive !== undefined && t >= scene.drive.from && t < scene.drive.to;
       car.current.visible = driving;
@@ -529,6 +570,9 @@ export function ReplayScene({ replay, kits, snow, overview, step, root, veil, on
           <meshBasicMaterial color="#FDE047" transparent opacity={0.9} depthWrite={false} />
         </mesh>
       ))}
+      <mesh ref={goalSign} geometry={GOAL_SIGN_GEOMETRY} position={[0, PITCH_SURFACE_Y + 0.015, 0]} visible={false}>
+        <meshBasicMaterial map={goalSignMap} color={GOAL_GREEN} transparent opacity={0} depthWrite={false} toneMapped={false} />
+      </mesh>
       <mesh ref={card} visible={false}>
         <planeGeometry args={[0.3, 0.42]} />
         <meshBasicMaterial side={THREE.DoubleSide} />
