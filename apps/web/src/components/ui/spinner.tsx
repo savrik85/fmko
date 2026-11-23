@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useEffect, useId, useState } from "react";
-import { LOADING_QUIPS, loadingPhase, quipAt, type LoadingPhase } from "./loading-quips";
+import { BALL_DELAY_MS, LOADING_QUIPS, loadingPhase, quipAt } from "./loading-quips";
 
 type SpinnerSize = "sm" | "md" | "lg";
 
@@ -43,35 +43,30 @@ export function Spinner({ size = "md" }: { size?: SpinnerSize }) {
   );
 }
 
-interface LoadingState {
-  phase: LoadingPhase;
-  quip: string;
-}
-
-/** Odpočítává od připojení: do 300 ms nic, pak míč, od 1,5 s hláška (loading-quips.ts). */
-function useLoadingPhase(): LoadingState {
-  const [state, setState] = useState<LoadingState>({ phase: "hidden", quip: "" });
+/**
+ * Hláška pod míčem: od 1,5 s po připojení, pak střídání (loading-quips.ts).
+ * Kdy naskočí sám míč, řídí CSS (animation-delay), aby to platilo i před načtením JS.
+ */
+function useLoadingQuip(): string {
+  const [quip, setQuip] = useState("");
   useEffect(() => {
     const startedAt = performance.now();
     // Náhoda až v efektu: při renderu na serveru by se hláška lišila od klienta.
     const startIndex = Math.floor(Math.random() * LOADING_QUIPS.length);
     const timer = window.setInterval(() => {
       const elapsed = performance.now() - startedAt;
-      const phase = loadingPhase(elapsed);
-      const quip = phase === "quip" ? quipAt(startIndex, elapsed) : "";
-      setState((prev) => (prev.phase === phase && prev.quip === quip ? prev : { phase, quip }));
-      // Po 100 ms, ať míč naskočí nejpozději ve 0,4 s (při 250 ms to bylo až v 0,55 s).
+      setQuip(loadingPhase(elapsed) === "quip" ? quipAt(startIndex, elapsed) : "");
     }, 100);
     return () => window.clearInterval(timer);
   }, []);
-  return state;
+  return quip;
 }
 
 /** Skákající míč se stínem a hláškou. Místo zabírá hned, jen je do 300 ms neviditelný. */
 function LoadingBall() {
-  const { phase, quip } = useLoadingPhase();
+  const quip = useLoadingQuip();
   return (
-    <div className={`loading-indicator${phase === "hidden" ? "" : " is-visible"}`}>
+    <div className="loading-indicator" style={{ animationDelay: `${BALL_DELAY_MS}ms` }}>
       <div className="loading-ball">
         <div className="loading-ball-body"><BallIcon /></div>
         <div className="loading-ball-shadow" />
