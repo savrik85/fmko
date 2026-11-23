@@ -13,6 +13,15 @@ export interface ReleaseNote {
 export const RELEASE_NOTES: ReleaseNote[] = [
   {
     date: "2026-11-23",
+    emoji: "🔎",
+    title: "Profil soupeře",
+    items: [
+      "Profil cizího týmu má novou záložku Soupeř: vzájemné zápasy, kdo komu dává góly, srovnání sezóny a kádrů, kdy soupeř dává a dostává góly a jak hraje.",
+      "Na záložku vede odkaz Soupeř z karty Další zápas na [Přehledu](/prehled).",
+    ],
+  },
+  {
+    date: "2026-11-23",
     emoji: "🎬",
     title: "Záznam zápasu jako 3D video",
     items: [
