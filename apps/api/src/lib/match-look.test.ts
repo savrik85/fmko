@@ -53,6 +53,7 @@ describe("vzhled hráče pro 3D záznam", () => {
 
   it("hráč bez obličeje a fyzických údajů nemá nic", () => {
     expect(playerLook({ avatar: null, physical: null })).toEqual({});
+    expect(playerLook({ avatar: "{}", physical: null })).toEqual({});
   });
 });
 
