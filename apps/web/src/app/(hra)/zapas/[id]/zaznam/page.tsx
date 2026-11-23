@@ -174,7 +174,7 @@ export default function MatchReplayPage() {
   const prevBallX = useRef(50);
 
   const [stadiumInfo, setStadiumInfo] = useState<{ name: string; pitchCondition: number } | null>(null);
-  // Záznam začíná ve 2D („Tracker“), na 3D („Video“) se přepíná. Kdo video ještě nikdy nepustil (prohlížeč si to
+  // Záznam začíná ve 2D („Plánek“), na 3D („Video“) se přepíná. Kdo video ještě nikdy nepustil (prohlížeč si to
   // pamatuje), toho na něj zve bublina u tlačítka.
   const [view3d, setView3d] = useState(false);
   /** Hráč klikl na Video a vybírá, odkud ho pustit; záznam zatím stojí a 3D scéna se ještě nenačítá. */
@@ -702,18 +702,18 @@ export default function MatchReplayPage() {
               {view3d && failed3d && (
                 <div className="absolute inset-0 z-20 flex flex-col items-center justify-center gap-1 px-6 bg-[#0a0a0a]/90 text-center font-heading text-white">
                   <div className="font-[900] text-base sm:text-2xl">Video se nepodařilo přehrát</div>
-                  <div className="text-xs sm:text-base text-white/75">Přepni vlevo nahoře na Tracker a zápas dohraj tam.</div>
+                  <div className="text-xs sm:text-base text-white/75">Přepni vlevo nahoře na Plánek a zápas dohraj tam.</div>
                 </div>
               )}
               {view3d && !failed3d && Replay3D && (
                 <Replay3D detail={match.detail} events={match.events} onReady={() => setReady3d(true)} onFailure={() => setFailed3d(true)}
                   progress={{ take, idx, flash, intro, kickoff, halfTime: htPause, finished, paused, cue, fast: speed === "fast", homeGoals: hg, awayGoals: ag }} />
               )}
-              <button onClick={switchView} title={view3d ? "Přepnout na tracker" : "Přepnout na video"}
+              <button onClick={switchView} title={view3d ? "Přepnout na plánek" : "Přepnout na video"}
                 // Pod horními nápisy videa a stejně daleko od kraje: `top` je v procentech výšky okna, proto poměr stran.
                 style={{ top: `calc(${BANNERS_BOTTOM * VIEWER_ASPECT * 100}% + ${OVERLAY_GAP}px)`, left: `${BANNERS_INSET * 100}%` }}
                 className={`${OVERLAY_BUTTON} z-30 px-2 ${videoTried ? OVERLAY_FAINT : ""}`}>
-                {view3d ? "Tracker" : "Video"}
+                {view3d ? "Plánek" : "Video"}
                 {/* Kdo video ještě nezkusil, tomu na tlačítko ukazuje žlutá bublina. */}
                 {!videoTried && (
                   <span className="absolute left-full top-0 ml-2.5 h-7 px-2 flex items-center rounded-md bg-yellow-400 text-black whitespace-nowrap shadow-md pointer-events-none">

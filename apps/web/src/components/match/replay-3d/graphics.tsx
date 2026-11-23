@@ -83,11 +83,11 @@ export function EventLabel(props: GraphicsProps & { override?: Label }) {
   );
 }
 
-/** Kdo dal góly do události `index` včetně, po hráčích: „Novák 12', 30' · Dvořák 55'“. */
+/** Kdo z týmu dal góly do události `index` včetně, po hráčích: „Novák 12', 30', Dvořák 55'“. */
 function scorers(events: ReplayEvent[], index: number, teamId: number): string {
   const byPlayer = new Map<string, number[]>();
   for (const e of events.slice(0, index + 1)) if (e.type === "goal" && e.teamId === teamId) byPlayer.set(e.playerName, [...(byPlayer.get(e.playerName) ?? []), e.minute]);
-  return [...byPlayer].map(([name, minutes]) => `${name.split(" ").at(-1)} ${minutes.map((m) => `${m}'`).join(", ")}`).join(" · ");
+  return [...byPlayer].map(([name, minutes]) => `${name.split(" ").at(-1)} ${minutes.map((m) => `${m}'`).join(", ")}`).join(", ");
 }
 
 /**
@@ -104,7 +104,7 @@ export function EventCard({ detail, events, index, event, attack }: GraphicsProp
     : event.type === "substitution" ? `↓ ${substitutedOut(event)}`
     : event.type === "injury" ? event.detail
     : null;
-  const board = event.type === "goal" ? [1, 2].map((teamId) => scorers(events, index, teamId)).filter(Boolean).join("   —   ") : null;
+  const board = event.type === "goal" ? [1, 2].map((teamId) => scorers(events, index, teamId)).filter(Boolean).join(" · ") : null;
   return <LowerThird key={index} color={color} name={event.playerName} avatar={player?.avatar} title={event.type === "substitution" ? `↑ ${event.playerName}` : event.playerName}
     note={note} board={board} badge={`${event.minute}'`} />;
 }
