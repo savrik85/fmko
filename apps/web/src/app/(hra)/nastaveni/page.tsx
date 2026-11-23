@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import Link from "next/link";
 import { useTeam } from "@/context/team-context";
-import { ChoiceGroup, SectionLabel, StatusChip, type ChoiceOption } from "@/components/ui";
+import { Button, ChoiceGroup, Input, ListCard, ListRow, Sheet, StatusChip, Switch, type ChoiceOption } from "@/components/ui";
 import { currentPushSubscription, disablePush, enablePush, pushAvailability, type EnablePushResult, type PushAvailability } from "@/lib/push";
 import { cachedReplayView, DEFAULT_REPLAY_VIEW, fetchReplayView, saveReplayView, type ReplayView } from "@/lib/ui-prefs";
 import { PitchIcon, VideoIcon } from "@/components/match/replay-view-icons";
@@ -20,14 +20,14 @@ type NotifPrefs = {
   system: boolean;
 };
 
-const PREF_LABELS: { key: keyof NotifPrefs; label: string; desc: string; icon: string }[] = [
-  { key: "match_result",   icon: "⚽", label: "Výsledek zápasu",           desc: "Hned po odehrání zápasu" },
-  { key: "match_reminder", icon: "📋", label: "Sestava před zápasem",       desc: "Připomenutí den předem" },
-  { key: "transfer",       icon: "🤝", label: "Přestupy",                   desc: "Nabídka nebo odpověď na přestup" },
-  { key: "challenge",      icon: "⚡", label: "Výzvy",                      desc: "Výzva od jiného týmu" },
+const PREF_LABELS: { key: keyof NotifPrefs; label: string; desc: string }[] = [
+  { key: "match_result",   label: "Výsledek zápasu",           desc: "Hned po odehrání zápasu" },
+  { key: "match_reminder", label: "Sestava před zápasem",       desc: "Připomenutí den předem" },
+  { key: "transfer",       label: "Přestupy",                   desc: "Nabídka nebo odpověď na přestup" },
+  { key: "challenge",      label: "Výzvy",                      desc: "Výzva od jiného týmu" },
   // `event` je společný typ pro všechno ostatní: sezónní události, incidenty, sázky i hlídač.
   // Typy `season` a `system` hra nikdy neposílá, jejich přepínače nic neřídily (skryté).
-  { key: "event",          icon: "🎉", label: "Události a ostatní",         desc: "Sezónní události, incidenty, sázky a další zprávy klubu" },
+  { key: "event",          label: "Události a ostatní",         desc: "Sezónní události, incidenty, sázky a další zprávy klubu" },
 ];
 
 const ENABLE_FAILURE_TEXT: Partial<Record<EnablePushResult, string>> = {
@@ -164,13 +164,14 @@ function ReplayViewCard() {
   }
 
   return (
-    <div className="card p-5 max-w-md">
-      <h3 className="font-heading font-bold text-base mb-1">Záznam zápasu</h3>
-      <p className="text-sm text-muted mb-3">Jak se záznam zápasu otevře. Přepnout můžeš kdykoli i během zápasu.</p>
-      <ChoiceGroup ariaLabel="Jak se záznam zápasu otevře" columns={2} value={view} onChange={choose} options={REPLAY_VIEW_OPTIONS} />
-      {error && <p role="alert" className="text-sm text-card-red mt-3">{error}</p>}
-      {!error && saved && <p className="text-sm text-pitch-600 mt-3">Uloženo. Platí na všech tvých zařízeních.</p>}
-    </div>
+    <ListCard title="Záznam zápasu">
+      <div className="px-4 py-4">
+        <p className="text-meta text-muted mb-3">Jak se záznam zápasu otevře. Přepnout můžeš kdykoli i během zápasu.</p>
+        <ChoiceGroup ariaLabel="Jak se záznam zápasu otevře" columns={2} value={view} onChange={choose} options={REPLAY_VIEW_OPTIONS} />
+        {error && <p role="alert" className="text-sm text-card-red mt-3">{error}</p>}
+        {!error && saved && <p className="text-sm text-pitch-600 mt-3">Uloženo. Platí na všech tvých zařízeních.</p>}
+      </div>
+    </ListCard>
   );
 }
 
@@ -183,15 +184,13 @@ function checkPassword(pw: string): string[] {
   return errors;
 }
 
-export default function SettingsPage() {
-  const { email } = useTeam();
+/** Změna hesla v plachtě: formulář se otevře, až ho hráč potřebuje. */
+function PasswordSheet({ onClose, onChanged }: { onClose: () => void; onChanged: () => void }) {
   const [currentPw, setCurrentPw] = useState("");
   const [newPw, setNewPw] = useState("");
   const [newPw2, setNewPw2] = useState("");
-  const [status, setStatus] = useState<{ type: "ok" | "error"; msg: string } | null>(null);
+  const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
-  const { pushEnabled, availability, blocked, pushError, pushBusy, prefs, prefsSaving, enable, disable, savePrefs } = usePushNotifications();
-  const pushSupported = availability === "supported";
   const pwErrors = newPw ? checkPassword(newPw) : [];
   const pwMatch = newPw2 && newPw !== newPw2;
   const canSubmit = currentPw && newPw && newPw2 && pwErrors.length === 0 && newPw === newPw2;
@@ -200,7 +199,7 @@ export default function SettingsPage() {
     e.preventDefault();
     if (!canSubmit) return;
     setSaving(true);
-    setStatus(null);
+    setError(null);
     try {
       const token = localStorage.getItem("om_token");
       const res = await fetch(`${API}/auth/change-password`, {
@@ -210,166 +209,128 @@ export default function SettingsPage() {
       });
       const data = await res.json();
       if (data.ok) {
-        setStatus({ type: "ok", msg: "Heslo změněno" });
-        setCurrentPw(""); setNewPw(""); setNewPw2("");
-      } else {
-        setStatus({ type: "error", msg: data.error ?? "Chyba" });
+        onChanged();
+        return;
       }
+      setError(data.error ?? "Chyba");
     } catch (e) {
       console.error("change-password failed:", e);
-      setStatus({ type: "error", msg: "Nepodařilo se spojit se serverem" });
+      setError("Nepodařilo se spojit se serverem");
     }
     setSaving(false);
   }
 
   return (
-    <div className="page-container space-y-5">
-      <SectionLabel>Nastavení</SectionLabel>
-
-      <div className="card p-5 max-w-md">
-        <h3 className="font-heading font-bold text-base mb-1">Účet</h3>
-        <p className="text-sm text-muted mb-4">{email}</p>
-
-        <h3 className="font-heading font-bold text-base mb-3">Změna hesla</h3>
-        <form onSubmit={handleChange} className="space-y-3">
-          {/* Popisky svázané přes htmlFor a autoComplete pro správce hesel —
-              bez toho pole nikdo nevyplní ani nepřečte. */}
-          <div>
-            <label htmlFor="pw-current" className="text-xs text-muted uppercase font-heading font-bold block mb-1">Současné heslo</label>
-            <input id="pw-current" name="current-password" type="password" autoComplete="current-password"
-              value={currentPw} onChange={(e) => setCurrentPw(e.target.value)}
-              className="input !w-full !px-3 !py-2 !text-sm" required />
-          </div>
-          <div>
-            <label htmlFor="pw-new" className="text-xs text-muted uppercase font-heading font-bold block mb-1">Nové heslo</label>
-            <input id="pw-new" name="new-password" type="password" autoComplete="new-password"
-              value={newPw} onChange={(e) => setNewPw(e.target.value)}
-              className="input !w-full !px-3 !py-2 !text-sm" required />
-            {newPw && pwErrors.length > 0 && (
-              <div className="flex gap-2 mt-1.5 flex-wrap">
-                {["min. 8 znaků", "malé písmeno", "velké písmeno", "číslo"].map((req) => {
-                  const ok = !pwErrors.includes(req);
-                  return (
-                    <StatusChip tone={ok ? "ok" : "neutral"} key={req}>
-                      {ok ? "✓" : "○"} {req}
-                    </StatusChip>
-                  );
-                })}
-              </div>
-            )}
-          </div>
-          <div>
-            <label htmlFor="pw-new-2" className="text-xs text-muted uppercase font-heading font-bold block mb-1">Nové heslo znovu</label>
-            <input id="pw-new-2" name="new-password-confirm" type="password" autoComplete="new-password"
-              value={newPw2} onChange={(e) => setNewPw2(e.target.value)}
-              className="input !w-full !px-3 !py-2 !text-sm" required />
-            {pwMatch && <p className="text-card-red text-xs mt-1">Hesla se neshodují</p>}
-          </div>
-
-          {status && (
-            <div className={`text-sm font-heading font-bold px-3 py-2 rounded-soft ${status.type === "ok" ? "bg-pitch-50 text-pitch-600" : "bg-red-50 text-card-red"}`}>
-              {status.msg}
-            </div>
-          )}
-
-          <button type="submit" disabled={!canSubmit || saving}
-            className="w-full py-2 rounded-soft bg-pitch-500 text-white font-heading font-bold text-sm hover:bg-pitch-600 disabled:opacity-50 transition-colors">
-            {saving ? "Ukládám..." : "Změnit heslo"}
+    <Sheet open onClose={onClose} maxWidth="420px" closeOnBackdrop={false} title="Změna hesla">
+      <form onSubmit={handleChange} className="p-5 space-y-4">
+        <div className="flex items-start justify-between gap-3">
+          <h3 className="font-heading font-bold text-lg text-ink">Změna hesla</h3>
+          <button type="button" onClick={onClose} aria-label="Zavřít" className="-mr-2 -mt-1 w-10 h-10 flex items-center justify-center rounded-full text-muted hover:text-ink hover:bg-surface-2">
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+              <path d="M3 3l10 10M13 3L3 13" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+            </svg>
           </button>
-        </form>
-      </div>
-
-      {/* Push notifikace */}
-      <div className="card max-w-md overflow-hidden">
-        {/* Header */}
-        <div className="px-5 pt-5 pb-4 flex items-start justify-between gap-3">
-          <div className="flex items-center gap-3">
-            <div className={`w-10 h-10 rounded-xl flex items-center justify-center text-lg flex-shrink-0 transition-colors ${pushEnabled ? "bg-pitch-100" : "bg-gray-100"}`}>
-              🔔
+        </div>
+        {/* Name a autoComplete pro správce hesel; popisky svazuje Input přes htmlFor. */}
+        <Input label="Současné heslo" name="current-password" type="password" autoComplete="current-password"
+          value={currentPw} onChange={(e) => setCurrentPw(e.target.value)} required />
+        <div>
+          <Input label="Nové heslo" name="new-password" type="password" autoComplete="new-password"
+            value={newPw} onChange={(e) => setNewPw(e.target.value)} required />
+          {newPw && pwErrors.length > 0 && (
+            <div className="flex gap-2 mt-2 flex-wrap">
+              {["min. 8 znaků", "malé písmeno", "velké písmeno", "číslo"].map((req) => {
+                const ok = !pwErrors.includes(req);
+                return (
+                  <StatusChip tone={ok ? "ok" : "neutral"} key={req}>
+                    {ok ? "✓" : "○"} {req}
+                  </StatusChip>
+                );
+              })}
             </div>
-            <div>
-              <h3 className="font-heading font-bold text-base leading-tight">Push notifikace</h3>
-              <p className="text-sm text-muted mt-0.5">
-                {availability === "ios_install"
-                  ? "Na iPhonu jen z Pralesu přidaného na plochu"
-                  : !pushSupported
-                  ? "Tenhle prohlížeč upozornění neumí"
-                  : pushEnabled
-                  ? "Zapnuto, dostáváš upozornění"
-                  : blocked
-                  ? "Zablokované v prohlížeči"
-                  : "Vypnuto"}
-              </p>
-            </div>
-          </div>
-          {pushSupported && (
-            <button
-              onClick={pushEnabled ? disable : enable}
-              disabled={pushBusy}
-              aria-label={pushEnabled ? "Vypnout upozornění" : "Zapnout upozornění"}
-              className={`relative inline-flex h-7 w-12 items-center rounded-full transition-colors flex-shrink-0 mt-1.5 disabled:opacity-50 ${pushEnabled ? "bg-pitch-500" : "bg-gray-200"}`}
-            >
-              <span className={`inline-block h-5 w-5 rounded-full bg-white shadow-sm transition-transform ${pushEnabled ? "translate-x-6" : "translate-x-1"}`} />
-            </button>
           )}
         </div>
+        <div>
+          <Input label="Nové heslo znovu" name="new-password-confirm" type="password" autoComplete="new-password"
+            value={newPw2} onChange={(e) => setNewPw2(e.target.value)} required />
+          {pwMatch && <p className="text-sm text-card-red mt-1">Hesla se neshodují</p>}
+        </div>
+        {error && <p role="alert" className="text-sm text-card-red">{error}</p>}
+        <Button type="submit" disabled={!canSubmit || saving} className="w-full">
+          {saving ? "Ukládám…" : "Změnit heslo"}
+        </Button>
+      </form>
+    </Sheet>
+  );
+}
+
+function pushStatusText(availability: PushAvailability, enabled: boolean, blocked: boolean): string {
+  if (availability === "ios_install") return "Na iPhonu jen z Pralesu přidaného na plochu";
+  if (availability !== "supported") return "Tenhle prohlížeč upozornění neumí";
+  if (enabled) return "Zapnuto, dostáváš upozornění";
+  if (blocked) return "Zablokované v prohlížeči";
+  return "Vypnuto";
+}
+
+export default function SettingsPage() {
+  const { email } = useTeam();
+  const [passwordOpen, setPasswordOpen] = useState(false);
+  const [passwordChanged, setPasswordChanged] = useState(false);
+  const { pushEnabled, availability, blocked, pushError, pushBusy, prefs, prefsSaving, enable, disable, savePrefs } = usePushNotifications();
+  const pushSupported = availability === "supported";
+
+  return (
+    <div className="page-container space-y-5 lg:max-w-2xl">
+      <ReplayViewCard />
+
+      <ListCard title="Upozornění">
+        <ListRow
+          title="Push notifikace"
+          meta={pushStatusText(availability, pushEnabled, blocked)}
+          trailing={pushSupported ? (
+            <Switch checked={pushEnabled} disabled={pushBusy} label="Push notifikace"
+              onChange={(next) => { if (next) enable(); else disable(); }} />
+          ) : undefined}
+        />
         {availability === "ios_install" && (
-          <p className="px-5 pb-4 text-sm">
+          <p className="px-4 py-3 text-sm border-b border-line-soft last:border-b-0">
             Klepni dole na Sdílet, vyber „Přidat na plochu“ a Prales pak otevírej z plochy. Tam upozornění zapneš.{" "}
             <Link href="/aplikace" className="font-bold text-pitch-600 hover:underline">Jak na to</Link>
           </p>
         )}
         {pushSupported && !pushEnabled && blocked && !pushError && (
-          <p className="px-5 pb-4 text-sm">Povol upozornění v nastavení prohlížeče u stránky prales.fun, pak je tady zapneš.</p>
+          <p className="px-4 py-3 text-sm border-b border-line-soft last:border-b-0">Povol upozornění v nastavení prohlížeče u stránky prales.fun, pak je tady zapneš.</p>
         )}
-        {pushError && <p className="px-5 pb-4 text-sm text-card-red">{pushError}</p>}
-
-        {/* Preference typů */}
+        {pushError && <p role="alert" className="px-4 py-3 text-sm text-card-red border-b border-line-soft last:border-b-0">{pushError}</p>}
+        {pushSupported && !pushEnabled && !blocked && (
+          <p className="px-4 py-3 text-sm text-muted">
+            Zapni a dostávej upozornění na výsledky, přestupy nebo výzvy, i když máš Prales zavřený.
+          </p>
+        )}
         {pushSupported && pushEnabled && (
           <>
-            <div className="mx-5 mb-3 border-t border-gray-100" />
-            <div className="px-5 pb-2">
-              <p className="text-micro text-muted uppercase font-heading font-bold tracking-wide mb-3">Co tě má budit</p>
-              <div className="space-y-1">
-                {PREF_LABELS.map(({ key, icon, label, desc }) => (
-                  <div
-                    key={key}
-                    className="flex items-center gap-3 py-2.5 px-3 rounded-xl hover:bg-gray-50 transition-colors"
-                  >
-                    <span className="text-base w-6 text-center flex-shrink-0">{icon}</span>
-                    <div className="flex-1 min-w-0">
-                      <p className="text-sm font-medium leading-tight">{label}</p>
-                      <p className="text-micro text-muted leading-tight mt-0.5">{desc}</p>
-                    </div>
-                    <button
-                      onClick={() => savePrefs({ ...prefs, [key]: !prefs[key] })}
-                      disabled={prefsSaving}
-                      className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors disabled:opacity-40 flex-shrink-0 ${prefs[key] ? "bg-pitch-500" : "bg-gray-200"}`}
-                    >
-                      <span className={`inline-block h-3.5 w-3.5 rounded-full bg-white shadow-sm transition-transform ${prefs[key] ? "translate-x-[18px]" : "translate-x-0.5"}`} />
-                    </button>
-                  </div>
-                ))}
-              </div>
-            </div>
-            <div className="px-5 pt-1 pb-4">
-              <p className="text-micro text-muted/60 leading-snug">
-                Vypnutí notifikací odhlásí toto zařízení. Ostatní zařízení nejsou ovlivněna.
-              </p>
-            </div>
+            {PREF_LABELS.map(({ key, label, desc }) => (
+              <ListRow key={key} title={label} meta={desc}
+                trailing={<Switch checked={prefs[key]} disabled={prefsSaving} label={label}
+                  onChange={(next) => savePrefs({ ...prefs, [key]: next })} />} />
+            ))}
+            <p className="px-4 py-3 text-meta text-muted">
+              Vypnutí upozornění odhlásí jen toto zařízení. Ostatní zařízení zůstanou, jak jsou.
+            </p>
           </>
         )}
+      </ListCard>
 
-        {pushSupported && !pushEnabled && !blocked && (
-          <div className="px-5 pb-5">
-            <p className="text-sm text-muted">
-              Zapni a dostávej upozornění na výsledky, přestupy nebo výzvy, i když máš Prales zavřený.
-            </p>
-          </div>
-        )}
-      </div>
+      <ListCard title="Účet">
+        <ListRow title="E-mail" meta={email} />
+        <ListRow title="Změnit heslo" meta={passwordChanged ? "Heslo změněno" : undefined}
+          onClick={() => { setPasswordChanged(false); setPasswordOpen(true); }} />
+      </ListCard>
 
-      <ReplayViewCard />
+      {passwordOpen && (
+        <PasswordSheet onClose={() => setPasswordOpen(false)}
+          onChanged={() => { setPasswordOpen(false); setPasswordChanged(true); }} />
+      )}
     </div>
   );
 }
