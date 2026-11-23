@@ -120,7 +120,6 @@ function Replay3DView({ detail, events, progress, onReady, onSecondHalf }: Repla
   const [fullscreen, setFullscreen] = useState(false);
   // Pohled: televizní kamera z tribuny, nebo celý stadion z výšky.
   const [overview, setOverview] = useState(false);
-  const finalScore = `${detail.home_score} : ${detail.away_score}${pens ? ` (pen. ${pens.home}:${pens.away})` : ""}`;
   const frame = useRef<HTMLDivElement>(null);
   // Grafika je rozvržená na šířku GRAPHICS_WIDTH a s oknem se zvětšuje a zmenšuje celá.
   const [fit, setFit] = useState({ scale: 1, height: 0 });
@@ -148,7 +147,8 @@ function Replay3DView({ detail, events, progress, onReady, onSecondHalf }: Repla
   const coachSide = intro === "home" || intro === "away" ? intro : null;
   const attendance = detail.attendance as number | null;
   const graphics = { detail, events, index: pictured, event, attack };
-  const fixedLabel = finished ? { text: "KONEC ZÁPASU", sub: finalScore, tone: "info" as const }
+  // Skóre je na tabulce vedle; u nápisu je jen výsledek rozstřelu, který na ní není.
+  const fixedLabel = finished ? { text: "KONEC ZÁPASU", sub: pens ? `pen. ${pens.home}:${pens.away}` : undefined, tone: "info" as const }
     : coachSide ? { text: coachSide === "home" ? "TRENÉR DOMÁCÍCH" : "TRENÉR HOSTŮ", tone: "info" as const }
     : kickoff ? { text: "VÝKOP", sub: kickoff === "2nd" ? "2. poločas" : undefined, tone: "info" as const } : undefined;
 
@@ -185,8 +185,8 @@ function Replay3DView({ detail, events, progress, onReady, onSecondHalf }: Repla
       {ready && <div className="absolute top-0 left-0 z-30 origin-top-left pointer-events-none" style={{ width: GRAPHICS_WIDTH, height: fit.height, transform: `scale(${fit.scale})` }}>
         {/* Nahoře vedle sebe: vlevo výsledková tabulka, vpravo nápis akce. */}
         <div className="absolute top-2 inset-x-2 flex items-start gap-2">
-          {/* O přestávce a po konci zápasu v obraze žádná akce není, tabulka je bez minuty. */}
-          <ScoreBug detail={detail} homeGoals={homeGoals} awayGoals={awayGoals} minute={halfTime || finished ? undefined : minute} scored={scored} fast={fast} />
+          {/* Před první akcí (minuta 0), o přestávce a po konci zápasu v obraze žádná akce není, tabulka je bez minuty. */}
+          <ScoreBug detail={detail} homeGoals={homeGoals} awayGoals={awayGoals} minute={halfTime || finished || minute === 0 ? undefined : minute} scored={scored} fast={fast} />
           <EventLabel {...graphics} override={fixedLabel} />
         </div>
         <ReplayMark />
