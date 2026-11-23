@@ -4,7 +4,7 @@ import { useEffect, useLayoutEffect, useMemo, useRef, type RefObject } from "rea
 import * as THREE from "three";
 import { addAfterEffect, useFrame, useThree } from "@react-three/fiber";
 import { FENCE_BOUNDS, GOAL_NAME, PITCH_SURFACE_Y } from "@/components/stadium/stadium-3d/constants";
-import { emptyFrame, HALF_L, HALF_W, REPLAY, sampleClip, sceneTime, type Clip, type Figure, type Replay, type ReplayKit, type Scene, type Side } from "./scenes";
+import { emptyFrame, GOAL_TEXT, HALF_L, HALF_W, REPLAY, sampleClip, sceneTime, type Clip, type Figure, type Replay, type ReplayKit, type Scene, type Side } from "./scenes";
 
 /** Záběr: scéna a její část. Nový objekt znamená hrát od začátku, i když jde o tutéž scénu (skok zpět na její začátek). */
 interface ReplayPlay {
@@ -161,6 +161,35 @@ function tintGoal(goal: THREE.Object3D, on: boolean) {
     material.color.set(on ? GOAL_GREEN : material.userData.plain);
   });
 }
+/**
+ * Nápis gólu promítnutý na střed hřiště jako grafika v televizním přenosu: leží na trávníku (hráči po něm běhají)
+ * a čte se z tribuny. `width` je podél hřiště, `depth` napříč; z tribuny se hloubka zkrátí asi na čtvrtinu,
+ * z paneláku míň, takže odtud jsou písmena vyšší.
+ * Objeví se s gólem (`fadeIn` sekund) a zmizí s koncem scény (`fadeOut`).
+ */
+const GOAL_SIGN = { width: 20, depth: 13.5, opacity: 0.8, fadeIn: 0.35, fadeOut: 0.25 };
+/** Kamera stojí na straně +x a dívá se k −x: vpravo v obraze je −z, nahoře −x. */
+const GOAL_SIGN_GEOMETRY = new THREE.PlaneGeometry(GOAL_SIGN.width, GOAL_SIGN.depth)
+  .applyMatrix4(new THREE.Matrix4().makeBasis(new THREE.Vector3(0, 0, -1), new THREE.Vector3(-1, 0, 0), new THREE.Vector3(0, 1, 0)));
+/** Bílý nápis přes celou texturu; zelenou mu dá materiál. Písmo je nadpisové písmo hry. */
+function goalSignTexture(): THREE.CanvasTexture {
+  const canvas = document.createElement("canvas");
+  canvas.width = 1024;
+  canvas.height = 256;
+  const ctx = canvas.getContext("2d")!;
+  ctx.font = `900 200px ${getComputedStyle(document.body).getPropertyValue("--font-heading")}, sans-serif`;
+  ctx.textAlign = "center";
+  ctx.textBaseline = "middle";
+  ctx.fillStyle = "#FFFFFF";
+  const metrics = ctx.measureText(GOAL_TEXT);
+  ctx.translate(canvas.width / 2, canvas.height / 2);
+  ctx.scale((canvas.width - 24) / metrics.width, (canvas.height - 24) / (metrics.actualBoundingBoxAscent + metrics.actualBoundingBoxDescent));
+  ctx.fillText(GOAL_TEXT, 0, (metrics.actualBoundingBoxAscent - metrics.actualBoundingBoxDescent) / 2);
+  const texture = new THREE.CanvasTexture(canvas);
+  texture.colorSpace = THREE.SRGBColorSpace;
+  texture.anisotropy = 8;
+  return texture;
+}
 /** Auto, kterým po zápase odjíždí rozhodčí: jede po cestě za plotem areálu (x) zprava doleva (z), z obrazu ven i při pohledu z paneláku. */
 const CAR_ROAD = { x: -(FENCE_BOUNDS.width / 2 + 4), from: -110, to: 110 };
 
@@ -233,6 +262,11 @@ export function ReplayScene({ replay, kits, snow, overview, step, root, veil, on
   const car = useRef<THREE.Group>(null);
   /** Branka, která je po gólu zelená. */
   const scored = useRef<THREE.Object3D | null>(null);
+  const goalSign = useRef<THREE.Mesh>(null);
+  const goalSignMap = useMemo(goalSignTexture, []);
+  useEffect(() => () => goalSignMap.dispose(), [goalSignMap]);
+  /** Jak moc je nápis gólu na hřišti vidět (0–1). */
+  const goalSignShown = useRef(0);
   const world = useThree((s) => s.scene);
   useEffect(() => () => { if (scored.current) tintGoal(scored.current, false); }, []);
   const camera = useThree((s) => s.camera) as THREE.PerspectiveCamera;
@@ -443,6 +477,14 @@ export function ReplayScene({ replay, kits, snow, overview, step, root, veil, on
       if (goal) tintGoal(goal, true);
       scored.current = goal;
     }
+    if (goalSign.current) {
+      const shown = goalSignShown.current = THREE.MathUtils.clamp(goalSignShown.current + (inGoal ? dt / GOAL_SIGN.fadeIn : -dt / GOAL_SIGN.fadeOut), 0, 1);
+      const eased = THREE.MathUtils.smoothstep(shown, 0, 1);
+      goalSign.current.visible = shown > 0;
+      (goalSign.current.material as THREE.MeshBasicMaterial).opacity = GOAL_SIGN.opacity * eased;
+      // Při objevení nápis lehce doroste.
+      goalSign.current.scale.setScalar(0.92 + 0.08 * eased);
+    }
     if (car.current) {
       const driving = scene.drive !== undefined && t >= scene.drive.from && t < scene.drive.to;
       car.current.visible = driving;
@@ -528,6 +570,9 @@ export function ReplayScene({ replay, kits, snow, overview, step, root, veil, on
           <meshBasicMaterial color="#FDE047" transparent opacity={0.9} depthWrite={false} />
         </mesh>
       ))}
+      <mesh ref={goalSign} geometry={GOAL_SIGN_GEOMETRY} position={[0, PITCH_SURFACE_Y + 0.015, 0]} visible={false}>
+        <meshBasicMaterial map={goalSignMap} color={GOAL_GREEN} transparent opacity={0} depthWrite={false} toneMapped={false} />
+      </mesh>
       <mesh ref={card} visible={false}>
         <planeGeometry args={[0.3, 0.42]} />
         <meshBasicMaterial side={THREE.DoubleSide} />

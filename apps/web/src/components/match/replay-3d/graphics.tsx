@@ -4,7 +4,7 @@ import { FaceAvatar } from "@/components/players/face-avatar";
 import { BadgePreview, type BadgePattern } from "@/components/ui";
 import { bestTextOn } from "@/lib/team-color";
 import { useEffect, useState, type ReactNode } from "react";
-import { chanceResult, sideOf, substitutedOut, type ReplayCoach, type ReplayEvent, type ReplayKit, type ReplayLineup, type ReplayPlayer, type ShotResult, type Side } from "./scenes";
+import { chanceResult, GOAL_TEXT, sideOf, substitutedOut, type ReplayCoach, type ReplayEvent, type ReplayKit, type ReplayLineup, type ReplayPlayer, type ShotResult, type Side } from "./scenes";
 
 /** Co se právě hraje: událost (při „ŠANCE“ ta, která teprve přijde) a její pořadí v zápase. */
 interface GraphicsProps {
@@ -15,7 +15,7 @@ interface GraphicsProps {
   attack: boolean;
 }
 
-const RESULTS: Record<ShotResult, string> = { goal: "GÓÓÓL!", saved: "CHYTIL BRANKÁŘ!", post: "TYČ!", bar: "BŘEVNO!", wide: "VEDLE!", over: "NAD BRÁNU!", blocked: "ZBLOKOVÁNO!" };
+const RESULTS: Record<ShotResult, string> = { goal: GOAL_TEXT, saved: "CHYTIL BRANKÁŘ!", post: "TYČ!", bar: "BŘEVNO!", wide: "VEDLE!", over: "NAD BRÁNU!", blocked: "ZBLOKOVÁNO!" };
 // Červené pole má jen nápis opakovaného záběru (ReplayMark), ať se s ním nápis akce neplete; červená karta je červeným písmem.
 const TONES = { goal: "bg-green-500 text-white", danger: "bg-orange-500 text-white", miss: "bg-slate-600 text-white", yellow: "bg-yellow-400 text-gray-900", red: "bg-white text-red-600", info: "bg-white text-gray-900" };
 interface Label { text: string; tag?: string; sub?: string; tone: keyof typeof TONES }
