@@ -24,7 +24,7 @@ const CLAIM_TTL_MS = 15 * 60 * 1000;
 const THIRD_PLACE_EARLIER_MS = 2 * 60 * 60 * 1000;
 const SMS_META = { type: "tournament" };
 
-const STAGE_LABEL: Record<string, string> = { league: "ligová fáze", qf: "čtvrtfinále", sf: "semifinále", third: "zápas o 3. místo", final: "finále" };
+export const STAGE_LABEL: Record<string, string> = { league: "ligová fáze", qf: "čtvrtfinále", sf: "semifinále", third: "zápas o 3. místo", final: "finále" };
 
 /** „16:00" v pražském čase. */
 function pragueTime(iso: string): string {

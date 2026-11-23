@@ -303,6 +303,12 @@ export function NextMatchWidget({ data, teamId }: WidgetProps) {
 
         <div className="text-center px-4 py-2">
           <Link href="/zapas" className="inline text-sm text-pitch-500 font-heading font-bold hover:underline">Sestava →</Link>
+          {/* Profil soupeře z mého pohledu (záložka Soupeř). Velkoklub v poháru vlastní stránku nemá. */}
+          {oppTeamData.id && (
+            <Link href={`/tym/${oppTeamData.id}?tab=souper`} className="inline ml-4 text-sm text-pitch-500 font-heading font-bold hover:underline">
+              Soupeř →
+            </Link>
+          )}
           {/* Turnaj se hraje na neutrální půdě, propagovat ho nejde. */}
           {nextMatch.isHome && !nextMatch.isTournament && nextMatch.promoted && (
             <span className="inline ml-4 text-sm text-gold-600 font-heading font-bold">📢 Propagováno</span>

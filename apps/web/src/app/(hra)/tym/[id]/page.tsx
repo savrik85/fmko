@@ -5,7 +5,7 @@ import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { apiFetch, showError, type Team, type Player, type TeamMatchResults, type ManagerProfile } from "@/lib/api";
 import { useTeam } from "@/context/team-context";
-import { SectionLabel, BadgePreview, PositionBadge, JerseyPreview, ListCard, ListRow, ListEmpty, ShowMore, ScoreChip, RatingPill, DataTable, EntityCell, ratingToneIn, type DataColumn, type MatchOutcome, PageLoading } from "@/components/ui";
+import { SectionLabel, BadgePreview, PositionBadge, JerseyPreview, ListCard, ListRow, ListEmpty, ShowMore, ScoreChip, RatingPill, DataTable, EntityCell, ratingToneIn, type DataColumn, type MatchOutcome, PageLoading, Tabs, useTabParam } from "@/components/ui";
 import { attrBg } from "@/lib/player-attrs";
 import type { BadgePattern } from "@/components/ui";
 import { HeroBackdrop } from "@/components/ui/hero-backdrop";
@@ -13,6 +13,7 @@ import { FaceAvatar } from "@/components/players/face-avatar";
 import { PreMatchCard } from "@/components/relations/RelationSection";
 import { ForeignSquad } from "./ForeignSquad";
 import { TransferOverview } from "./TransferOverview";
+import { RivalTab } from "./RivalTab";
 import { readableOnLight, bestTextOn } from "@/lib/team-color";
 import { HERO_BUTTON, HeroActions, HeroNavButton, HeroStat, HeroStats, heroTone } from "@/components/ui/hero-kit";
 import { CoachName } from "@/components/manager/coach-name";
@@ -22,6 +23,8 @@ import { formatKc } from "@/lib/format";
 const POS_LABELS: Record<string, string> = { GK: "BRA", DEF: "OBR", MID: "ZÁL", FWD: "ÚTO" };
 const POS_ORDER: Record<string, number> = { GK: 0, DEF: 1, MID: 2, FWD: 3 };
 type PosFilter = "all" | "GK" | "DEF" | "MID" | "FWD";
+/** Záložky cizího týmu; Soupeř = pohled na tým z mého úhlu (`?tab=souper`, odkaz z karty Další zápas). */
+const TEAM_TABS = ["tym", "souper"] as const;
 
 type SkillKey = "speed" | "technique" | "shooting" | "passing" | "heading" | "defense" | "goalkeeping";
 
@@ -72,6 +75,7 @@ export default function TeamPage() {
   const [filter, setFilter] = useState<PosFilter>("all");
   const [loading, setLoading] = useState(true);
   const [shownResults, setShownResults] = useState(10);
+  const [tab, setTab] = useTabParam(TEAM_TABS);
 
   useEffect(() => {
     Promise.all([
@@ -126,6 +130,7 @@ export default function TeamPage() {
 
   const color = team.primary_color || "#2D5F2D";
   const tone = heroTone(color);
+  const showRivalTab = !isOwnTeam && !!myTeamId;
   // Pozice v lize stojí na plné destičce; na ní se píše barvou klubu.
   const plateText = tone.light ? "#FFFFFF" : readableOnLight(color);
   const statNumber = "font-heading font-extrabold text-xl sm:text-3xl tabular-nums leading-none";
@@ -286,6 +291,20 @@ export default function TeamPage() {
       </div>
 
     <div className="page-container space-y-5">
+      {showRivalTab && (
+        <div className="card p-1.5">
+          <Tabs value={tab} onChange={setTab} ariaLabel="Pohled na tým" dense mobileIcons={false}
+            items={[
+              { key: "tym", label: "Tým", icon: "\u{1F3E0}" },
+              { key: "souper", label: "Soupeř", icon: "\u2694\uFE0F" },
+            ]} />
+        </div>
+      )}
+
+      {showRivalTab && tab === "souper" ? (
+        <RivalTab myTeamId={myTeamId!} rivalId={teamId} rivalName={team.name} />
+      ) : (
+      <>
       <SameOwnerNote clubs={team.sameOwnerClubs} />
 
       {/* ═══ Kádr cizího týmu — hned nahoře, kvůli přestupům i přípravě na zápas ═══ */}
@@ -487,6 +506,8 @@ export default function TeamPage() {
 
       {/* ═══ Přehled přestupů (vlastní i cizí tým) ═══ */}
       <TransferOverview teamId={teamId} />
+      </>
+      )}
     </div>
     </>
   );
