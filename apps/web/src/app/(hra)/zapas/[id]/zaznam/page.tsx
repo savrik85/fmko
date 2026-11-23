@@ -10,6 +10,7 @@ import { bestTextOn } from "@/lib/team-color";
 import type { BadgePattern } from "@/components/ui";
 import { BANNERS_BOTTOM, BANNERS_INSET, OVERLAY_BUTTON, OVERLAY_FAINT, OVERLAY_GAP } from "@/components/match/replay-3d/overlay";
 import { actionStarts, scenedEvents, shootoutEvents, STEP_SECONDS, substitutionsTogether, type ReplayKit } from "@/components/match/replay-3d/scenes";
+import { cachedReplayView, DEFAULT_REPLAY_VIEW, fetchReplayView, type ReplayView } from "@/lib/ui-prefs";
 
 interface MatchEvent { minute: number; type: string; playerId: number; playerName: string; teamId: number; description: string; detail?: string; }
 interface LineupPlayer { id: string; name: string; position: string; naturalPosition: string; rating: number }
@@ -174,13 +175,41 @@ export default function MatchReplayPage() {
   const prevBallX = useRef(50);
 
   const [stadiumInfo, setStadiumInfo] = useState<{ name: string; pitchCondition: number } | null>(null);
-  // Záznam začíná ve 2D („Plánek“), na 3D („Video“) se přepíná. Kdo video ještě nikdy nepustil (prohlížeč si to
-  // pamatuje), toho na něj zve bublina u tlačítka.
+  // Záznam začíná ve 2D („Plánek“), nebo rovnou ve 3D („Video“), když si to hráč vybral v Nastavení; přepnout jde
+  // kdykoli. Kdo video ještě nikdy nepustil (prohlížeč si to pamatuje), toho na něj zve bublina u tlačítka.
   const [view3d, setView3d] = useState(false);
   /** Hráč klikl na Video a vybírá, odkud ho pustit; záznam zatím stojí a 3D scéna se ještě nenačítá. */
   const [choosingVideo, setChoosingVideo] = useState(false);
   const [videoTried, setVideoTried] = useState(true);
-  useEffect(() => { setVideoTried(localStorage.getItem("replayVideoTried") !== null); }, []);
+  useEffect(() => {
+    try {
+      setVideoTried(localStorage.getItem("replayVideoTried") !== null);
+    } catch (e) {
+      console.warn("Prohlížeč nedovolil zjistit, jestli hráč video zkusil:", e);
+    }
+  }, []);
+  const markVideoTried = () => {
+    if (videoTried) return;
+    try {
+      localStorage.setItem("replayVideoTried", "1");
+    } catch (e) {
+      console.warn("Prohlížeč si nezapamatoval, že hráč video zkusil:", e);
+    }
+    setVideoTried(true);
+  };
+  /**
+   * Pohled, ve kterém se záznam rozběhne (předvolba účtu z Nastavení). Hned platí poslední známá z prohlížeče;
+   * když tu žádná není, záznam se startem počká na API. Když API selže, je to Plánek jako dřív.
+   */
+  const [openingView, setOpeningView] = useState<ReplayView | null>(null);
+  useEffect(() => {
+    const cached = cachedReplayView();
+    if (cached) setOpeningView(cached);
+    fetchReplayView().then(setOpeningView).catch((e) => {
+      console.error("Předvolbu záznamu zápasu se nepodařilo načíst:", e);
+      setOpeningView((v) => v ?? DEFAULT_REPLAY_VIEW);
+    });
+  }, []);
   // 3D záznam se nestáhl nebo spadl: v okně je o tom zpráva a záznam stojí, dokud hráč nepřepne na 2D.
   const [failed3d, setFailed3d] = useState(false);
   const [Replay3D, setReplay3D] = useState<typeof import("@/components/match/replay-3d/Replay3D").Replay3D | null>(null);
@@ -254,10 +283,7 @@ export default function MatchReplayPage() {
     if (fromStart) begin(true);
   };
   const switchView = () => {
-    if (!videoTried) {
-      localStorage.setItem("replayVideoTried", "1");
-      setVideoTried(true);
-    }
+    markVideoTried();
     setFailed3d(false);
     if (view3d) {
       setView3d(false);
@@ -348,12 +374,19 @@ export default function MatchReplayPage() {
     if (cur) { const t = setTimeout(() => { prevBallX.current = ballX; }, 500); return () => clearTimeout(t); }
   }, [idx, cur, ballX]);
 
-  // Show kickoff when match loads — block replay via animating ref
+  // Záznam se rozběhne, až je zápas načtený a je jasné, ve kterém pohledu. Jen jednou: předvolba z API, která
+  // dorazí až po startu, pohled už nemění. Video od začátku s představením trenérů, bez otázky „odkud“; jde jen
+  // se sestavami obou týmů, jinak záznam jede na Plánku.
   useEffect(() => {
-    if (!match || started.current) return;
+    if (!match || !openingView || started.current) return;
     started.current = true;
-    begin(false);
-  }, [!!match]);
+    const video = openingView === "3d" && can3d;
+    if (video) {
+      markVideoTried();
+      setView3d(true);
+    }
+    begin(video);
+  }, [!!match, openingView]);
 
   // Kickoff 2nd half — auto-dismiss
   useEffect(() => {

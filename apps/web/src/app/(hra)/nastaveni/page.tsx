@@ -1,10 +1,11 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import Link from "next/link";
 import { useTeam } from "@/context/team-context";
-import { SectionLabel, StatusChip } from "@/components/ui";
+import { ChoiceGroup, SectionLabel, StatusChip, type ChoiceOption } from "@/components/ui";
 import { currentPushSubscription, disablePush, enablePush, pushAvailability, type EnablePushResult, type PushAvailability } from "@/lib/push";
+import { cachedReplayView, DEFAULT_REPLAY_VIEW, fetchReplayView, saveReplayView, type ReplayView } from "@/lib/ui-prefs";
 
 const API = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8787";
 
@@ -110,6 +111,66 @@ function usePushNotifications() {
   }, [authHeaders]);
 
   return { pushEnabled, availability, blocked, pushError, pushBusy, prefs, prefsSaving, enable, disable, savePrefs };
+}
+
+const REPLAY_VIEW_OPTIONS: ReadonlyArray<ChoiceOption<ReplayView>> = [
+  { value: "2d", label: "Plánek" },
+  { value: "3d", label: "Video (3D)" },
+];
+
+/**
+ * Jak se záznam zápasu otevře. Volba patří účtu (platí na mobilu i na počítači) a ukládá se hned po kliknutí.
+ * Dokud odpověď nedorazí, ukazuje se poslední známá volba z prohlížeče.
+ */
+function ReplayViewCard() {
+  const [view, setView] = useState<ReplayView | null>(null);
+  const [saving, setSaving] = useState(false);
+  const [saved, setSaved] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  /** Hráč už volil: pozdě došlá uložená volba z API by jeho klik přepsala. */
+  const chosen = useRef(false);
+
+  useEffect(() => {
+    setView(cachedReplayView());
+    fetchReplayView()
+      .then((v) => { if (!chosen.current) setView(v); })
+      .catch((e) => {
+        console.error("Načtení předvolby záznamu zápasu selhalo:", e);
+        if (chosen.current) return;
+        setView((v) => v ?? DEFAULT_REPLAY_VIEW);
+        setError("Uloženou volbu se nepodařilo načíst. Zkus stránku obnovit.");
+      });
+  }, []);
+
+  async function choose(next: ReplayView) {
+    if (saving || next === view) return;
+    chosen.current = true;
+    const previous = view;
+    setView(next);
+    setSaving(true);
+    setSaved(false);
+    setError(null);
+    try {
+      setView(await saveReplayView(next));
+      setSaved(true);
+    } catch (e) {
+      console.error("Uložení předvolby záznamu zápasu selhalo:", e);
+      setView(previous);
+      setError("Uložit se nepovedlo. Zkus to prosím znovu.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <div className="card p-5 max-w-md">
+      <h3 className="font-heading font-bold text-base mb-1">Záznam zápasu</h3>
+      <p className="text-sm text-muted mb-3">Jak se záznam zápasu otevře. Přepnout můžeš kdykoli i během zápasu.</p>
+      <ChoiceGroup ariaLabel="Jak se záznam zápasu otevře" columns={2} value={view} onChange={choose} options={REPLAY_VIEW_OPTIONS} />
+      {error && <p role="alert" className="text-sm text-card-red mt-3">{error}</p>}
+      {!error && saved && <p className="text-sm text-pitch-600 mt-3">Uloženo. Platí na všech tvých zařízeních.</p>}
+    </div>
+  );
 }
 
 function checkPassword(pw: string): string[] {
@@ -306,6 +367,8 @@ export default function SettingsPage() {
           </div>
         )}
       </div>
+
+      <ReplayViewCard />
     </div>
   );
 }
