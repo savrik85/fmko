@@ -10,6 +10,7 @@ import { bestTextOn } from "@/lib/team-color";
 import type { BadgePattern } from "@/components/ui";
 import { actionStarts, scenedEvents, shootoutEvents, STEP_SECONDS, substitutionsTogether, type ReplayKit } from "@/components/match/replay-3d/scenes";
 import { cachedReplayView, DEFAULT_REPLAY_VIEW, fetchReplayView, type ReplayView } from "@/lib/ui-prefs";
+import { PitchIcon, VideoIcon } from "@/components/match/replay-view-icons";
 
 interface MatchEvent { minute: number; type: string; playerId: number; playerName: string; teamId: number; description: string; detail?: string; }
 interface LineupPlayer { id: string; name: string; position: string; naturalPosition: string; rating: number }
@@ -735,7 +736,7 @@ export default function MatchReplayPage() {
               {view3d && failed3d && (
                 <div className="absolute inset-0 z-20 flex flex-col items-center justify-center gap-1 px-6 bg-[#0a0a0a]/90 text-center font-heading text-white">
                   <div className="font-[900] text-base sm:text-2xl">Video se nepodařilo přehrát</div>
-                  <div className="text-xs sm:text-base text-white/75">Přepni pod záznamem na 2D a zápas dohraj tam.</div>
+                  <div className="text-xs sm:text-base text-white/75">Přepni pod záznamem na Plánek a zápas dohraj tam.</div>
                 </div>
               )}
               {view3d && !failed3d && Replay3D && (
@@ -867,14 +868,15 @@ export default function MatchReplayPage() {
         {/* 2D/3D pod záznamem, ne přes obraz zápasu: dřív tlačítko a bublina „Vyzkoušej video“ překrývaly hřiště. */}
         {can3d && (
           <div className="flex gap-1 p-1 rounded-xl bg-white shadow-md" role="group" aria-label="Zobrazení záznamu">
-            {([["2D", false], ["3D", true]] as const).map(([label, is3d]) => {
+            {([["Plánek", false], ["Video", true]] as const).map(([label, is3d]) => {
               const active = view3d === is3d;
               return (
                 <button key={label} onClick={() => { if (!active) switchView(); }} aria-pressed={active}
                   title={is3d ? "Záznam jako 3D video" : "Záznam na plánku hřiště"}
-                  className={`relative w-11 py-2 rounded-lg text-base font-heading font-bold transition-all ${
+                  className={`relative flex items-center gap-1.5 px-3 py-2 rounded-lg text-base font-heading font-bold transition-all ${
                     active ? (bestTextOn(hc) === "light" ? "text-white" : "text-gray-900") : "text-muted hover:text-ink"
                   }`} style={active ? { backgroundColor: hc } : undefined}>
+                  {is3d ? <VideoIcon /> : <PitchIcon />}
                   {label}
                   {/* Kdo 3D ještě nezkusil, tomu ho připomene štítek na tlačítku. */}
                   {is3d && !videoTried && (

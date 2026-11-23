@@ -6,6 +6,7 @@ import { useTeam } from "@/context/team-context";
 import { ChoiceGroup, SectionLabel, StatusChip, type ChoiceOption } from "@/components/ui";
 import { currentPushSubscription, disablePush, enablePush, pushAvailability, type EnablePushResult, type PushAvailability } from "@/lib/push";
 import { cachedReplayView, DEFAULT_REPLAY_VIEW, fetchReplayView, saveReplayView, type ReplayView } from "@/lib/ui-prefs";
+import { PitchIcon, VideoIcon } from "@/components/match/replay-view-icons";
 
 const API = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8787";
 
@@ -114,8 +115,8 @@ function usePushNotifications() {
 }
 
 const REPLAY_VIEW_OPTIONS: ReadonlyArray<ChoiceOption<ReplayView>> = [
-  { value: "2d", label: "2D" },
-  { value: "3d", label: "3D" },
+  { value: "2d", label: <span className="inline-flex items-center gap-1.5"><PitchIcon />Plánek</span> },
+  { value: "3d", label: <span className="inline-flex items-center gap-1.5"><VideoIcon />Video</span> },
 ];
 
 /**
