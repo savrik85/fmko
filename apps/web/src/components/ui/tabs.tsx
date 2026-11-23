@@ -164,6 +164,24 @@ export function Tabs<T extends string>({
       list.scrollLeft = left - (list.clientWidth - active.offsetWidth) / 2;
     }
   }, [value, isGrid]);
+
+  // Přechod u pravého kraje jen tehdy, když je vpravo ještě kam posouvat. Kreslený napořád
+  // překrýval rámeček poslední záložky, i když se všechny vešly (Tým / Soupeř).
+  const [moreRight, setMoreRight] = useState(false);
+  useEffect(() => {
+    const list = listRef.current;
+    if (!list || isGrid) return;
+    const update = () => setMoreRight(list.scrollWidth - list.clientWidth - list.scrollLeft > 1);
+    update();
+    list.addEventListener("scroll", update, { passive: true });
+    const observer = new ResizeObserver(update);
+    observer.observe(list);
+    return () => {
+      list.removeEventListener("scroll", update);
+      observer.disconnect();
+    };
+  }, [isGrid, items.length]);
+
   const listClass = isGrid
     ? "grid grid-cols-2 gap-1 bg-surface rounded-card p-1 sm:flex"
     : "relative flex gap-1 bg-surface rounded-card p-1 overflow-x-auto no-scrollbar [overscroll-behavior-x:contain]";
@@ -215,7 +233,7 @@ export function Tabs<T extends string>({
         );
       })}
       </div>
-      {!isGrid && (
+      {!isGrid && moreRight && (
         <div
           aria-hidden="true"
           className="pointer-events-none absolute inset-y-1 right-1 w-6 rounded-r-card bg-gradient-to-l from-surface to-transparent"
