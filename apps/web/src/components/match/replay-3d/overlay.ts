@@ -3,8 +3,14 @@
  * u krajů okna pod horními nápisy videa.
  */
 export const OVERLAY_BUTTON = "absolute h-7 rounded-md bg-black text-white text-xs font-heading font-bold shadow-md";
-/** Tlačítka jsou vidět pořád, ale průsvitná, ať nepřekáží obrazu; plná jsou pod myší. */
+/** V okně jsou tlačítka vidět pořád, ale průsvitná, ať nepřekáží obrazu; plná jsou pod myší. */
 export const OVERLAY_FAINT = "opacity-40 hover:opacity-100 transition-opacity";
+/**
+ * Na celé obrazovce se tlačítka ukážou při pohybu myši nebo klepnutí do obrazu a po chvíli klidu
+ * (OVERLAY_SHOWN_MS) zase zmizí, jako ovládání v přehrávači videa.
+ */
+export const OVERLAY_HIDDEN = "opacity-0 pointer-events-none transition-opacity";
+export const OVERLAY_SHOWN_MS = 2500;
 /** Horní nápisy videa končí v tomhle podílu šířky obrazu od jeho horního kraje (grafika se zmenšuje s obrazem). */
 export const BANNERS_BOTTOM = 52 / 848;
 /** Od bočních krajů obrazu jsou nápisy odsazené o tenhle podíl jeho šířky; tlačítka stejně. */
