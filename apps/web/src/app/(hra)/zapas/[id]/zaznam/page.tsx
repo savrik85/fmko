@@ -367,6 +367,11 @@ export default function MatchReplayPage() {
   const cur = idx > 0 && match ? match.events[idx - 1] : null;
   const curText = cur && match ? (match.commentary[idx - 1] ?? cur.description).replace(/^\d+'\s*—\s*/, "") : "";
   const curMin = cur?.minute ?? 0;
+  // Minuta ve videu: patří akci, která je v obraze (při „ŠANCE“ té, která teprve přijde; události bez scény obraz
+  // nemění), před první akcí poločasu je to minuta výkopu. Stejnou ukazuje záhlaví i tabulka ve videu.
+  const pictured = cue ?? (flash === "attacking" ? idx : idx > 0 && scened ? scened.lastIndexOf(true, idx - 1) : -1);
+  const picturedMin = pictured >= 0 ? match?.events[pictured]?.minute ?? 0 : 0;
+  const videoMin = (picturedMin > 45) === htDone ? picturedMin : htDone ? 45 : 0;
   const ballX = getBallPos_X(cur);
   const zone = getZone(cur);
 
@@ -514,7 +519,7 @@ export default function MatchReplayPage() {
             </div>
             <div className="flex items-center justify-center gap-1.5 mt-1">
               {!finished && !htPause && <div className="w-2 h-2 rounded-full bg-green-400 animate-pulse" />}
-              <span className="text-white/50 text-xs sm:text-base font-heading font-bold">{finished ? "Konec" : htPause ? "Poločas" : `${curMin}'`}</span>
+              <span className="text-white/50 text-xs sm:text-base font-heading font-bold">{finished ? "Konec" : htPause ? "Poločas" : `${view3d ? videoMin : curMin}'`}</span>
               {match.round ? <span className="text-white/25 text-xs sm:text-base font-heading">· {match.round}. kolo</span>
                 : match.roundName ? <span className="text-white/25 text-xs sm:text-base font-heading">· 🏆 {match.roundName}</span> : null}
             </div>
@@ -748,7 +753,7 @@ export default function MatchReplayPage() {
               {view3d && !failed3d && !Replay3D && <VideoLoading />}
               {view3d && !failed3d && Replay3D && (
                 <Replay3D detail={match.detail} events={match.events} onReady={() => setReady3d(true)} onFailure={() => setFailed3d(true)} onSecondHalf={startSecondHalf}
-                  progress={{ take, idx, flash, intro, kickoff, halfTime: htPause, finished, paused, cue, fast: speed === "fast", homeGoals: hg, awayGoals: ag }} />
+                  progress={{ take, idx, flash, intro, kickoff, halfTime: htPause, finished, paused, cue, fast: speed === "fast", homeGoals: hg, awayGoals: ag, minute: videoMin }} />
               )}
             </>
           )}
