@@ -868,19 +868,55 @@ body { touch-action: manipulation; }
 }
 
 /* ═══════════════════════════════════════════════
-   SPINNER
+   SPINNER — míč místo kolečka (components/ui/spinner.tsx)
+   Spinner: točící se míček ve stejných rozměrech jako dřív kolečko.
+   PageLoading/SectionLoading: skákající míč se stínem a hláškou.
    ═══════════════════════════════════════════════ */
 
 @keyframes spin { to { transform: rotate(360deg); } }
-.spinner {
-  border: 3px solid var(--color-pitch-500);
-  border-top-color: transparent;
-  border-radius: 50%;
-  animation: spin 0.7s linear infinite;
-}
-.spinner-sm { width: 1.25rem; height: 1.25rem; border-width: 2px; }
+.spinner { display: block; flex: none; animation: spin 0.8s linear infinite; }
+.spinner > svg { display: block; width: 100%; height: 100%; }
+.spinner-sm { width: 1.25rem; height: 1.25rem; }
 .spinner-md { width: 2rem; height: 2rem; }
 .spinner-lg { width: 2.5rem; height: 2.5rem; }
+
+/* Místo je vyhrazené od začátku (jen neviditelné), ať se stránka po 300 ms neposune. */
+.loading-indicator {
+  display: flex; flex-direction: column; align-items: center; gap: 0.375rem;
+  opacity: 0; transition: opacity 0.2s ease-out;
+}
+.loading-indicator.is-visible { opacity: 1; }
+.loading-ball { position: relative; width: 3rem; height: 5rem; }
+.loading-ball-body {
+  position: absolute; left: 0.375rem; bottom: 0.5rem; width: 2.25rem; height: 2.25rem;
+  transform-origin: 50% 100%; animation: loading-ball-bounce 0.9s infinite;
+}
+.loading-ball-body > svg { display: block; width: 100%; height: 100%; animation: spin 1.8s linear infinite; }
+.loading-ball-shadow {
+  position: absolute; left: 0.5rem; bottom: 0.125rem; width: 2rem; height: 0.4375rem;
+  border-radius: 50%; background: rgb(26 23 20 / 0.2); animation: loading-ball-shadow 0.9s infinite;
+}
+.loading-quip {
+  min-height: 1.25rem; padding: 0 1rem; font-size: 0.8125rem; line-height: 1.25rem;
+  color: var(--color-muted); text-align: center; animation: loading-fade-in 0.3s ease-out;
+}
+/* Pád zrychluje, výskok zpomaluje, při dopadu se míč zplácne. */
+@keyframes loading-ball-bounce {
+  0%   { transform: translateY(-2.125rem); animation-timing-function: cubic-bezier(.45, 0, .95, .55); }
+  44%  { transform: translateY(0) scale(1, 1); animation-timing-function: ease-out; }
+  50%  { transform: translateY(0) scale(1.16, .82); animation-timing-function: ease-in; }
+  56%  { transform: translateY(0) scale(1, 1); animation-timing-function: cubic-bezier(.05, .45, .55, 1); }
+  100% { transform: translateY(-2.125rem); }
+}
+@keyframes loading-ball-shadow {
+  0%       { transform: scale(.5); opacity: .45; animation-timing-function: cubic-bezier(.45, 0, .95, .55); }
+  44%, 56% { transform: scale(1.05); opacity: 1; animation-timing-function: cubic-bezier(.05, .45, .55, 1); }
+  100%     { transform: scale(.5); opacity: .45; }
+}
+@keyframes loading-fade-in { from { opacity: 0; } to { opacity: 1; } }
+@media (prefers-reduced-motion: reduce) {
+  .spinner, .loading-ball-body, .loading-ball-body > svg, .loading-ball-shadow, .loading-quip { animation: none; }
+}
 
 /* ═══════════════════════════════════════════════
    RATING COLORS
