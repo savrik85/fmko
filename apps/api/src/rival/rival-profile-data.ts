@@ -13,7 +13,7 @@ import { roundName } from "../cup/cup";
 import { STAGE_LABEL } from "../tournament/advance";
 import { OPPONENT_ANALYSIS_BONUS_DAYS } from "../scouting/opponent-analysis";
 import {
-  PERIOD_COUNT, goalPeriods, lineAverages, lineupTactics, outcome, recordFor, seasonAt, summarizeHeadToHead,
+  PERIOD_COUNT, goalPeriods, lineAverages, lineupTactics, outcome, recordFor, seasonOfDate, sortHeadToHead, summarizeHeadToHead,
   type LineAverages, type Outcome, type RecordLine, type SeasonRecord,
 } from "./rival-profile";
 
@@ -27,7 +27,7 @@ export interface HeadToHeadMatch {
   /** „3. kolo“, „Čtvrtfinále“, „Turnaj P-Mobile, finále“; přátelák null. */
   label: string | null;
   date: string | null;
-  /** Číslo sezóny; liga a pohár ho mají u sebe, přátelák a turnaj podle data. null = před první sezónou. */
+  /** Číslo sezóny; liga a pohár ho mají u sebe, přátelák a turnaj podle ligových kol týmu. null = tým nehrál ligu. */
   season: number | null;
   isHome: boolean;
   myScore: number;
@@ -165,9 +165,14 @@ async function loadHeadToHead(
   cupTeams: ReadonlyArray<{ id: string; cup_id: string; team_id: string }>,
 ): Promise<HeadToHeadMatch[]> {
   const pair = [teamId, rivalId, rivalId, teamId];
-  const seasons = await db.prepare("SELECT number, created_at FROM seasons").all<{ number: number; created_at: string }>()
-    .then((r) => r.results.map((s) => ({ number: s.number, startedAt: s.created_at })))
-    .catch((e) => { logger.warn(MODULE, "sezóny pro vzájemné zápasy", e); return [] as Array<{ number: number; startedAt: string }>; });
+  // Poslední ligové kolo každé sezóny mého týmu (i neodehrané): podle něj se řadí přátelák a turnaj.
+  const seasonEnds = await db.prepare(
+    `SELECT sc.season_number AS season, MAX(sc.scheduled_at) AS lastAt
+       FROM matches m JOIN season_calendar sc ON sc.id = m.calendar_id
+      WHERE m.home_team_id = ?1 OR m.away_team_id = ?1
+      GROUP BY sc.season_number`,
+  ).bind(teamId).all<{ season: number; lastAt: string }>().then((r) => r.results)
+    .catch((e) => { logger.warn(MODULE, "konce sezón týmu", e); return [] as Array<{ season: number; lastAt: string }>; });
   const toMatch = (row: {
     id: string; home_id: string; home_score: number; away_score: number; home_pens?: number | null; away_pens?: number | null; date: string | null;
     season?: number | null;
@@ -176,7 +181,7 @@ async function loadHeadToHead(
     const myScore = isHome ? row.home_score : row.away_score;
     const rivalScore = isHome ? row.away_score : row.home_score;
     return {
-      id: row.id, competition, label, date: row.date, season: row.season ?? seasonAt(row.date, seasons), isHome, myScore, rivalScore,
+      id: row.id, competition, label, date: row.date, season: row.season ?? seasonOfDate(row.date, seasonEnds), isHome, myScore, rivalScore,
       myPens: (isHome ? row.home_pens : row.away_pens) ?? null,
       rivalPens: (isHome ? row.away_pens : row.home_pens) ?? null,
       result: outcome(myScore, rivalScore),
@@ -230,7 +235,7 @@ async function loadHeadToHead(
     logger.warn(MODULE, "vzájemné zápasy", e);
     return [] as HeadToHeadMatch[];
   })));
-  return parts.flat().sort((a, b) => (b.date ?? "").localeCompare(a.date ?? ""));
+  return sortHeadToHead(parts.flat());
 }
 
 async function loadScorers(
