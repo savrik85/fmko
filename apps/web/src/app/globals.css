@@ -880,12 +880,14 @@ body { touch-action: manipulation; }
 .spinner-md { width: 2rem; height: 2rem; }
 .spinner-lg { width: 2.5rem; height: 2.5rem; }
 
-/* Místo je vyhrazené od začátku (jen neviditelné), ať se stránka po 300 ms neposune. */
+/* Místo je vyhrazené od začátku (jen neviditelné), ať se stránka po 300 ms neposune.
+   Zpoždění (animation-delay = BALL_DELAY_MS) řídí CSS, ne JavaScript: při prvním načtení
+   je PageLoading už v HTML ze serveru a míč musí naskočit dřív, než se načte JS. */
 .loading-indicator {
   display: flex; flex-direction: column; align-items: center; gap: 0.375rem;
-  opacity: 0; transition: opacity 0.2s ease-out;
+  animation: loading-appear 0.2s ease-out both;
 }
-.loading-indicator.is-visible { opacity: 1; }
+@keyframes loading-appear { from { opacity: 0; } to { opacity: 1; } }
 .loading-ball { position: relative; width: 3rem; height: 5rem; }
 .loading-ball-body {
   position: absolute; left: 0.375rem; bottom: 0.5rem; width: 2.25rem; height: 2.25rem;
@@ -897,7 +899,8 @@ body { touch-action: manipulation; }
   border-radius: 50%; background: rgb(26 23 20 / 0.2); animation: loading-ball-shadow 0.9s infinite;
 }
 .loading-quip {
-  min-height: 1.25rem; padding: 0 1rem; font-size: 0.8125rem; line-height: 1.25rem;
+  /* 14 px: menší písmo hra nepoužívá (pravidla UI). */
+  min-height: 1.25rem; padding: 0 1rem; font-size: 0.875rem; line-height: 1.25rem;
   color: var(--color-muted); text-align: center; animation: loading-fade-in 0.3s ease-out;
 }
 /* Pád zrychluje, výskok zpomaluje, při dopadu se míč zplácne. */
