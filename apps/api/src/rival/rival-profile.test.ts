@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
-  goalPeriods, lineAverages, outcome, periodIndex, recordFor, summarizeHeadToHead, lineupTactics,
+  goalPeriods, lineAverages, outcome, periodIndex, recordFor, summarizeHeadToHead, lineupTactics, seasonAt,
 } from "./rival-profile";
 
 describe("výsledek vzájemného zápasu", () => {
@@ -109,5 +109,25 @@ describe("rozestavení ze záznamu sestavy", () => {
     expect(lineupTactics(null)).toBeNull();
     expect(lineupTactics("{nejde")).toBeNull();
     expect(lineupTactics(JSON.stringify({ starters: [] }))).toBeNull();
+  });
+});
+
+describe("sezóna podle data", () => {
+  const seasons = [
+    { number: 1, startedAt: "2026-03-29 09:17:29" },
+    { number: 2, startedAt: "2026-07-04 08:53:56" },
+    { number: 3, startedAt: "2026-10-21 17:50:36" },
+  ];
+
+  it("zápas patří do sezóny, která začala naposledy před ním", () => {
+    expect(seasonAt("2026-05-01T16:00:00Z", seasons)).toBe(1);
+    expect(seasonAt("2026-07-04T09:00:00Z", seasons)).toBe(2);
+    expect(seasonAt("2026-11-11T17:01:09Z", seasons)).toBe(3);
+  });
+
+  it("před první sezónou nebo bez data null", () => {
+    expect(seasonAt("2026-01-01T00:00:00Z", seasons)).toBeNull();
+    expect(seasonAt(null, seasons)).toBeNull();
+    expect(seasonAt("2026-05-01T16:00:00Z", [])).toBeNull();
   });
 });

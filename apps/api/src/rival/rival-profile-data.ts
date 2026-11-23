@@ -13,7 +13,7 @@ import { roundName } from "../cup/cup";
 import { STAGE_LABEL } from "../tournament/advance";
 import { OPPONENT_ANALYSIS_BONUS_DAYS } from "../scouting/opponent-analysis";
 import {
-  PERIOD_COUNT, goalPeriods, lineAverages, lineupTactics, outcome, recordFor, summarizeHeadToHead,
+  PERIOD_COUNT, goalPeriods, lineAverages, lineupTactics, outcome, recordFor, seasonAt, summarizeHeadToHead,
   type LineAverages, type Outcome, type RecordLine, type SeasonRecord,
 } from "./rival-profile";
 
@@ -27,6 +27,8 @@ export interface HeadToHeadMatch {
   /** „3. kolo“, „Čtvrtfinále“, „Turnaj P-Mobile, finále“; přátelák null. */
   label: string | null;
   date: string | null;
+  /** Číslo sezóny; liga a pohár ho mají u sebe, přátelák a turnaj podle data. null = před první sezónou. */
+  season: number | null;
   isHome: boolean;
   myScore: number;
   rivalScore: number;
@@ -163,14 +165,18 @@ async function loadHeadToHead(
   cupTeams: ReadonlyArray<{ id: string; cup_id: string; team_id: string }>,
 ): Promise<HeadToHeadMatch[]> {
   const pair = [teamId, rivalId, rivalId, teamId];
+  const seasons = await db.prepare("SELECT number, created_at FROM seasons").all<{ number: number; created_at: string }>()
+    .then((r) => r.results.map((s) => ({ number: s.number, startedAt: s.created_at })))
+    .catch((e) => { logger.warn(MODULE, "sezóny pro vzájemné zápasy", e); return [] as Array<{ number: number; startedAt: string }>; });
   const toMatch = (row: {
     id: string; home_id: string; home_score: number; away_score: number; home_pens?: number | null; away_pens?: number | null; date: string | null;
+    season?: number | null;
   }, competition: Competition, label: string | null): HeadToHeadMatch => {
     const isHome = row.home_id === teamId;
     const myScore = isHome ? row.home_score : row.away_score;
     const rivalScore = isHome ? row.away_score : row.home_score;
     return {
-      id: row.id, competition, label, date: row.date, isHome, myScore, rivalScore,
+      id: row.id, competition, label, date: row.date, season: row.season ?? seasonAt(row.date, seasons), isHome, myScore, rivalScore,
       myPens: (isHome ? row.home_pens : row.away_pens) ?? null,
       rivalPens: (isHome ? row.away_pens : row.home_pens) ?? null,
       result: outcome(myScore, rivalScore),
@@ -178,11 +184,11 @@ async function loadHeadToHead(
   };
 
   const league = db.prepare(
-    `SELECT m.id, m.calendar_id, m.round, m.home_team_id AS home_id, m.home_score, m.away_score,
+    `SELECT m.id, m.calendar_id, m.round, m.home_team_id AS home_id, m.home_score, m.away_score, sc.season_number AS season,
             COALESCE(m.simulated_at, sc.scheduled_at) AS date
        FROM matches m LEFT JOIN season_calendar sc ON sc.id = m.calendar_id
       WHERE m.status = 'simulated' AND ((m.home_team_id = ? AND m.away_team_id = ?) OR (m.home_team_id = ? AND m.away_team_id = ?))`,
-  ).bind(...pair).all<{ id: string; calendar_id: string | null; round: number | null; home_id: string; home_score: number; away_score: number; date: string | null }>()
+  ).bind(...pair).all<{ id: string; calendar_id: string | null; round: number | null; home_id: string; home_score: number; away_score: number; date: string | null; season: number | null }>()
     .then((r) => r.results.map((row) => row.calendar_id == null
       ? toMatch(row, "friendly", null)
       : toMatch(row, "league", row.round != null ? `${row.round}. kolo` : null)));
@@ -193,12 +199,12 @@ async function loadHeadToHead(
   const sharedCups = [...new Set(cupTeams.filter((ct) => ct.team_id === teamId).map((ct) => ct.cup_id))]
     .filter((cup) => cupTeams.some((ct) => ct.team_id === rivalId && ct.cup_id === cup));
   const cup = inChunks(sharedCups, (chunk, ph) => db.prepare(
-    `SELECT cm.id, cm.round, cc.total_rounds, cm.home_cup_team_id, cm.away_cup_team_id, cm.home_score, cm.away_score,
+    `SELECT cm.id, cm.round, cc.total_rounds, cc.season_number AS season, cm.home_cup_team_id, cm.away_cup_team_id, cm.home_score, cm.away_score,
             cm.home_pens, cm.away_pens, COALESCE(cm.simulated_at, cm.scheduled_at) AS date
        FROM cup_matches cm LEFT JOIN cup_competitions cc ON cc.id = cm.cup_id
       WHERE cm.cup_id IN (${ph}) AND cm.status = 'simulated'`,
   ).bind(...chunk).all<{
-    id: string; round: number; total_rounds: number | null; home_cup_team_id: string; away_cup_team_id: string;
+    id: string; round: number; total_rounds: number | null; season: number | null; home_cup_team_id: string; away_cup_team_id: string;
     home_score: number; away_score: number; home_pens: number | null; away_pens: number | null; date: string | null;
   }>().then((r) => r.results))
     .then((rows) => rows

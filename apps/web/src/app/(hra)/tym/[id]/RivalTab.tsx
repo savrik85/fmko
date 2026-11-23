@@ -1,10 +1,10 @@
 "use client";
 
-import { useCallback, useEffect, useState, type ReactNode } from "react";
+import { Fragment, useCallback, useEffect, useState, type ReactNode } from "react";
 import Link from "next/link";
 import { apiFetch } from "@/lib/api";
 import {
-  CardSkeleton, ListCard, ListEmpty, ListRow, ListSkeleton, PositionBadge, RatingPill, ResultChip, ScoreChip,
+  CardSkeleton, ListCard, ListEmpty, ListRow, ListSkeleton, PositionBadge, RatingPill, ResultChip, RowGroup, ScoreChip,
   SectionLabel, ShowMore, SkeletonPage, ratingToneIn, type MatchOutcome,
 } from "@/components/ui";
 import { PreMatchCard } from "@/components/relations/RelationSection";
@@ -25,7 +25,7 @@ interface RivalProfile {
   headToHead: {
     summary: RecordLine;
     matches: Array<{
-      id: string; competition: Competition; label: string | null; date: string | null; isHome: boolean;
+      id: string; competition: Competition; label: string | null; date: string | null; season: number | null; isHome: boolean;
       myScore: number; rivalScore: number; myPens: number | null; rivalPens: number | null; result: MatchOutcome;
     }>;
   };
@@ -118,7 +118,9 @@ export function RivalTab({ myTeamId, rivalId, rivalName }: { myTeamId: string; r
               Skóre ze všech vzájemných zápasů{" "}
               <span className="font-heading font-bold text-ink tabular-nums">{h2h.summary.goalsFor}:{h2h.summary.goalsAgainst}</span>
             </div>
-            {h2h.matches.slice(0, shownMatches).map((m) => {
+            {h2h.matches.slice(0, shownMatches).map((m, i, shown) => {
+              // Zápasy jdou od nejnovějšího; nadpis sezóny nad prvním zápasem každé sezóny.
+              const newSeason = i === 0 || shown[i - 1].season !== m.season;
               const home = m.isHome ? m.myScore : m.rivalScore;
               const away = m.isHome ? m.rivalScore : m.myScore;
               const pens = m.myPens != null && m.rivalPens != null
@@ -126,10 +128,13 @@ export function RivalTab({ myTeamId, rivalId, rivalName }: { myTeamId: string; r
                 : null;
               const venue = m.competition === "tournament" ? "turnaj" : m.isHome ? "doma" : "venku";
               return (
-                <ListRow key={m.id} href={`/zapas/${m.id}/zaznam`}
-                  title={competitionLabel(m)}
-                  meta={[shortDate(m.date), venue, pens].filter(Boolean).join(" · ")}
-                  trailing={<ScoreChip result={m.result}>{home}:{away}</ScoreChip>} />
+                <Fragment key={m.id}>
+                  {newSeason && <RowGroup label={m.season != null ? `Sezóna ${m.season}` : "Starší zápasy"} />}
+                  <ListRow href={`/zapas/${m.id}/zaznam`}
+                    title={competitionLabel(m)}
+                    meta={[shortDate(m.date), venue, pens].filter(Boolean).join(" · ")}
+                    trailing={<ScoreChip result={m.result}>{home}:{away}</ScoreChip>} />
+                </Fragment>
               );
             })}
             <ShowMore shown={Math.min(shownMatches, h2h.matches.length)} total={h2h.matches.length} step={10}
