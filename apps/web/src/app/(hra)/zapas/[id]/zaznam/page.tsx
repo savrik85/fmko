@@ -8,7 +8,6 @@ import { Spinner, BadgePreview, JerseyPreview } from "@/components/ui";
 import { PositionBadge } from "@/components/ui/position-badge";
 import { bestTextOn } from "@/lib/team-color";
 import type { BadgePattern } from "@/components/ui";
-import { BANNERS_BOTTOM, BANNERS_INSET, OVERLAY_BUTTON, OVERLAY_FAINT, OVERLAY_GAP } from "@/components/match/replay-3d/overlay";
 import { actionStarts, scenedEvents, shootoutEvents, STEP_SECONDS, substitutionsTogether, type ReplayKit } from "@/components/match/replay-3d/scenes";
 import { cachedReplayView, DEFAULT_REPLAY_VIEW, fetchReplayView, type ReplayView } from "@/lib/ui-prefs";
 
@@ -736,27 +735,13 @@ export default function MatchReplayPage() {
               {view3d && failed3d && (
                 <div className="absolute inset-0 z-20 flex flex-col items-center justify-center gap-1 px-6 bg-[#0a0a0a]/90 text-center font-heading text-white">
                   <div className="font-[900] text-base sm:text-2xl">Video se nepodařilo přehrát</div>
-                  <div className="text-xs sm:text-base text-white/75">Přepni vlevo nahoře na Plánek a zápas dohraj tam.</div>
+                  <div className="text-xs sm:text-base text-white/75">Přepni pod záznamem na 2D a zápas dohraj tam.</div>
                 </div>
               )}
               {view3d && !failed3d && Replay3D && (
                 <Replay3D detail={match.detail} events={match.events} onReady={() => setReady3d(true)} onFailure={() => setFailed3d(true)} onSecondHalf={startSecondHalf}
                   progress={{ take, idx, flash, intro, kickoff, halfTime: htPause, finished, paused, cue, fast: speed === "fast", homeGoals: hg, awayGoals: ag }} />
               )}
-              <button onClick={switchView} title={view3d ? "Přepnout na plánek" : "Přepnout na video"}
-                // Pod horními nápisy videa a stejně daleko od kraje: `top` je v procentech výšky okna, proto poměr stran.
-                style={{ top: `calc(${BANNERS_BOTTOM * VIEWER_ASPECT * 100}% + ${OVERLAY_GAP}px)`, left: `${BANNERS_INSET * 100}%` }}
-                className={`${OVERLAY_BUTTON} z-30 px-2 ${videoTried ? OVERLAY_FAINT : ""}`}>
-                {view3d ? "Plánek" : "Video"}
-                {/* Kdo video ještě nezkusil, tomu na tlačítko ukazuje žlutá bublina. */}
-                {!videoTried && (
-                  <span className="absolute left-full top-0 ml-2.5 h-7 px-2 flex items-center rounded-md bg-yellow-400 text-black whitespace-nowrap shadow-md pointer-events-none">
-                    {/* Šipka z levého kraje bubliny k tlačítku. */}
-                    <span className="absolute right-full top-1/2 -translate-y-1/2 border-y-[5px] border-y-transparent border-r-[6px] border-r-yellow-400" />
-                    Vyzkoušej video
-                  </span>
-                )}
-              </button>
             </>
           )}
           {/* Team color side bars */}
@@ -879,6 +864,27 @@ export default function MatchReplayPage() {
 
       {/* ═══ CONTROLS ═══ */}
       <div className="flex flex-wrap justify-center items-center gap-3 py-2">
+        {/* 2D/3D pod záznamem, ne přes obraz zápasu: dřív tlačítko a bublina „Vyzkoušej video“ překrývaly hřiště. */}
+        {can3d && (
+          <div className="flex gap-1 p-1 rounded-xl bg-white shadow-md" role="group" aria-label="Zobrazení záznamu">
+            {([["2D", false], ["3D", true]] as const).map(([label, is3d]) => {
+              const active = view3d === is3d;
+              return (
+                <button key={label} onClick={() => { if (!active) switchView(); }} aria-pressed={active}
+                  title={is3d ? "Záznam jako 3D video" : "Záznam na plánku hřiště"}
+                  className={`relative w-11 py-2 rounded-lg text-base font-heading font-bold transition-all ${
+                    active ? (bestTextOn(hc) === "light" ? "text-white" : "text-gray-900") : "text-muted hover:text-ink"
+                  }`} style={active ? { backgroundColor: hc } : undefined}>
+                  {label}
+                  {/* Kdo 3D ještě nezkusil, tomu ho připomene štítek na tlačítku. */}
+                  {is3d && !videoTried && (
+                    <span className="absolute -top-2 -right-2 h-4 px-1 rounded-full bg-yellow-400 text-black text-[10px] leading-4 font-bold shadow pointer-events-none">nové</span>
+                  )}
+                </button>
+              );
+            })}
+          </div>
+        )}
         {/* Přetáčení po akcích a pauza; čára je dělí od rychlosti přehrávání. */}
         <div className="flex gap-3 pr-3 border-r-2 border-black/15">
           {([

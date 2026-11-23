@@ -114,8 +114,8 @@ function usePushNotifications() {
 }
 
 const REPLAY_VIEW_OPTIONS: ReadonlyArray<ChoiceOption<ReplayView>> = [
-  { value: "2d", label: "Plánek" },
-  { value: "3d", label: "Video (3D)" },
+  { value: "2d", label: "2D" },
+  { value: "3d", label: "3D" },
 ];
 
 /**

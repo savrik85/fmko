@@ -17,8 +17,8 @@ export const RELEASE_NOTES: ReleaseNote[] = [
     title: "Záznam zápasu jako 3D video",
     items: [
       "Záznam zápasu jde přehrát jako 3D video.",
-      "Mezi Plánkem a Videem jde přepínat kdykoli během zápasu.",
-      "Výchozí zobrazení si každý může nastavit v [Nastavení](/nastaveni), jinak se záznam otevře na Plánku.",
+      "Mezi 2D a 3D jde přepínat kdykoli během zápasu, přepínač je pod záznamem.",
+      "Výchozí zobrazení si každý může nastavit v [Nastavení](/nastaveni), jinak se záznam otevře ve 2D.",
       "Video vyvinul [Féďa](/manazer/15cf621b-3126-4c7d-93e2-60771059cf49), pochvaly, problémy i nadávky směřujte jemu.",
     ],
   },
