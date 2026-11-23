@@ -198,6 +198,19 @@ describe("scény 3D záznamu", () => {
     expect(actionStarts(list)).toEqual([0, 1, 2, 4, 5]);
   });
 
+  it("po zakončení standardky je další šance nebo gól týmu ve stejné minutě nová akce s vlastní scénou", () => {
+    const pieces = [
+      [event(49, "penalty", 1, 9), event(49, "chance", 1, 9, { detail: "penalty_missed" }), event(49, "chance", 1, 8, { detail: "vedle" })],
+      [event(37, "penalty", 1, 9), event(37, "goal", 1, 9, { detail: "1:0", source: "penalty" }), event(37, "goal", 1, 8, { detail: "2:0", source: "open_play" }), event(37, "assist", 1, 7)],
+      [event(20, "freekick", 2, 6, { detail: "direct" }), event(20, "chance", 2, 6, { detail: "vedle" }), event(20, "goal", 2, 9, { detail: "0:1", source: "open_play" })],
+      [event(60, "corner", 1, 6), event(60, "chance", 1, 3, { detail: "vedle" }), event(60, "chance", 1, 9, { detail: "tyč" })],
+    ];
+    for (const list of pieces) {
+      expect(actionStarts(list)).toEqual([0, 2]);
+      expect(checkAll(new Replay(input(list)), list, list[0].type)).toEqual([]);
+    }
+  });
+
   it("trenéři, kteří spolu vycházejí, se po podání ruky obejmou; ostatní ne", () => {
     const poses = (goodTerms: boolean) => {
       const replay = new Replay({ ...input([event(5, "goal", 1, 9)]), goodTerms }), scene = replay.intro(), frame = emptyFrame(replay.figures.length);
