@@ -5,7 +5,7 @@ import Link from "next/link";
 import { useTeam } from "@/context/team-context";
 import { TalentStars } from "@/components/players/talent-stars";
 import { apiFetch, type Team, type Player } from "@/lib/api";
-import { PositionBadge, Tabs, useTabParam, ListCard, ListRow, ListEmpty, DataTable, PageLoading, SectionLoading } from "@/components/ui";
+import { PositionBadge, Tabs, useTabParam, ListCard, ListRow, ListEmpty, DataTable, SectionLoading, SkeletonPage, TabsSkeleton, TableSkeleton, Skeleton } from "@/components/ui";
 import { PositionFilter, SquadAttributeTable, StickyPlayerName, type PosFilter } from "@/components/players/squad-attribute-table";
 import { SquadBodyTab } from "@/components/players/squad-body-tab";
 import { SquadAnalysisTab } from "@/components/players/squad-analysis-tab";
@@ -165,7 +165,24 @@ export default function SquadPage() {
     };
   }, [players]);
 
-  if (loading) return <PageLoading />;
+  if (loading) return (
+    <SkeletonPage>
+      <TabsSkeleton count={4} framed />
+      <div className="card grid grid-cols-4 divide-x divide-gray-100">
+        {[0, 1, 2, 3].map((i) => (
+          <div key={i} className="px-1 py-2 sm:py-3 flex flex-col items-center gap-1.5">
+            <Skeleton className="h-2.5 w-10" />
+            <Skeleton className="h-5 w-8" />
+          </div>
+        ))}
+      </div>
+      <div className="card p-3 space-y-2">
+        <div className="py-0.5"><Skeleton className="h-3 w-24" /></div>
+        <div className="flex gap-2">{[0, 1, 2, 3, 4].map((i) => <Skeleton key={i} className="h-[39px] flex-1 rounded-control" />)}</div>
+      </div>
+      <TableSkeleton rows={11} columns={5} />
+    </SkeletonPage>
+  );
   if (!team) return <div className="p-6">Tým nenalezen.</div>;
 
   const filtered = filter === "all" ? players : players.filter((p) => p.position === filter);
