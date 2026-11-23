@@ -7,6 +7,11 @@ export const BALL_DELAY_MS = 300;
 export const QUIP_DELAY_MS = 1500;
 /** Jak dlouho jedna hláška vydrží, než přijde další. */
 export const QUIP_INTERVAL_MS = 2600;
+/**
+ * Od 10 s už hlášky nestačí: hráč dostane vysvětlení a tlačítko „Zkusit znovu“
+ * (Nielsen Norman Group: nad 10 s čekání vysvětlit a nabídnout cestu ven).
+ */
+export const SLOW_LOADING_MS = 10_000;
 
 /** Hlášky ze skutečných chvil na okresním hřišti před zápasem. Max. 34 znaků, ať se na mobilu vejdou na řádek. */
 export const LOADING_QUIPS: readonly string[] = [
@@ -26,12 +31,13 @@ export const LOADING_QUIPS: readonly string[] = [
   "Rozhodčí hledá píšťalku…",
 ];
 
-export type LoadingPhase = "hidden" | "ball" | "quip";
+export type LoadingPhase = "hidden" | "ball" | "quip" | "slow";
 
 export function loadingPhase(elapsedMs: number): LoadingPhase {
   if (elapsedMs < BALL_DELAY_MS) return "hidden";
   if (elapsedMs < QUIP_DELAY_MS) return "ball";
-  return "quip";
+  if (elapsedMs < SLOW_LOADING_MS) return "quip";
+  return "slow";
 }
 
 /** Hláška pro daný čas: začíná na `startIndex` a každých 2,6 s posune o jednu, dokola. */

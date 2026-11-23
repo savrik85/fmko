@@ -1,6 +1,6 @@
 // Spouští se z kořene repa: npx vitest run --root apps/web src/components/ui/loading-quips.test.ts
 import { describe, expect, it } from "vitest";
-import { BALL_DELAY_MS, LOADING_QUIPS, QUIP_DELAY_MS, QUIP_INTERVAL_MS, loadingPhase, quipAt } from "./loading-quips";
+import { BALL_DELAY_MS, LOADING_QUIPS, QUIP_DELAY_MS, QUIP_INTERVAL_MS, SLOW_LOADING_MS, loadingPhase, quipAt } from "./loading-quips";
 
 describe("fáze načítání", () => {
   it("rychlé načtení do 300 ms neukáže nic", () => {
@@ -14,10 +14,16 @@ describe("fáze načítání", () => {
     expect(loadingPhase(1499)).toBe("ball");
   });
 
-  it("od 1,5 s je pod míčem hláška a zůstává tam", () => {
+  it("od 1,5 s do 10 s je pod míčem hláška", () => {
     expect(QUIP_DELAY_MS).toBe(1500);
     expect(loadingPhase(1500)).toBe("quip");
-    expect(loadingPhase(60000)).toBe("quip");
+    expect(loadingPhase(9999)).toBe("quip");
+  });
+
+  it("od 10 s místo hlášky vysvětlení a možnost zkusit znovu, napořád", () => {
+    expect(SLOW_LOADING_MS).toBe(10000);
+    expect(loadingPhase(10000)).toBe("slow");
+    expect(loadingPhase(600000)).toBe("slow");
   });
 });
 
