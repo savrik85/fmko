@@ -67,6 +67,8 @@ beforeAll(async () => {
     db.prepare("INSERT INTO villages (id, name, district, region, population, size, lat, lng) VALUES ('v1', 'Lhota', 'Prachatice', 'Jihočeský', 300, 'village', 49, 14)"),
     // Migrace zakládají první sezónu samy.
     db.prepare("INSERT OR IGNORE INTO seasons (id, number) VALUES ('s1', 1)"),
+    // Přátelák a turnaj se do sezóny řadí podle data jejího začátku.
+    db.prepare("UPDATE seasons SET created_at = '2026-06-01 00:00:00' WHERE number = 1"),
     db.prepare("INSERT INTO leagues (id, season_id, district, name) VALUES ('L1', (SELECT id FROM seasons WHERE number = 1), 'Prachatice', 'Okresní přebor')"),
     db.prepare(`INSERT INTO teams (id, user_id, village_id, name, league_id) VALUES
       ('mine', 'u-mine', 'v1', 'Sokol Lhota', 'L1'), ('rival', 'u-other', 'v1', 'FK Zbytiny', 'L1'), ('third', 'u-third', 'v1', 'TJ Třetí', 'L1')`),
@@ -160,6 +162,12 @@ describe("profil soupeře: obsah", () => {
     expect(p.headToHead.matches.map((m: any) => m.id)).toEqual(["tm1", "m4", "cm1", "m2", "m1", "m0"]);
     expect(p.headToHead.matches.map((m: any) => m.competition)).toEqual(["tournament", "friendly", "cup", "league", "league", "league"]);
     expect(p.headToHead.summary).toEqual({ played: 6, wins: 2, draws: 2, losses: 2, goalsFor: 10, goalsAgainst: 7 });
+  });
+
+  it("u každého zápasu sezóna: liga z kalendáře, pohár z ročníku, přátelák a turnaj podle data", () => {
+    expect(p.headToHead.matches.map((m: any) => [m.id, m.season])).toEqual([
+      ["tm1", 1], ["m4", 1], ["cm1", 1], ["m2", 1], ["m1", 1], ["m0", 0],
+    ]);
   });
 
   it("zápas je z mého pohledu, pohár s penaltami", () => {

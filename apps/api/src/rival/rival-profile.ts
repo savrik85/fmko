@@ -140,3 +140,25 @@ export function lineupTactics(raw: string | null): { formation: string; tactic: 
     return null;
   }
 }
+
+/** Čas z `seasons.created_at` („2026-07-04 08:53:56“, UTC) nebo ISO data zápasu. */
+const toTime = (s: string): number => Date.parse(s.includes("T") ? s : `${s.replace(" ", "T")}Z`);
+
+/**
+ * Sezóna podle data: ta, která začala naposledy před zápasem. Pro přáteláky a turnaj,
+ * které číslo sezóny u sebe nemají. Před první sezónou null.
+ */
+export function seasonAt(date: string | null, seasons: ReadonlyArray<{ number: number; startedAt: string }>): number | null {
+  if (!date) return null;
+  const at = toTime(date);
+  let found: number | null = null;
+  let foundStart = -Infinity;
+  for (const s of seasons) {
+    const start = toTime(s.startedAt);
+    if (start <= at && start > foundStart) {
+      found = s.number;
+      foundStart = start;
+    }
+  }
+  return found;
+}
