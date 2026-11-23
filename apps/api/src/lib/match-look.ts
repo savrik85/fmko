@@ -1,7 +1,7 @@
 /**
  * Vzhled hráčů, dresy a trenéři pro 3D záznam zápasu (detail ligového, pohárového i turnajového zápasu).
  */
-import { orderPair } from "../community/manager-relations";
+import { orderPair, relationLabel } from "../community/manager-relations";
 import { currentSeasonSql } from "./season";
 
 interface PlayerLook {
@@ -76,13 +76,18 @@ const BLACK = "#111111";
  * maximum ~441) nad 100. Tmavě zelená vs. tmavě modrá (~90) ještě splývá, zelená vs. modrá (~120) už ne.
  */
 const MIN_KIT_DISTANCE = 100;
+/** Vztahy ze škály relationLabel, při kterých se trenéři před výkopem obejmou. */
+const HUG_RELATIONS = new Set(["Spojenec", "Kamarádi od piva", "Dobří známí", "Přátelská rivalita"]);
 
-/** Obličej (facesjs v `players.avatar`) a z něj pleť a vlasy pro 3D postavu, výška z `players.physical`. */
+/**
+ * Obličej (facesjs v `players.avatar`) a z něj pleť a vlasy pro 3D postavu, výška z `players.physical`.
+ * Trenér registrovaný bez obličeje má uložené `{}`: to obličej není.
+ */
 export function playerLook(row: { avatar: string | null; physical: string | null }): PlayerLook {
   const look: PlayerLook = {};
   if (row.avatar) {
     const avatar = JSON.parse(row.avatar) as { body?: { color?: string }; hair?: { id?: string; color?: string } };
-    look.avatar = avatar;
+    if (Object.keys(avatar).length > 0) look.avatar = avatar;
     if (avatar.body?.color) look.skinColor = avatar.body.color;
     if (avatar.hair?.id) look.hairColor = avatar.hair.id.includes("bald") ? null : (avatar.hair.color ?? null);
   }
@@ -141,14 +146,18 @@ function awayKit(team: TeamKitRow | undefined, fallback: string, homeShirt: stri
   return candidates.find((kit) => colorDistance(kit.shirt, homeShirt) > MIN_KIT_DISTANCE)!;
 }
 
-/** Ligová bilance klubu v aktuální sezóně před výkopem `kickoff`; u zápasu z dřívější sezóny tedy žádná. */
+/**
+ * Ligová bilance klubu v aktuální sezóně před výkopem `kickoff`; u zápasu z dřívější sezóny tedy žádná.
+ * `+m.status` drží plánovač od indexu na stav, který by prošel všechny odehrané zápasy: dotaz jde přes
+ * indexy zápasů klubu.
+ */
 async function leagueRecordBefore(db: D1Database, teamId: string, kickoff: string): Promise<MatchCoach["record"]> {
   const row = await db.prepare(
     `SELECT COUNT(*) AS played,
             COALESCE(SUM((m.home_team_id = ?1 AND m.home_score > m.away_score) OR (m.away_team_id = ?1 AND m.away_score > m.home_score)), 0) AS won
        FROM matches m
        JOIN season_calendar sc ON sc.id = m.calendar_id
-      WHERE m.status = 'simulated' AND (m.home_team_id = ?1 OR m.away_team_id = ?1)
+      WHERE +m.status = 'simulated' AND (m.home_team_id = ?1 OR m.away_team_id = ?1)
         AND ${currentSeasonSql("sc")} AND sc.scheduled_at < ?2`,
   ).bind(teamId, kickoff).first<{ played: number; won: number }>();
   return row && row.played > 0 ? { played: row.played, won: row.won } : null;
@@ -203,9 +212,9 @@ export async function loadMatchLook(
     const row = lookById.get(p.id);
     if (row) Object.assign(p, playerLook(row));
   }
-  // Aspoň „Dobří známí“ ze škály relationLabel: respekt od 10 a bez napětí. Bez řádku v manager_relations je vztah neutrální.
+  // Bez řádku v manager_relations je vztah neutrální.
   return {
     home_kit, away_kit, home_coach: coachOf(home.teamId, homeRecord), away_coach: coachOf(away.teamId, awayRecord),
-    coaches_on_good_terms: !!relation && relation.respect >= 10 && relation.heat < 20,
+    coaches_on_good_terms: !!relation && HUG_RELATIONS.has(relationLabel(relation.respect, relation.heat)),
   };
 }

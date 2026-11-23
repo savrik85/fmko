@@ -1,7 +1,7 @@
 /**
  * Ligová bilance trenéra v detailu zápasu na skutečné D1 (Miniflare): počítá se jen aktuální sezóna
  * a jen odehraná kola před výkopem, ať jde o ligový zápas, nebo o pohár mezi dvěma koly. A vztah trenérů:
- * objímají se jen ti, mezi jejichž kluby je respekt nad nulou.
+ * objímají se jen ti, jejichž vztah hra ukazuje jako přátelský (relationLabel).
  */
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { Miniflare } from "miniflare";
@@ -63,7 +63,7 @@ describe("ligová bilance trenéra", () => {
 describe("vztah trenérů", () => {
   const goodTerms = async () => (await loadMatchLook(db, { teamId: "h" }, { teamId: "a" }, null, null, null)).coaches_on_good_terms;
 
-  it("objímají se až dobří známí (respekt od 10) bez napětí", async () => {
+  it("objímají se dobří známí a lepší, i přátelská rivalita a spojenci s napětím; sousedské špičkování a rivalové ne", async () => {
     expect(await goodTerms()).toBe(false);
     // Dvojice je uložená s menším id jako první.
     await db.prepare("INSERT INTO manager_relations (team_a_id, team_b_id, respect) VALUES ('a', 'h', 0)").run();
@@ -74,7 +74,17 @@ describe("vztah trenérů", () => {
     expect(await goodTerms()).toBe(false);
     await db.prepare("UPDATE manager_relations SET respect = 10").run();
     expect(await goodTerms()).toBe(true);
+    // Sousedské špičkování.
     await db.prepare("UPDATE manager_relations SET heat = 20").run();
+    expect(await goodTerms()).toBe(false);
+    // Přátelská rivalita.
+    await db.prepare("UPDATE manager_relations SET respect = 30").run();
+    expect(await goodTerms()).toBe(true);
+    // Spojenec, i když to mezi kluby jiskří.
+    await db.prepare("UPDATE manager_relations SET respect = 70, heat = 30").run();
+    expect(await goodTerms()).toBe(true);
+    // Vážený rival.
+    await db.prepare("UPDATE manager_relations SET heat = 90").run();
     expect(await goodTerms()).toBe(false);
   });
 });
