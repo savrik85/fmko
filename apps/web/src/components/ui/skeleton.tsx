@@ -1,5 +1,6 @@
 import React, { type ReactNode } from "react";
 import { BALL_DELAY_MS } from "./loading-quips";
+import { SlowLoadingNotice } from "./spinner";
 
 // Skeletony ve tvaru stránek. Kde je jasné, jak obsah vypadá, ukazují jeho tvar
 // místo míče. Naskočí po 300 ms jako míč, takže rychlé načtení nic neproblikne.
@@ -14,7 +15,8 @@ export function Skeleton({ className = "", style }: { className?: string; style?
 
 /**
  * Obal celé stránky. `header` (třeba skutečná PageHeader) je vidět hned,
- * zbytek naskočí po 300 ms.
+ * zbytek naskočí po 300 ms. Po 10 s nahoře karta „Trvá to déle než obvykle“ se „Zkusit znovu“.
+ * Tvary jsou prázdné spany, čtečka v nich nic nenajde; přečte jen „Načítám“ a případně tu kartu.
  */
 export function SkeletonPage({ header, children, className = "page-container space-y-4" }: {
   header?: ReactNode;
@@ -24,7 +26,8 @@ export function SkeletonPage({ header, children, className = "page-container spa
   return (
     <div role="status" aria-label="Načítám">
       {header}
-      <div className={`skeleton-appear ${className}`} style={{ animationDelay: `${BALL_DELAY_MS}ms` }} aria-hidden="true">
+      <div className={`skeleton-appear ${className}`} style={{ animationDelay: `${BALL_DELAY_MS}ms` }}>
+        <SlowLoadingNotice />
         {children}
       </div>
     </div>
@@ -101,6 +104,7 @@ export function CardSkeleton({ lines = 3, className = "" }: { lines?: number; cl
 export function ConversationListSkeleton({ rows = 8 }: { rows?: number }) {
   return (
     <div className="divide-y divide-gray-100 skeleton-appear" style={{ animationDelay: `${BALL_DELAY_MS}ms` }} role="status" aria-label="Načítám">
+      <SlowLoadingNotice className="px-4 py-3" />
       {Array.from({ length: rows }, (_, i) => (
         <div key={i} className="flex items-center gap-3 px-4 py-3" aria-hidden="true">
           <Skeleton className="w-10 h-10 shrink-0 !rounded-full" />

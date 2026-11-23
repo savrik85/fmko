@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useEffect, useId, useState } from "react";
-import { BALL_DELAY_MS, LOADING_QUIPS, loadingPhase, quipAt } from "./loading-quips";
+import { BALL_DELAY_MS, LOADING_QUIPS, SLOW_LOADING_MS, loadingPhase, quipAt } from "./loading-quips";
 
 type SpinnerSize = "sm" | "md" | "lg";
 
@@ -44,35 +44,85 @@ export function Spinner({ size = "md" }: { size?: SpinnerSize }) {
 }
 
 /**
- * Hláška pod míčem: od 1,5 s po připojení, pak střídání (loading-quips.ts).
+ * Hláška pod míčem: od 1,5 s po připojení, pak střídání (loading-quips.ts). Od 10 s místo ní `slow`.
  * Kdy naskočí sám míč, řídí CSS (animation-delay), aby to platilo i před načtením JS.
  */
-function useLoadingQuip(): string {
-  const [quip, setQuip] = useState("");
+function useLoadingQuip(): { quip: string; slow: boolean } {
+  const [state, setState] = useState({ quip: "", slow: false });
   useEffect(() => {
     const startedAt = performance.now();
     // Náhoda až v efektu: při renderu na serveru by se hláška lišila od klienta.
     const startIndex = Math.floor(Math.random() * LOADING_QUIPS.length);
     const timer = window.setInterval(() => {
       const elapsed = performance.now() - startedAt;
-      setQuip(loadingPhase(elapsed) === "quip" ? quipAt(startIndex, elapsed) : "");
+      const phase = loadingPhase(elapsed);
+      if (phase === "slow") {
+        window.clearInterval(timer);
+        setState({ quip: "", slow: true });
+        return;
+      }
+      setState({ quip: phase === "quip" ? quipAt(startIndex, elapsed) : "", slow: false });
     }, 100);
     return () => window.clearInterval(timer);
   }, []);
-  return quip;
+  return state;
+}
+
+/** Načítání trvá přes 10 s (SLOW_LOADING_MS): do té doby nic, pak `true`. */
+function useSlowLoading(): boolean {
+  const [slow, setSlow] = useState(false);
+  useEffect(() => {
+    const timer = window.setTimeout(() => setSlow(true), SLOW_LOADING_MS);
+    return () => window.clearTimeout(timer);
+  }, []);
+  return slow;
+}
+
+const SLOW_TEXT = "Trvá to déle než obvykle.";
+
+/** Zkusit znovu = načíst stránku znovu: nevíme, který z dotazů se zasekl. */
+function RetryButton() {
+  return (
+    <button type="button" onClick={() => window.location.reload()} className="btn btn-secondary btn-sm shrink-0">
+      Zkusit znovu
+    </button>
+  );
+}
+
+/**
+ * Pro skeletony: po 10 s karta s vysvětlením a tlačítkem „Zkusit znovu“, do té doby nic.
+ * Míč má totéž vestavěné místo hlášky.
+ */
+export function SlowLoadingNotice({ className = "card p-4" }: { className?: string }) {
+  const slow = useSlowLoading();
+  if (!slow) return null;
+  return (
+    <div className={`flex items-center justify-between gap-3 ${className}`}>
+      <p className="text-sm text-ink">{SLOW_TEXT}</p>
+      <RetryButton />
+    </div>
+  );
 }
 
 /** Skákající míč se stínem a hláškou. Místo zabírá hned, jen je do 300 ms neviditelný. */
 function LoadingBall() {
-  const quip = useLoadingQuip();
+  const { quip, slow } = useLoadingQuip();
   return (
     <div className="loading-indicator" style={{ animationDelay: `${BALL_DELAY_MS}ms` }}>
       <div className="loading-ball">
         <div className="loading-ball-body"><BallIcon /></div>
         <div className="loading-ball-shadow" />
       </div>
-      {/* Hláška jen pro oko: čtečka by ji jinak hlásila každé 2,6 s. */}
-      <p key={quip} className="loading-quip" aria-hidden="true">{quip}</p>
+      {slow ? (
+        <>
+          {/* Na rozdíl od hlášek tohle čtečka přečte: hráč má co udělat. */}
+          <p className="loading-quip">{SLOW_TEXT}</p>
+          <RetryButton />
+        </>
+      ) : (
+        // Hláška jen pro oko: čtečka by ji jinak hlásila každé 2,6 s.
+        <p key={quip} className="loading-quip" aria-hidden="true">{quip}</p>
+      )}
     </div>
   );
 }
