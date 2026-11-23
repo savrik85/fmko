@@ -55,7 +55,9 @@ const SEAM = 0.25;
 /** Výška boků sedícího náhradníka nad zemí (sedačka střídačky je ve výšce 0,5 m). */
 const SEAT_HIP_Y = 0.6;
 /** Po kolika plynulých snímcích za sebou se scéna považuje za načtenou. */
-const SMOOTH_FRAMES = 10;
+const SMOOTH_FRAMES = 20;
+/** Snímek je plynulý, když netrvá déle (s). */
+const SMOOTH_DELTA = 0.1;
 /** Jak daleko dopředu v klipu (sekundy) se po střihu měří rychlost a směr postav. */
 const LOOKAHEAD = 0.1;
 
@@ -325,7 +327,7 @@ export function ReplayScene({ replay, kits, snow, overview, step, root, veil, on
   useFrame((_, delta) => {
     // Záznam se rozběhne, až se scéna kreslí plynule: první snímky po načtení trvají i sekundy (překládají se
     // shadery, dotahují modely) a úvod by mezitím proběhl za načítáním.
-    if (!ready.current && (ready.current = (smooth.current = delta < 0.25 ? smooth.current + 1 : 0) >= SMOOTH_FRAMES)) onReady();
+    if (!ready.current && (ready.current = (smooth.current = delta < SMOOTH_DELTA ? smooth.current + 1 : 0) >= SMOOTH_FRAMES)) onReady();
     const { play, rate, hold } = step.current;
     const dt = Math.min(delta, 0.1);
     const p = playback.current;
@@ -336,7 +338,9 @@ export function ReplayScene({ replay, kits, snow, overview, step, root, veil, on
       Object.assign(p, { play, elapsed: seamless ? p.t - first : 0 });
     }
     const { scene, attack } = play;
-    const elapsed = p.elapsed = hold ? 0 : p.elapsed + dt * rate;
+    // Dokud se scéna načítá, stojí na prvním snímku: nápisy řídí stránka a ta se rozběhne až po načtení.
+    const held = hold || !ready.current;
+    const elapsed = p.elapsed = held ? 0 : p.elapsed + dt * rate;
     // Gól: po chvíli oslavy se zakončení zpomaleně zopakuje.
     const again = !attack && scene.replay ? scene.replay : null;
     // Opakovaný záběr je to poslední, co z gólu je: když skončí, drží jeho poslední snímek, dokud nepřijde další akce
@@ -366,18 +370,21 @@ export function ReplayScene({ replay, kits, snow, overview, step, root, veil, on
     last.current = { clip: scene.clip, t, cuts: frame.cuts, replaying };
     const now = performance.now() / 1000;
 
-    if (cut) sampleClip(scene.clip, t + LOOKAHEAD, ahead);
+    // Po střihu se rychlost a směr berou z klipu: kdo ve střihu jde nebo běží, jde hned a čelem po směru. Stejně
+    // u stojícího snímku (po skoku na akci, při načítání): vypadá jako zastavené video a po rozběhnutí hráči
+    // nezačínají ze stoje.
+    const fromClip = cut || held;
+    if (fromClip) sampleClip(scene.clip, t + LOOKAHEAD, ahead);
     frame.figures.forEach((f, i) => {
       const s = states[i];
       if (!f.visible) return;
-      // Po střihu se rychlost a směr berou z klipu: kdo ve střihu jde nebo běží, jde hned a čelem po směru.
-      const from = cut ? f : s, to = cut ? (ahead.figures[i].visible ? ahead.figures[i] : f) : f;
+      const from = fromClip ? f : s, to = fromClip ? (ahead.figures[i].visible ? ahead.figures[i] : f) : f;
       const dx = to.x - from.x, dz = to.z - from.z;
-      const stride = cut ? 0 : Math.hypot(dx, dz);
+      const stride = fromClip ? 0 : Math.hypot(dx, dz);
       s.x = f.x;
       s.z = f.z;
       // Snímek bez uplynulého času (překreslení zastaveného obrazu) rychlost nemění.
-      if (cut) s.speed = Math.hypot(dx, dz) / LOOKAHEAD;
+      if (fromClip) s.speed = Math.hypot(dx, dz) / LOOKAHEAD;
       else if (dt > 0) s.speed = THREE.MathUtils.lerp(s.speed, stride / dt, Math.min(1, dt * 8));
       s.phase += stride * 1.9;
       // Čelem po směru běhu, stojící čelem k míči; padající brankář čelem do pole, ležící napříč obrazem.
@@ -391,7 +398,7 @@ export function ReplayScene({ replay, kits, snow, overview, step, root, veil, on
       // Při podání ruky a objetí zůstávají čelem k sobě, jak k sobě došli.
       else if (f.pose !== "shake" && f.pose !== "hug" && Math.abs(faceX) + Math.abs(faceZ) > 0.01) {
         const diff = Math.atan2(faceX, faceZ) - s.yaw;
-        s.yaw += Math.atan2(Math.sin(diff), Math.cos(diff)) * (cut ? 1 : Math.min(1, dt * 7));
+        s.yaw += Math.atan2(Math.sin(diff), Math.cos(diff)) * (fromClip ? 1 : Math.min(1, dt * 7));
       }
     });
 
