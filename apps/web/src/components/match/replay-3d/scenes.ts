@@ -711,10 +711,20 @@ export class Replay {
    * Události bez vlastní scény (držení míče, počasí…) tak obraz nemění, poslední akce v něm běží dál.
    */
   before(next: number): Scene {
-    const kickoff = this.secondHalf >= 0 && next >= this.secondHalf ? this.secondHalf : 0;
+    const shown = this.shownBefore(next);
+    return shown < 0 ? this.kickoff(this.halfStart(next)) : this.scene(shown);
+  }
+
+  /** Akce, která je v obraze před událostí `next`; -1, když v tom poločase ještě žádná nebyla (v obraze je výkop). */
+  shownBefore(next: number): number {
     // Záporný začátek by lastIndexOf počítal od konce pole: před první událostí by vrátil poslední akci zápasu.
     const shown = next > 0 ? this.scened.lastIndexOf(true, next - 1) : -1;
-    return shown < kickoff ? this.kickoff(kickoff) : this.scene(shown);
+    return shown < this.halfStart(next) ? -1 : shown;
+  }
+
+  /** První událost poločasu, do kterého patří `next`. */
+  private halfStart(next: number): number {
+    return this.secondHalf >= 0 && next >= this.secondHalf ? this.secondHalf : 0;
   }
 
   /**
@@ -1080,9 +1090,12 @@ export class Replay {
     const keeperTo = (x: number) => st.go(gk, reach(x), 0.35, fly - 0.35);
     const dive = (x: number) => st.pose(gk, x > 0 ? "diveRight" : "diveLeft", 2.2, fly - 0.3);
     if (result === "goal") {
-      const x = sgn * (1 + st.rng() * 2.2);
-      keeperTo(-Math.sign(x) * 1.6);
-      dive(-x);
+      // Gól padá k tyči, a to k té dál od brankáře (při standardce nestojí uprostřed): brankář skočí správným
+      // směrem, ale skoro z místa, takže na míč nedosáhne.
+      const from = st.pos(gk).x, to = Math.abs(from) > 0.1 ? -Math.sign(from) : sgn;
+      const x = to * (2.5 + st.rng() * 0.9);
+      keeperTo(from + to * 0.2);
+      dive(x);
       st.ballTo(line(x), fly, { h: 0.4 + st.rng() * 1.5, arc: 0.4 });
       st.wait(fly);
       st.ballTo({ x: x * 0.9, z: gz + s * 1.4 }, 0.25, { h: 0.2 });
