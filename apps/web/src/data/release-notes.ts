@@ -12,6 +12,16 @@ export interface ReleaseNote {
 
 export const RELEASE_NOTES: ReleaseNote[] = [
   {
+    date: "2026-11-23",
+    emoji: "🎬",
+    title: "Záznam zápasu jako 3D video",
+    items: [
+      "Záznam zápasu jde přehrát jako 3D video.",
+      "Mezi Plánkem a Videem jde přepínat kdykoli během zápasu. Výchozí zobrazení se nastaví v Nastavení.",
+      "Video vyvinul Féďa, pochvaly, problémy i nadávky směřujte jemu.",
+    ],
+  },
+  {
     date: "2026-11-22",
     emoji: "👂",
     title: "Kabina má uši a reakce na přestupy",
