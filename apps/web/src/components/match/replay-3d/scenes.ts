@@ -55,6 +55,8 @@ export interface ReplayCoach {
  */
 const COACH_INTRO = 4, MEET = 1.6, HANDSHAKE = 2.2;
 /** Jak dlouho drží kroky záznamu (s), jejichž délku určuje scéna; stránka záznamu se jimi řídí. */
+/** Nápis gólu: v nápisu akce nad obrazem i promítnutý na hřiště. */
+export const GOAL_TEXT = "GÓÓÓL!";
 export const STEP_SECONDS = {
   coach: COACH_INTRO, handshake: MEET + HANDSHAKE, setup: SETUP, attack: ATTACK, drama: DRAMA_STEP, goal: REPLAY.after + REPLAY.seconds,
 };
