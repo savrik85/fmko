@@ -6,7 +6,7 @@ import { useRouter } from "next/navigation";
 import { useTeam } from "@/context/team-context";
 import { apiFetch } from "@/lib/api";
 import { FaceAvatar } from "@/components/players/face-avatar";
-import { Spinner } from "@/components/ui";
+import { ConversationListSkeleton } from "@/components/ui";
 import { PhoneFrame } from "@/components/phone/phone-frame";
 import { Adresar } from "./Adresar";
 import { Oznameni } from "./Oznameni";
@@ -246,7 +246,7 @@ export default function PhonePage() {
       {/* Conversation list */}
       <div className="flex-1 overflow-y-auto bg-gray-50">
         {loading ? (
-          <div className="flex items-center justify-center h-40"><Spinner /></div>
+          <ConversationListSkeleton />
         ) : conversations.length === 0 ? (
           <div className="p-6 text-center text-muted">
             <p className="text-base mb-1">Žádné zprávy</p>

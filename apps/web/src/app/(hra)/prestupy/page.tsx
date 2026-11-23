@@ -9,7 +9,7 @@ import { useTeam } from "@/context/team-context";
 import { apiFetch, apiAction, showError, type Player } from "@/lib/api";
 import { trackEvent } from "@/lib/analytics";
 import { nationalityFlag } from "@/lib/nationality";
-import { SectionLabel, PositionBadge, useConfirm, BadgePreview, type BadgePattern, Tabs, useTabParam, Sheet, SheetDialog, Button, DataTable, EntityCell, ListCard, ListRow, ListEmpty, RowIcon, RowValue, RatingPill, StatusChip, ratingToneIn, PageLoading, SectionLoading, ChoiceGroup, choiceClass } from "@/components/ui";
+import { SectionLabel, PositionBadge, useConfirm, BadgePreview, type BadgePattern, Tabs, useTabParam, Sheet, SheetDialog, Button, DataTable, EntityCell, ListCard, ListRow, ListEmpty, RowIcon, RowValue, RatingPill, StatusChip, ratingToneIn, SectionLoading, ChoiceGroup, choiceClass, SkeletonPage, TabsSkeleton, ListSkeleton } from "@/components/ui";
 import { attrBg } from "@/lib/player-attrs";
 import { PlayerRevealCard } from "@/components/players/reveal-card";
 import { FaceAvatar } from "@/components/players/face-avatar";
@@ -1061,7 +1061,13 @@ export default function TransfersPage() {
     return getUnseenOffersCount(teamId ?? "", { incoming, outgoing, incomingBids, outgoingBids });
   }, [teamId, incoming, outgoing, incomingBids, outgoingBids, tab]);
 
-  if (loading) return <PageLoading />;
+  if (loading) return (
+    <SkeletonPage className="page-container space-y-5">
+      <TabsSkeleton count={5} />
+      <ListSkeleton rows={6} />
+      <ListSkeleton rows={3} />
+    </SkeletonPage>
+  );
 
   const quitCount = players.filter((p) => (p as any).status === "quit").length;
   const tabs: [Tab, string, number][] = [

@@ -5,7 +5,7 @@ import Link from "next/link";
 import { useSearchParams, useRouter } from "next/navigation";
 import { useTeam } from "@/context/team-context";
 import { apiFetch } from "@/lib/api";
-import { SectionLabel, BadgePreview, PositionBadge, PageHeader, Tabs, DataTable, EntityCell, ListCard, ListRow, ListEmpty, RowGroup, RowIcon, ResultChip, type DataColumn, type MatchOutcome, PageLoading, SectionLoading, ChoiceGroup } from "@/components/ui";
+import { SectionLabel, BadgePreview, PositionBadge, PageHeader, Tabs, DataTable, EntityCell, ListCard, ListRow, ListEmpty, RowGroup, RowIcon, ResultChip, type DataColumn, type MatchOutcome, SectionLoading, ChoiceGroup, SkeletonPage, TabsSkeleton, TableSkeleton, Skeleton } from "@/components/ui";
 import type { BadgePattern } from "@/components/ui";
 import { PreseasonNotice } from "@/components/team/preseason-notice";
 import { LeagueStatsTab, type StatsData } from "@/components/league/league-stats";
@@ -223,7 +223,19 @@ function LigaPage() {
     setTab("tabulka");
   };
 
-  if (loadingStandings) return <PageLoading />;
+  if (loadingStandings) return (
+    <SkeletonPage
+      className="page-container space-y-5"
+      header={<PageHeader compact name={leagueName || "Liga"} detail={ctx.district ? `Okres ${ctx.district}` : undefined} badge={null}>{null}</PageHeader>}
+    >
+      <div className="flex gap-2"><Skeleton className="h-8 w-28 !rounded-full" /><Skeleton className="h-8 w-40 !rounded-full" /></div>
+      <div className="grid grid-cols-2 gap-3">
+        {[0, 1].map((i) => <div key={i} className="space-y-2"><div className="py-px"><Skeleton className="h-3 w-16" /></div><Skeleton className="h-11 rounded-control" /></div>)}
+      </div>
+      <TabsSkeleton count={4} />
+      <TableSkeleton rows={12} columns={5} />
+    </SkeletonPage>
+  );
 
   const displayName = seasonNum ? `${leagueName}. Sezóna ${seasonNum}` : (leagueName || "Liga");
 

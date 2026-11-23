@@ -3,7 +3,7 @@
 import { useState, useEffect } from "react";
 import { useTeam } from "@/context/team-context";
 import { apiFetch, showError } from "@/lib/api";
-import { SectionLabel, BadgePreview, PageHeader, useConfirm, Tabs, ListCard, ListRow, ListEmpty, ScoreChip, type MatchOutcome, PageLoading, SectionLoading } from "@/components/ui";
+import { SectionLabel, BadgePreview, PageHeader, useConfirm, Tabs, ListCard, ListRow, ListEmpty, ScoreChip, type MatchOutcome, SectionLoading, SkeletonPage, TabsSkeleton, ListSkeleton, Skeleton } from "@/components/ui";
 import { FixtureGroup, FixtureRow, type FixtureSide } from "@/components/match/fixture-row";
 import type { BadgePattern } from "@/components/ui";
 import { PreseasonNotice } from "@/components/team/preseason-notice";
@@ -152,7 +152,13 @@ export default function SchedulePage() {
       .catch(() => setLeagueLoading(false));
   }, [tab, teamId, leagueLoaded]);
 
-  if (loading) return <PageLoading />;
+  if (loading) return (
+    <SkeletonPage className="page-container space-y-5" header={<PageHeader compact name="Rozpis zápasů">{null}</PageHeader>}>
+      <TabsSkeleton count={2} />
+      <Skeleton className="h-[72px] !rounded-card" />
+      <ListSkeleton rows={8} />
+    </SkeletonPage>
+  );
 
   const played = matches.filter((m) => m.status === "simulated");
   const upcoming = matches.filter((m) => m.status !== "simulated");

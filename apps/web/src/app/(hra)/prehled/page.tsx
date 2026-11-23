@@ -11,7 +11,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useTeam } from "@/context/team-context";
 import { apiFetch, showError } from "@/lib/api";
-import { useConfirm, PageLoading } from "@/components/ui";
+import { useConfirm, SkeletonPage, CardSkeleton, Skeleton } from "@/components/ui";
 import { getWidget } from "@/components/dashboard/widgets/registry";
 import { DEFAULT_LAYOUT } from "@/components/dashboard/widgets/default-layout";
 import { useDashboardData } from "@/components/dashboard/widgets/use-dashboard-data";
@@ -158,7 +158,16 @@ export default function DashboardPage() {
   };
 
   if (!layout) {
-    return <PageLoading />;
+    return (
+      <SkeletonPage className="page-container space-y-5">
+        <div className="flex justify-end gap-2">{[0, 1, 2].map((i) => <Skeleton key={i} className="h-8 w-20 rounded-soft" />)}</div>
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
+          <CardSkeleton lines={4} />
+          <CardSkeleton lines={3} />
+          <CardSkeleton lines={5} />
+        </div>
+      </SkeletonPage>
+    );
   }
 
   return (
