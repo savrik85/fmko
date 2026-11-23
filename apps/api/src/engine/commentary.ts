@@ -40,7 +40,7 @@ const FALLBACK_TEMPLATES = [
   { event_type: 'substitution', template: 'Střídání: {player}.', tags: [], district: null },
   { event_type: 'special', template: '{player} na míči.', tags: ['possession'], district: null },
   { event_type: 'special', template: 'Konec zápasu! Obě mužstva míří do hospody na rozbor.', tags: ['full_time'], district: null },
-  { event_type: 'special', template: 'Píská se konec! Rozhodčí utíká k autu — pro jistotu.', tags: ['poor_referee'], district: null },
+  { event_type: 'special', template: 'Píská se konec! Rozhodčí utíká k autu, pro jistotu.', tags: ['poor_referee'], district: null },
   { event_type: 'goal', template: 'GÓÓÓL! {player} doráží po vyraženém míči!', tags: ['scramble'], district: null },
   { event_type: 'penalty', template: 'Penalta! Míč si bere {player}.', tags: [], district: null },
   { event_type: 'corner', template: 'Roh zahrává {player}.', tags: [], district: null },
