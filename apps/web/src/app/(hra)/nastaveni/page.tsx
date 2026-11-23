@@ -115,7 +115,7 @@ function usePushNotifications() {
 }
 
 const REPLAY_VIEW_OPTIONS: ReadonlyArray<ChoiceOption<ReplayView>> = [
-  { value: "2d", label: <span className="inline-flex items-center gap-1.5"><PitchIcon />Plánek</span> },
+  { value: "2d", label: <span className="inline-flex items-center gap-1.5"><PitchIcon />Hřiště</span> },
   { value: "3d", label: <span className="inline-flex items-center gap-1.5"><VideoIcon />Video</span> },
 ];
 
