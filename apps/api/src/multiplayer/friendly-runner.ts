@@ -321,7 +321,7 @@ export async function simulateFriendlyMatches(db: D1Database): Promise<number> {
       await db.prepare(
         `UPDATE matches SET status = 'simulated', home_score = ?, away_score = ?,
          events = ?, commentary = ?, attendance = ?, stadium_name = ?, pitch_condition = ?, weather = ?,
-         home_lineup_data = ?, away_lineup_data = ?, absences = ?, possession_home = ?,
+         home_lineup_data = ?, away_lineup_data = ?, absences = ?, possession_home = ?, referee_grade = ?,
          simulated_at = strftime('%Y-%m-%dT%H:%M:%SZ', 'now') WHERE id = ?`
       ).bind(
         result.homeScore, result.awayScore,
@@ -331,6 +331,8 @@ export async function simulateFriendlyMatches(db: D1Database): Promise<number> {
         JSON.stringify(homeLineupData), JSON.stringify(awayLineupData),
         matchAbsences.length > 0 ? JSON.stringify(matchAbsences) : null,
         result.possessionHome,
+        // Rozhodčí přáteláku jméno nemá, známku ale ano: řídí se jí jeho odchod ve 3D záznamu, stejně jako komentář konce zápasu.
+        result.refereeGrade,
         matchId,
       ).run();
       if (result.factors) {
