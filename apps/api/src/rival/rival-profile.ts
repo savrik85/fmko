@@ -141,24 +141,26 @@ export function lineupTactics(raw: string | null): { formation: string; tactic: 
   }
 }
 
-/** Čas z `seasons.created_at` („2026-07-04 08:53:56“, UTC) nebo ISO data zápasu. */
+/** Čas z data zápasu: ISO („…T…Z“) i SQLite („2026-04-04 20:59:56“, UTC). */
 const toTime = (s: string): number => Date.parse(s.includes("T") ? s : `${s.replace(" ", "T")}Z`);
 
 /**
- * Sezóna podle data: ta, která začala naposledy před zápasem. Pro přáteláky a turnaj,
- * které číslo sezóny u sebe nemají. Před první sezónou null.
+ * Sezóna přáteláku nebo turnaje, které číslo sezóny u sebe nemají: první sezóna týmu, jejíž poslední
+ * ligové kolo ještě nebylo (stejně jako Rozpis: přátelák po posledním kole sezóny patří do další).
+ * `seasonEnds` = poslední kolo každé sezóny týmu, i neodehrané kolo běžící sezóny.
+ * Kalendáře různých soutěží se v čase překrývají, proto se nepoužívá datum založení sezóny.
  */
-export function seasonAt(date: string | null, seasons: ReadonlyArray<{ number: number; startedAt: string }>): number | null {
-  if (!date) return null;
+export function seasonOfDate(date: string | null, seasonEnds: ReadonlyArray<{ season: number; lastAt: string }>): number | null {
+  if (!date || seasonEnds.length === 0) return null;
   const at = toTime(date);
-  let found: number | null = null;
-  let foundStart = -Infinity;
-  for (const s of seasons) {
-    const start = toTime(s.startedAt);
-    if (start <= at && start > foundStart) {
-      found = s.number;
-      foundStart = start;
-    }
-  }
-  return found;
+  const ordered = [...seasonEnds].sort((a, b) => a.season - b.season);
+  const current = ordered.find((s) => toTime(s.lastAt) >= at);
+  return current ? current.season : ordered[ordered.length - 1].season + 1;
+}
+
+/** Vzájemné zápasy: nejnovější sezóna nahoře a v ní nejnovější zápas, bez sezóny na konci. */
+export function sortHeadToHead<T extends { season: number | null; date: string | null }>(matches: readonly T[]): T[] {
+  const time = (d: string | null) => (d ? toTime(d) : 0);
+  return [...matches].sort((a, b) =>
+    (b.season ?? -Infinity) - (a.season ?? -Infinity) || time(b.date) - time(a.date));
 }

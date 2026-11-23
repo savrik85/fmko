@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
-  goalPeriods, lineAverages, outcome, periodIndex, recordFor, summarizeHeadToHead, lineupTactics, seasonAt,
+  goalPeriods, lineAverages, outcome, periodIndex, recordFor, summarizeHeadToHead, lineupTactics, seasonOfDate, sortHeadToHead,
 } from "./rival-profile";
 
 describe("výsledek vzájemného zápasu", () => {
@@ -112,22 +112,41 @@ describe("rozestavení ze záznamu sestavy", () => {
   });
 });
 
-describe("sezóna podle data", () => {
-  const seasons = [
-    { number: 1, startedAt: "2026-03-29 09:17:29" },
-    { number: 2, startedAt: "2026-07-04 08:53:56" },
-    { number: 3, startedAt: "2026-10-21 17:50:36" },
+describe("sezóna přáteláku a turnaje podle ligových kol týmu", () => {
+  // Poslední kolo každé sezóny mého týmu (včetně ještě neodehraných kol běžící sezóny).
+  const seasonEnds = [
+    { season: 3, lastAt: "2027-01-29T17:00:00.000Z" },
+    { season: 1, lastAt: "2026-09-18T16:00:00.000Z" },
+    { season: 2, lastAt: "2026-10-12T16:00:00.000Z" },
   ];
 
-  it("zápas patří do sezóny, která začala naposledy před ním", () => {
-    expect(seasonAt("2026-05-01T16:00:00Z", seasons)).toBe(1);
-    expect(seasonAt("2026-07-04T09:00:00Z", seasons)).toBe(2);
-    expect(seasonAt("2026-11-11T17:01:09Z", seasons)).toBe(3);
+  it("zápas patří do první sezóny, jejíž poslední kolo ještě nebylo", () => {
+    expect(seasonOfDate("2026-05-01T16:00:00Z", seasonEnds)).toBe(1);
+    expect(seasonOfDate("2026-09-18T16:00:00Z", seasonEnds)).toBe(1);
+    expect(seasonOfDate("2026-09-20T10:00:00Z", seasonEnds)).toBe(2);
+    expect(seasonOfDate("2026-11-11 17:01:09", seasonEnds)).toBe(3);
   });
 
-  it("před první sezónou nebo bez data null", () => {
-    expect(seasonAt("2026-01-01T00:00:00Z", seasons)).toBeNull();
-    expect(seasonAt(null, seasons)).toBeNull();
-    expect(seasonAt("2026-05-01T16:00:00Z", [])).toBeNull();
+  it("po posledním kole poslední sezóny je to příprava na další sezónu", () => {
+    expect(seasonOfDate("2027-02-10T10:00:00Z", seasonEnds)).toBe(4);
+  });
+
+  it("bez data nebo bez ligových kol null", () => {
+    expect(seasonOfDate(null, seasonEnds)).toBeNull();
+    expect(seasonOfDate("2026-05-01T16:00:00Z", [])).toBeNull();
+  });
+});
+
+describe("řazení vzájemných zápasů", () => {
+  it("nejdřív podle sezóny, pak podle data, nejnovější první; bez sezóny na konci", () => {
+    const sorted = sortHeadToHead([
+      { id: "a", season: 3, date: "2026-10-06T21:44:55Z" },
+      { id: "b", season: 4, date: "2026-10-01T16:04:38Z" },
+      { id: "c", season: null, date: "2026-12-01T10:00:00Z" },
+      { id: "d", season: 4, date: "2026-11-23T17:02:18Z" },
+      { id: "e", season: 1, date: "2026-04-04 20:59:56" },
+      { id: "f", season: 1, date: "2026-04-10T10:00:00Z" },
+    ]);
+    expect(sorted.map((m) => m.id)).toEqual(["d", "b", "a", "f", "e", "c"]);
   });
 });
