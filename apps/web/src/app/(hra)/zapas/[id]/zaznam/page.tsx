@@ -50,8 +50,8 @@ const SCENE_MS = {
   coach: STEP_SECONDS.coach * 1000, handshake: STEP_SECONDS.handshake * 1000, setup: STEP_SECONDS.setup * 1000,
   attack: STEP_SECONDS.attack * 1000, drama: STEP_SECONDS.drama * 1000, goal: STEP_SECONDS.goal * 1000,
 };
-/** Před touhle minutou zápasu jde video rovnou od začátku; později se záznam zeptá, odkud ho pustit. */
-const VIDEO_ASKS_FROM = 5;
+/** Před touhle minutou zápasu (tedy jen v nulté) jde video rovnou od začátku; později se záznam zeptá, odkud ho pustit. */
+const VIDEO_ASKS_FROM = 1;
 /** Poměr stran okna záznamu (šířka : výška). */
 const VIEWER_ASPECT = 2.2;
 /** Po skoku na akci stojí její první snímek, než se rozběhne (ať je vidět, kam se skočilo). */
@@ -281,7 +281,11 @@ export default function MatchReplayPage() {
   const startVideo = (fromStart: boolean) => {
     setChoosingVideo(false);
     setView3d(true);
-    if (fromStart) begin(true);
+    if (fromStart) return begin(true);
+    // „Pokračovat od X. minuty“: video začne první akcí té minuty (není-li v ní žádná, nejbližší další). O přestávce,
+    // při výkopu a po konci zápasu zůstává záznam tam, kde je.
+    const first = finished || htPause || kickoff !== null ? undefined : starts.find((k) => match!.events[k].minute >= curMin);
+    if (first !== undefined) jumpTo(first);
   };
   const switchView = () => {
     markVideoTried();
