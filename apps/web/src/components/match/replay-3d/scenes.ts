@@ -177,11 +177,14 @@ export function chanceResult(e: ReplayEvent): ShotResult {
 /** Kdo při střídání odchází: „X za Y“, u vyloučeného brankáře „X jde do brány za vyloučeného gólmana, ven jde Y“. */
 export const substitutedOut = (e: ReplayEvent) => e.description.match(/(?: za | ven jde )([^,]+)$/)?.[1].trim();
 
+const SET_PIECES = ["corner", "freekick", "penalty"];
+const isFinish = (e: ReplayEvent) => e.type === "goal" || e.type === "chance";
+
 /** Události jedné akce (roh → gól → asistence, šance → zákrok, faul → karta…) tvoří jeden klip. */
 function follows(head: ReplayEvent, e: ReplayEvent): boolean {
   if (e.minute !== head.minute) return false;
   const sameTeam = e.teamId === head.teamId;
-  const finish = sameTeam && (e.type === "goal" || e.type === "chance" || e.type === "assist");
+  const finish = sameTeam && (isFinish(e) || e.type === "assist");
   switch (head.type) {
     case "corner":
     case "freekick": return finish;
@@ -200,9 +203,11 @@ function actionHeads(events: ReplayEvent[]): number[] {
   const heads: number[] = [];
   events.forEach((e, i) => {
     const head = heads[i - 1];
+    // Standardka má jedno zakončení: další šance nebo gól týmu ve stejné minutě je už nová akce ze hry.
+    const secondFinish = i > 0 && isFinish(e) && SET_PIECES.includes(events[head].type) && events.slice(head + 1, i).some(isFinish);
     // Střídání za zraněného (hned po jeho zranění) je vždy samo, i když tým ve stejné minutě střídá dál.
     const forInjured = i > 0 && events[head].type === "substitution" && events[head - 1]?.type === "injury" && events[head - 1].teamId === events[head].teamId;
-    const chained = i > 0 && !forInjured && (follows(events[head], e) || (head !== i - 1 && follows(events[i - 1], e)));
+    const chained = i > 0 && !forInjured && !secondFinish && (follows(events[head], e) || (head !== i - 1 && follows(events[i - 1], e)));
     heads.push(chained ? head : i);
   });
   return heads;

@@ -27,7 +27,10 @@ type Outfit = Pick<ReplayKit, "shirt" | "shorts" | "socks">;
 const REFEREE_KIT: Outfit = { shirt: "#111827", shorts: "#111827", socks: "#111827" };
 /** Trenér má bundu v barvě dresu svého týmu a tmavé kalhoty. */
 const COACH_TROUSERS = "#1F2937";
-/** Brankář dostane první barvu, která se neplete s dresy obou týmů ani s druhým brankářem. */
+/**
+ * Brankář dostane první barvu, která se neplete s dresy obou týmů, s rozhodčím ani s druhým brankářem.
+ * Když se pletou všechny, tu nejvzdálenější.
+ */
 const KEEPER_PALETTE = ["#FACC15", "#22C55E", "#EC4899", "#F97316", "#A855F7", "#E5E7EB"];
 const CARD_COLORS = { yellow: "#FACC15", red: "#DC2626" };
 /** Postavy jsou o kus větší než skutečnost, ať jsou z televizního pohledu čitelné i v malém okně. */
@@ -58,9 +61,10 @@ const LOOKAHEAD = 0.1;
 
 function keeperShirts(home: ReplayKit, away: ReplayKit): { home: string; away: string } {
   const taken = [home.shirt, away.shirt, REFEREE_KIT.shirt].map((c) => new THREE.Color(c));
+  const distance = (c: THREE.Color) => Math.min(...taken.map((t) => Math.hypot(c.r - t.r, c.g - t.g, c.b - t.b)));
   const pick = () => {
-    const color = KEEPER_PALETTE.map((c) => new THREE.Color(c)).find((c) => taken.every((t) => Math.hypot(c.r - t.r, c.g - t.g, c.b - t.b) > 0.45));
-    if (!color) throw new Error("Pro brankáře nezbyla barva dresu");
+    const colors = KEEPER_PALETTE.map((c) => new THREE.Color(c));
+    const color = colors.find((c) => distance(c) > 0.45) ?? colors.reduce((best, c) => (distance(c) > distance(best) ? c : best));
     taken.push(color);
     return `#${color.getHexString()}`;
   };
