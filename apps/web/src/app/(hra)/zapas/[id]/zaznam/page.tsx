@@ -11,6 +11,7 @@ import type { BadgePattern } from "@/components/ui";
 import { actionStarts, scenedEvents, shootoutEvents, STEP_SECONDS, substitutionsTogether, type ReplayKit } from "@/components/match/replay-3d/scenes";
 import { cachedReplayView, DEFAULT_REPLAY_VIEW, fetchReplayView, type ReplayView } from "@/lib/ui-prefs";
 import { PitchIcon, VideoIcon } from "@/components/match/replay-view-icons";
+import { VideoLoading } from "@/components/match/replay-3d/VideoLoading";
 
 interface MatchEvent { minute: number; type: string; playerId: number; playerName: string; teamId: number; description: string; detail?: string; }
 interface LineupPlayer { id: string; name: string; position: string; naturalPosition: string; rating: number }
@@ -739,6 +740,8 @@ export default function MatchReplayPage() {
                   <div className="text-xs sm:text-base text-white/75">Přepni pod záznamem na Hřiště a zápas dohraj tam.</div>
                 </div>
               )}
+              {/* Kód videa se teprve stahuje. */}
+              {view3d && !failed3d && !Replay3D && <VideoLoading />}
               {view3d && !failed3d && Replay3D && (
                 <Replay3D detail={match.detail} events={match.events} onReady={() => setReady3d(true)} onFailure={() => setFailed3d(true)} onSecondHalf={startSecondHalf}
                   progress={{ take, idx, flash, intro, kickoff, halfTime: htPause, finished, paused, cue, fast: speed === "fast", homeGoals: hg, awayGoals: ag }} />

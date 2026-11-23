@@ -5,6 +5,7 @@ import { apiFetch } from "@/lib/api";
 import { builtExtensionsOf } from "@/components/stadium/stadium-3d/stand-levels";
 import type { WeatherType } from "@/components/stadium/stadium-3d/constants";
 import { Stadium3D } from "@/components/stadium/stadium-3d/Stadium3D";
+import { VideoLoading } from "./VideoLoading";
 import { venueExtensions, venueFacilities } from "@/app/(hra)/turnaj/venue-scene";
 import { ReplayScene, type ReplayStep } from "./ReplayScene";
 import { CoachCard, EventCard, EventLabel, initials, ReplayMark, ScoreBug } from "./graphics";
@@ -170,11 +171,14 @@ function Replay3DView({ detail, events, progress, onReady, onSecondHalf }: Repla
         attendanceRatio={attendance !== null && stadium?.capacity ? Math.min(1, attendance / stadium.capacity) : undefined}
         initialWeather={(detail.weather as WeatherType | null) ?? "sunny"}
         showControls={false}
-        frozen={paused}
+        // Dokud se scéna načítá, kreslí se i při pauze: jinak by se plynulosti nedočkala.
+        frozen={paused && ready}
         // Pohled „z tribuny“ nemá rozostření okrajů, které stadion používá u pohledů z dálky.
         initialViewpoint="main_stand"
         replay={<ReplayScene replay={replay} kits={kits} snow={detail.weather === "snow"} overview={overview} step={step} root={frame} veil={veil} onReady={() => { setReady(true); onReady(); }} />}
       />}
+      {/* Načítání zakrývá scénu, dokud se nekreslí plynule: první snímky se zadrhávají. */}
+      {!ready && <VideoLoading />}
       {/* Při střihu tu doznívá poslední snímek starého záběru (kreslí a zprůhledňuje ho scéna); grafika zůstává nad ním. */}
       <canvas ref={veil} style={{ opacity: 0 }} className="absolute inset-0 z-10 w-full h-full pointer-events-none" />
 
