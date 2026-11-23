@@ -103,6 +103,10 @@ function Replay3DView({ detail, events, progress, onReady }: Replay3DProps) {
       apiFetch<StadiumData>(`/api/teams/${homeTeamId}/stadium`).then(setStadium).catch((e) => console.error("stadion pro 3D záznam:", e));
     }
   }, [venue, homeTeamId]);
+  // Scéna se staví, až je známo, jak stadion vypadá: jinak by se záznam rozběhl na výchozím hřišti a tribuny by
+  // naskočily až během něj. Dokud se podoba nenačte, záznam čeká (hráč může přepnout na tracker). Velkoklub
+  // z poháru stadion ve hře nemá, hraje se na výchozím.
+  const stadiumKnown = stadium !== null || (!venue?.look && !homeTeamId);
 
   const [fullscreen, setFullscreen] = useState(false);
   // Pohled: televizní kamera z tribuny, nebo celý stadion z výšky.
@@ -136,7 +140,7 @@ function Replay3DView({ detail, events, progress, onReady }: Replay3DProps) {
 
   return (
     <div ref={frame} className={`group/shot bg-black ${fullscreen ? "fixed inset-0 z-50" : "absolute inset-0 z-20"}`}>
-      <Stadium3D
+      {stadiumKnown && <Stadium3D
         pitchCondition={(detail.pitch_condition as number | null) ?? 85}
         pitchType={(venue?.look?.pitch_type as string) ?? (detail.pitch_type as string) ?? "natural"}
         facilities={stadium?.facilities ?? { stands: 1, fence: 1, entrance_gate: 1 }}
@@ -156,7 +160,7 @@ function Replay3DView({ detail, events, progress, onReady }: Replay3DProps) {
         // Pohled „z tribuny“ nemá rozostření okrajů, které stadion používá u pohledů z dálky.
         initialViewpoint="main_stand"
         replay={<ReplayScene replay={replay} kits={kits} snow={detail.weather === "snow"} overview={overview} step={step} root={frame} veil={veil} onReady={onReady} />}
-      />
+      />}
       {/* Při střihu tu doznívá poslední snímek starého záběru (kreslí a zprůhledňuje ho scéna); grafika zůstává nad ním. */}
       <canvas ref={veil} style={{ opacity: 0 }} className="absolute inset-0 z-10 w-full h-full pointer-events-none" />
 
