@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback } from "react";
 import type { VillageSelection } from "@/app/onboarding/page";
 import type { Player } from "@/lib/api";
 import { PlayerRevealCard } from "@/components/players/reveal-card";
+import { Spinner } from "@/components/ui";
 
 interface Props {
   village: VillageSelection;
@@ -77,7 +78,8 @@ export function StepReveal({ teamName, primaryColor, players, onComplete }: Prop
         {!isComplete && Array.from({ length: Math.min(3, players.length - revealedCount) }).map((_, i) => (
           <div key={`ph-${i}`}
             className="aspect-[3/4] rounded-2xl border-2 border-dashed border-pitch-500/10 flex items-center justify-center">
-            <div className="w-8 h-8 rounded-full border-2 border-pitch-500/20 border-t-pitch-500/60 animate-spin" />
+            {/* Prázdné místo pro kartu: míček jen napůl viditelný, ať nekřičí víc než odhalené karty. */}
+            <div className="opacity-40"><Spinner /></div>
           </div>
         ))}
       </div>

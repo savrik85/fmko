@@ -29,6 +29,7 @@ import { PostFX } from "./PostFX";
 import { PerformanceMonitor } from "@react-three/drei";
 import { WindContext, windStrength } from "./wind";
 import { BakedShadows } from "./BakedShadows";
+import { Spinner } from "@/components/ui/spinner";
 import {
   getStadiumLayout,
   getViewpoints,
@@ -472,9 +473,8 @@ export function Stadium3D({
       {/* Decentní úvodní indikátor načítání 3D scény */}
       {!isSceneReady && (
         <div className="absolute inset-0 z-30 flex flex-col items-center justify-center bg-[#141b26] text-white transition-opacity duration-300 pointer-events-none select-none">
-          <div className="relative mb-3 flex items-center justify-center">
-            <div className="w-10 h-10 border-3 border-pitch-500/30 border-t-pitch-400 rounded-full animate-spin shadow-lg" />
-            <span className="absolute text-sm">🏟️</span>
+          <div className="mb-3">
+            <Spinner size="lg" />
           </div>
           <div className="font-heading font-extrabold text-sm tracking-wide text-white/90">
             Načítám 3D areál...

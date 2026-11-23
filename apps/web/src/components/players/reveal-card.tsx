@@ -6,7 +6,7 @@ import { FaceAvatar } from "./face-avatar";
 import { nationalityFlag } from "@/lib/nationality";
 import { readableOnLight, bestTextOn } from "@/lib/team-color";
 import { formatKg } from "@/lib/player-attrs";
-import { StatusChip } from "@/components/ui";
+import { Spinner, StatusChip } from "@/components/ui";
 
 interface RevealCardProps {
   player: Player;
@@ -113,7 +113,7 @@ export function PlayerRevealCard({ player, teamColor, delay = 0, onRevealed }: R
           border: isCeleb ? "2px solid rgba(196,160,53,0.5)" : "1px solid rgba(45,95,45,0.3)",
         }}>
         <div className="text-center">
-          <div className={`w-8 h-8 rounded-full border-2 animate-spin mx-auto mb-2 ${isCeleb ? "border-gold-500/40 border-t-gold-400" : "border-pitch-500/40 border-t-pitch-400"}`} />
+          <div className="flex justify-center mb-2"><Spinner /></div>
           <span className={`text-micro font-heading uppercase tracking-wider ${isCeleb ? "text-gold-500/60" : "text-pitch-500/40"}`}>
             {isCeleb ? "Hvězda přichází..." : "Odhaluji..."}
           </span>

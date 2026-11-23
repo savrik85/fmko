@@ -225,7 +225,7 @@ export function StadiumPhotoCard({ data, isOwner, tone = "dark", showFacts = tru
               </>
             ) : (
               <>
-                <div className="w-10 h-10 border-4 border-emerald-500/30 border-t-emerald-400 rounded-full animate-spin" />
+                <Spinner size="lg" />
                 <div className="font-heading font-bold text-base">Fotím stadion z 3D modelu…</div>
                 <div className="text-sm text-slate-300">Tribuny, barvy i reklamy jsou přesně podle areálu klubu.</div>
               </>
