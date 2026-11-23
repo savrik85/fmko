@@ -185,7 +185,8 @@ function Replay3DView({ detail, events, progress, onReady, onSecondHalf }: Repla
       {ready && <div className="absolute top-0 left-0 z-30 origin-top-left pointer-events-none" style={{ width: GRAPHICS_WIDTH, height: fit.height, transform: `scale(${fit.scale})` }}>
         {/* Nahoře vedle sebe: vlevo výsledková tabulka, vpravo nápis akce. */}
         <div className="absolute top-2 inset-x-2 flex items-start gap-2">
-          <ScoreBug detail={detail} homeGoals={homeGoals} awayGoals={awayGoals} minute={minute} scored={scored} fast={fast} />
+          {/* O přestávce a po konci zápasu v obraze žádná akce není, tabulka je bez minuty. */}
+          <ScoreBug detail={detail} homeGoals={homeGoals} awayGoals={awayGoals} minute={halfTime || finished ? undefined : minute} scored={scored} fast={fast} />
           <EventLabel {...graphics} override={fixedLabel} />
         </div>
         <ReplayMark />
