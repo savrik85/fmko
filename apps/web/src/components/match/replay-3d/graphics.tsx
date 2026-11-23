@@ -186,7 +186,7 @@ export function ScoreBug({ detail, homeGoals, awayGoals, minute, scored, fast }:
     const name = detail[`${side}_name`] as string, flying = scored === side && step < 3;
     return (
       <div className={`flex items-center gap-2 ${side === "away" ? "flex-row-reverse" : ""}`}>
-        <span className={`w-1.5 self-stretch ${side === "home" ? "rounded-l-lg" : ""}`} style={{ backgroundColor: kitColor(detail, side) }} />
+        <span className={`w-1.5 self-stretch ${side === "home" ? "rounded-l-lg" : minute === undefined ? "rounded-r-lg" : ""}`} style={{ backgroundColor: kitColor(detail, side) }} />
         <span className="font-bold text-base truncate max-w-[9rem]">{name}</span>
         <span className="relative font-[900] text-2xl tabular-nums">
           {flying ? goals - 1 : goals}
