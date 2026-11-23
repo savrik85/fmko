@@ -175,7 +175,7 @@ export default function MatchReplayPage() {
   const prevBallX = useRef(50);
 
   const [stadiumInfo, setStadiumInfo] = useState<{ name: string; pitchCondition: number } | null>(null);
-  // Záznam začíná ve 2D („Plánek“), nebo rovnou ve 3D („Video“), když si to hráč vybral v Nastavení; přepnout jde
+  // Záznam začíná ve 2D („Hřiště“), nebo rovnou ve 3D („Video“), když si to hráč vybral v Nastavení; přepnout jde
   // kdykoli. Kdo video ještě nikdy nepustil (prohlížeč si to pamatuje), toho na něj zve bublina u tlačítka.
   const [view3d, setView3d] = useState(false);
   /** Hráč klikl na Video a vybírá, odkud ho pustit; záznam zatím stojí a 3D scéna se ještě nenačítá. */
@@ -199,7 +199,7 @@ export default function MatchReplayPage() {
   };
   /**
    * Pohled, ve kterém se záznam rozběhne (předvolba účtu z Nastavení). Hned platí poslední známá z prohlížeče;
-   * když tu žádná není, záznam se startem počká na API. Když API selže, je to Plánek jako dřív.
+   * když tu žádná není, záznam se startem počká na API. Když API selže, je to 2D jako dřív.
    */
   const [openingView, setOpeningView] = useState<ReplayView | null>(null);
   useEffect(() => {
@@ -289,7 +289,7 @@ export default function MatchReplayPage() {
       setView3d(false);
       // Až se hráč na video vrátí, scéna se načítá znovu.
       setReady3d(false);
-      // Plánek představení trenérů nemá: začíná výkopem.
+      // 2D představení trenérů nemá: začíná výkopem.
       if (intro !== null) begin(false);
     } else if (curMin < VIDEO_ASKS_FROM) {
       startVideo(true);
@@ -736,7 +736,7 @@ export default function MatchReplayPage() {
               {view3d && failed3d && (
                 <div className="absolute inset-0 z-20 flex flex-col items-center justify-center gap-1 px-6 bg-[#0a0a0a]/90 text-center font-heading text-white">
                   <div className="font-[900] text-base sm:text-2xl">Video se nepodařilo přehrát</div>
-                  <div className="text-xs sm:text-base text-white/75">Přepni pod záznamem na Plánek a zápas dohraj tam.</div>
+                  <div className="text-xs sm:text-base text-white/75">Přepni pod záznamem na Hřiště a zápas dohraj tam.</div>
                 </div>
               )}
               {view3d && !failed3d && Replay3D && (
@@ -868,7 +868,7 @@ export default function MatchReplayPage() {
         {/* 2D/3D pod záznamem, ne přes obraz zápasu: dřív tlačítko a bublina „Vyzkoušej video“ překrývaly hřiště. */}
         {can3d && (
           <div className="flex gap-1 p-1 rounded-xl bg-white shadow-md" role="group" aria-label="Zobrazení záznamu">
-            {([["Plánek", false], ["Video", true]] as const).map(([label, is3d]) => {
+            {([["Hřiště", false], ["Video", true]] as const).map(([label, is3d]) => {
               const active = view3d === is3d;
               return (
                 <button key={label} onClick={() => { if (!active) switchView(); }} aria-pressed={active}
