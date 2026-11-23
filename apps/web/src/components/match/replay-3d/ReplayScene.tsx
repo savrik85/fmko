@@ -51,6 +51,8 @@ const DISSOLVE = 0.35;
 const SEAM = 0.25;
 /** Výška boků sedícího náhradníka nad zemí (sedačka střídačky je ve výšce 0,5 m). */
 const SEAT_HIP_Y = 0.6;
+/** Po kolika plynulých snímcích za sebou se scéna považuje za načtenou. */
+const SMOOTH_FRAMES = 10;
 /** Jak daleko dopředu v klipu (sekundy) se po střihu měří rychlost a směr postav. */
 const LOOKAHEAD = 0.1;
 
@@ -243,7 +245,9 @@ export function ReplayScene({ replay, kits, snow, overview, step, root, veil, on
   /** Prolnutí střihu: `wanted` = po vykreslení zkopírovat obraz na `veil`, `taken` = zkopírováno, `left` = kolik sekund ještě doznívá. */
   const blend = useRef({ wanted: false, taken: false, left: 0 });
   const look = useRef(new THREE.Vector3());
-  const drawn = useRef(false);
+  /** Kolik snímků po sobě se nakreslilo bez zadrhnutí a jestli už scéna ohlásila, že je připravená. */
+  const smooth = useRef(0);
+  const ready = useRef(false);
 
   useEffect(() => {
     gl.clippingPlanes = overview ? [] : CLIP_PLANES;
@@ -286,10 +290,9 @@ export function ReplayScene({ replay, kits, snow, overview, step, root, veil, on
   };
 
   useFrame((_, delta) => {
-    if (!drawn.current) {
-      drawn.current = true;
-      onReady();
-    }
+    // Záznam se rozběhne, až se scéna kreslí plynule: první snímky po načtení trvají i sekundy (překládají se
+    // shadery, dotahují modely) a úvod by mezitím proběhl za načítáním.
+    if (!ready.current && (ready.current = (smooth.current = delta < 0.25 ? smooth.current + 1 : 0) >= SMOOTH_FRAMES)) onReady();
     const { play, rate, hold } = step.current;
     const dt = Math.min(delta, 0.1);
     const p = playback.current;
