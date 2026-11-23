@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback, useRef } from "react";
+import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { useTeam } from "@/context/team-context";
 import { apiFetch } from "@/lib/api";
@@ -8,6 +8,8 @@ import { Spinner, BadgePreview, JerseyPreview } from "@/components/ui";
 import { PositionBadge } from "@/components/ui/position-badge";
 import { bestTextOn } from "@/lib/team-color";
 import type { BadgePattern } from "@/components/ui";
+import { BANNERS_BOTTOM, BANNERS_INSET, OVERLAY_BUTTON, OVERLAY_FAINT, OVERLAY_GAP } from "@/components/match/replay-3d/overlay";
+import { actionStarts, scenedEvents, shootoutEvents, STEP_SECONDS, substitutionsTogether, type ReplayKit } from "@/components/match/replay-3d/scenes";
 
 interface MatchEvent { minute: number; type: string; playerId: number; playerName: string; teamId: number; description: string; detail?: string; }
 interface LineupPlayer { id: string; name: string; position: string; naturalPosition: string; rating: number }
@@ -16,6 +18,8 @@ interface LineupData { starters: LineupPlayer[]; subs: LineupPlayer[]; formation
 interface MatchData {
   id: string; home_team_id: string; away_team_id: string; home_score: number; away_score: number; round: number | null;
   roundName: string | null; isCup: boolean;
+  /** Celý detail zápasu z API pro 3D záznam (dresy, vzhled hráčů, stadion). */
+  detail: Record<string, unknown>;
   events: MatchEvent[]; commentary: string[];
   home_name: string; away_name: string; home_color: string; away_color: string;
   home_secondary: string; away_secondary: string; home_badge: string; away_badge: string;
@@ -29,7 +33,62 @@ const TACTIC_LABEL: Record<string, string> = {
 };
 
 type Speed = "live" | "fast" | "instant";
-const SPEED_MS: Record<Speed, number> = { live: 3500, fast: 600, instant: 0 };
+/** Jak dlouho drží kroky 2D záznamu (ms). `plain` je čekání u běžné události, ostatní jsou kroky s nápisem přes hřiště. */
+const FLAT_MS = { kickoff: 3000, secondHalf: 2500, plain: 3500, attack: 3500, goal: 6000, chance: 3000, drama: 4000, penalty: 7000 };
+const FLAT_FAST_MS = { ...FLAT_MS, plain: 600, attack: 1800, drama: 2500, penalty: 4000 };
+/**
+ * Ve 3D drží krok tak dlouho jako jeho scéna („Rychle“ ji přehrává dvakrát rychleji) a hned po něm přijde další,
+ * ať obraz po odehrané akci nestojí; události bez scény proběhnou okamžitě (`plain`). `setup` je rozehrání před
+ * šancí nebo kartou (roh, standardka, faul): útok nebo karta na ně navazují bez střihu. Gól končí opakovaným
+ * záběrem. `substitution` je jedno střídání; hromadné si dělí krok `drama`. Kroky, jejichž délku určuje scéna,
+ * jsou ze STEP_SECONDS.
+ */
+const SCENE_MS = {
+  substitution: 2600, kickoff: 5000, secondHalf: 5000, plain: 0, chance: 2200, penalty: 4500,
+  coach: STEP_SECONDS.coach * 1000, handshake: STEP_SECONDS.handshake * 1000, setup: STEP_SECONDS.setup * 1000,
+  attack: STEP_SECONDS.attack * 1000, drama: STEP_SECONDS.drama * 1000, goal: STEP_SECONDS.goal * 1000,
+};
+/** Do které minuty zápasu se video při prvním přepnutí pustí od úplného začátku. */
+const VIDEO_RESTART_UNTIL = 20;
+/** Poměr stran okna záznamu (šířka : výška). */
+const VIEWER_ASPECT = 2.2;
+/** Po skoku na akci stojí její první snímek, než se rozběhne (ať je vidět, kam se skočilo). */
+const CUE_MS = 700;
+
+/**
+ * Časovač kroků záznamu. Běží vždy jen jeden: další krok se plánuje, až ten předchozí skončí, a nový plán
+ * (skok na jinou akci) ten rozběhnutý ruší. Pauza ho zastaví a po ní doběhne zbytek.
+ */
+function useStepTimer(paused: boolean) {
+  const slot = useRef<{ fn: () => void; left: number; armedAt: number; id?: ReturnType<typeof setTimeout> } | null>(null);
+  const halted = useRef(paused);
+  const arm = () => {
+    const s = slot.current;
+    if (!s || halted.current) return;
+    s.armedAt = performance.now();
+    s.id = setTimeout(() => { slot.current = null; s.fn(); }, s.left);
+  };
+  useEffect(() => {
+    halted.current = paused;
+    const s = slot.current;
+    if (!s) return;
+    if (!paused) return arm();
+    clearTimeout(s.id);
+    s.left -= performance.now() - s.armedAt;
+  }, [paused]);
+  const cancel = () => { clearTimeout(slot.current?.id); slot.current = null; };
+  useEffect(() => cancel, []);
+  /** Naplánuje krok a vrátí funkci, která ho zruší (pokud mezitím nebyl naplánován jiný). */
+  const later = (ms: number, fn: () => void) => {
+    cancel();
+    const s: NonNullable<typeof slot.current> = { fn, left: ms, armedAt: 0 };
+    slot.current = s;
+    arm();
+    return () => { if (slot.current === s) cancel(); };
+  };
+  return { later, cancel };
+}
+
 function ini(n: string) { return n.split(" ").map((w) => w[0]).filter(Boolean).slice(0, 2).join("").toUpperCase(); }
 
 /* ── Zone from event: 0=home defense, 1=midfield, 2=home attack ── */
@@ -105,6 +164,8 @@ export default function MatchReplayPage() {
   const [finished, setFinished] = useState(false);
   const [htPause, setHtPause] = useState(false);
   const [htDone, setHtDone] = useState(false);
+  // 3D záznam: před výkopem představení trenérů a podání rukou.
+  const [intro, setIntro] = useState<"home" | "away" | "handshake" | null>(null);
   const [kickoff, setKickoff] = useState<"1st" | "2nd" | null>(null);
   const [flash, setFlash] = useState<"goal" | "card" | "chance" | "attacking" | "injury" | "penalty" | null>(null);
   const [flashEvent, setFlashEvent] = useState<MatchEvent | null>(null);
@@ -113,6 +174,101 @@ export default function MatchReplayPage() {
   const prevBallX = useRef(50);
 
   const [stadiumInfo, setStadiumInfo] = useState<{ name: string; pitchCondition: number } | null>(null);
+  // Záznam začíná ve 2D („Tracker“), na 3D („Video“) se přepíná. Kdo video ještě nikdy nepustil (prohlížeč si to
+  // pamatuje), toho na něj zve bublina u tlačítka.
+  const [view3d, setView3d] = useState(false);
+  const [videoTried, setVideoTried] = useState(true);
+  useEffect(() => { setVideoTried(localStorage.getItem("replayVideoTried") !== null); }, []);
+  // 3D záznam se nestáhl nebo spadl: v okně je o tom zpráva a záznam stojí, dokud hráč nepřepne na 2D.
+  const [failed3d, setFailed3d] = useState(false);
+  const [Replay3D, setReplay3D] = useState<typeof import("@/components/match/replay-3d/Replay3D").Replay3D | null>(null);
+  /**
+   * Jak se záznam rozběhl: "2d" = od začátku v trackeru a video v zápase ještě neběželo, "3d" = video už běželo,
+   * null = ještě se nerozběhl (čeká na zápas nebo na 3D scénu).
+   */
+  const started = useRef<"2d" | "3d" | null>(null);
+  // 3D záznam ukazuje jen důležité akce; události bez scény (držení míče, počasí…) v něm proběhnou hned.
+  const can3d = !!match?.home_lineup_data && !!match?.away_lineup_data;
+  const long3d = view3d && can3d;
+  const sceneMs = (step: keyof typeof SCENE_MS) => SCENE_MS[step] / (speed === "fast" ? 2 : 1);
+  const stepMs = (step: keyof typeof FLAT_MS) => (long3d ? sceneMs(step) : (speed === "fast" ? FLAT_FAST_MS : FLAT_MS)[step]);
+  // 3D záznam se stáhne, až když ho hráč má zapnutý (po chybě znovu, až se na něj vrátí).
+  useEffect(() => {
+    if (!long3d || Replay3D) return;
+    import("@/components/match/replay-3d/Replay3D").then((m) => setReplay3D(() => m.Replay3D))
+      .catch((e) => { console.error("3D záznam se nepodařilo stáhnout:", e); setFailed3d(true); });
+  }, [long3d, Replay3D]);
+  // Zápas se rozběhne, až je 3D scéna načtená; jinak by výkop proběhl za načítacím kolečkem.
+  const [ready3d, setReady3d] = useState(false);
+  const scened = useMemo(() => (match && can3d ? scenedEvents(match.events) : null), [match, can3d]);
+  // Pauza a skok na předchozí/další akci.
+  const [paused, setPaused] = useState(false);
+  const { later, cancel } = useStepTimer(paused || failed3d);
+  const starts = useMemo(() => (match ? actionStarts(match.events) : []), [match]);
+  /** Po skoku: akce, jejíž první snímek chvíli stojí, než se rozběhne. */
+  const [cue, setCue] = useState<number | null>(null);
+  const jumpTo = (k: number) => {
+    if (!match) return;
+    const before = match.events.slice(0, k);
+    setHg(before.filter((e) => e.type === "goal" && e.teamId === 1).length);
+    setAg(before.filter((e) => e.type === "goal" && e.teamId !== 1).length);
+    setFlash(null); setFlashEvent(null); setIntro(null); setKickoff(null); setHtPause(false); setFinished(false); setPaused(false);
+    // Po „Konec“ by se záznam hned zase přetočil na konec.
+    if (speed === "instant") setSpeed("live");
+    // Skok rovnou do druhého poločasu přestávku nespouští.
+    setHtDone((match.events[k]?.minute ?? 0) > 45);
+    setIdx(k);
+    setCue(k);
+    // Dokud snímek stojí, záznam čeká; akci pak rozběhne krok záznamu níž.
+    animating.current = true;
+    later(CUE_MS, () => { animating.current = false; setTick((t) => t + 1); });
+  };
+  /** Kolikrát se záznam pustil od začátku; 3D podle toho pozná, že má úvod přehrát znovu. */
+  const [take, setTake] = useState(0);
+  /** Záznam od začátku: představení trenérů (jen 3D, `withIntro`), výkop, hra. */
+  const begin = (withIntro: boolean) => {
+    if (!match) return;
+    setHg(0); setAg(0); setIdx(0); setCue(null); setFlash(null); setFlashEvent(null); setHtPause(false); setHtDone(false); setFinished(false); setPaused(false);
+    if (speed === "instant") setSpeed("live");
+    setTake((n) => n + 1);
+    animating.current = true;
+    // Představí se trenéři, které kluby mají; ruce si podají, jen když jsou oba.
+    const coaches = withIntro ? (["home", "away"] as const).filter((side) => match.detail[`${side}_coach`]) : [];
+    const steps = [...coaches, ...(coaches.length === 2 ? (["handshake"] as const) : [])];
+    const run = (n: number) => {
+      if (n < steps.length) {
+        setIntro(steps[n]);
+        later(sceneMs(steps[n] === "handshake" ? "handshake" : "coach"), () => run(n + 1));
+        return;
+      }
+      setIntro(null);
+      setKickoff("1st");
+      later(stepMs("kickoff"), () => { setKickoff(null); animating.current = false; setTick((t) => t + 1); });
+    };
+    run(0);
+  };
+  const switchView = () => {
+    if (!videoTried) {
+      localStorage.setItem("replayVideoTried", "1");
+      setVideoTried(true);
+    }
+    setFailed3d(false);
+    setView3d(!view3d);
+    if (!view3d && started.current !== "3d") {
+      // Video se v zápase poprvé pustí od úplného začátku (od představení trenérů), pokud zápas teprve začal;
+      // rozběhne se, až je scéna načtená. Později v zápase a při dalších přepnutích pokračuje tam, kde záznam je.
+      if (curMin < VIDEO_RESTART_UNTIL) cancel();
+      started.current = curMin < VIDEO_RESTART_UNTIL ? null : "3d";
+    } else if (view3d && intro !== null) {
+      // Tracker představení trenérů nemá: začíná výkopem.
+      begin(false);
+    }
+  };
+  /** Událost, která se právě hraje (při „ŠANCE!“ ta, která teprve přijde; po skoku ta, na které záznam stojí). */
+  const playing = cue ?? (flash === "attacking" ? idx : idx - 1);
+  // Po konci zápasu je „předchozí“ jeho poslední akce.
+  const previousAction = finished ? starts.at(-1) : starts.findLast((k) => k < (starts.findLast((x) => x <= playing) ?? 0));
+  const nextAction = starts.find((k) => k > playing);
 
   useEffect(() => {
     const hydrate = (r: Record<string, unknown>) => {
@@ -121,8 +277,9 @@ export default function MatchReplayPage() {
       setMatch({
         id: r.id as string, home_team_id: r.home_team_id as string, away_team_id: r.away_team_id as string,
         home_score: r.home_score as number, away_score: r.away_score as number, round: r.round as number | null,
-        roundName: (r.roundName as string) ?? null, isCup: r.isCup === true,
-        events: ev, commentary: co,
+        roundName: (r.roundName as string) ?? null, isCup: r.isCup === true, detail: r,
+        // Penaltový rozstřel se přehraje jako události za koncem zápasu.
+        events: [...ev, ...shootoutEvents(r)], commentary: co,
         home_name: (r.home_name as string) ?? "Domácí", away_name: (r.away_name as string) ?? "Hosté",
         home_color: (r.home_color as string) ?? "#2D5F2D", away_color: (r.away_color as string) ?? "#D94032",
         home_secondary: (r.home_secondary as string) ?? "#FFF", away_secondary: (r.away_secondary as string) ?? "#FFF",
@@ -185,30 +342,34 @@ export default function MatchReplayPage() {
 
   // Show kickoff when match loads — block replay via animating ref
   useEffect(() => {
-    if (!match) return;
-    setKickoff("1st");
-    animating.current = true;
-    const t = setTimeout(() => { setKickoff(null); animating.current = false; setTick((t) => t + 1); }, 3000);
-    return () => clearTimeout(t);
-  }, [!!match]);
+    if (!match || started.current || (long3d && !ready3d)) return;
+    started.current = long3d ? "3d" : "2d";
+    begin(long3d);
+  }, [!!match, long3d, ready3d]);
 
   // Kickoff 2nd half — auto-dismiss
   useEffect(() => {
     if (kickoff !== "2nd") return;
     animating.current = true;
-    const t = setTimeout(() => { setKickoff(null); animating.current = false; setTick((t) => t + 1); }, 2500);
-    return () => clearTimeout(t);
+    return later(stepMs("secondHalf"), () => { setKickoff(null); animating.current = false; setTick((t) => t + 1); });
   }, [kickoff]);
 
   // Auto-advance
   useEffect(() => {
-    if (!match || finished || htPause || animating.current) return;
-    if (idx >= match.events.length) { setFinished(true); setHg(match.home_score); setAg(match.away_score); markSeen(); return; }
+    if (!match || !started.current || finished || htPause) return;
+    // „Konec“ platí hned, i uprostřed rozehraného kroku.
     if (speed === "instant") {
-      let h = 0, a = 0;
-      for (const e of match.events) { if (e.type === "goal") { if (e.teamId === 1) h++; else a++; } }
-      setHg(h); setAg(a); setIdx(match.events.length); setFinished(true); setKickoff(null); markSeen(); return;
+      cancel();
+      animating.current = false;
+      setHg(match.home_score); setAg(match.away_score); setIdx(match.events.length); setFinished(true);
+      setIntro(null); setKickoff(null); setFlash(null); setFlashEvent(null); setCue(null); setPaused(false); markSeen(); return;
     }
+    if (animating.current) return;
+    // Po skoku se akce rozběhne ve stejném kroku, ve kterém zmizí její stojící snímek.
+    const afterJump = cue !== null;
+    if (afterJump) setCue(null);
+    const endStep = () => { setFlash(null); setFlashEvent(null); animating.current = false; setTick((t) => t + 1); };
+    if (idx >= match.events.length) { setFinished(true); setHg(match.home_score); setAg(match.away_score); markSeen(); return; }
     const next = match.events[idx];
     if (next.type === "special" && next.description.includes("Poločas")) { setIdx((i) => i + 1); return; }
     const prev = idx > 0 ? match.events[idx - 1]?.minute ?? 0 : 0;
@@ -220,13 +381,11 @@ export default function MatchReplayPage() {
       setFlashEvent(next);
       setFlash("penalty");
       setIdx((i) => i + 1);
-      const dur = speed === "fast" ? 4000 : 7000;
-      setTimeout(() => { setFlash(null); setFlashEvent(null); animating.current = false; setTick((t) => t + 1); }, dur);
+      later(stepMs("penalty"), endStep);
       return;
     }
 
     // Chances and goals: show "attacking" phase first for drama
-    // Use ref-based timeout to avoid cleanup issues
     // Zahozená penalta má napětí za sebou (bylo u nařízení) — jde rovnou k výsledku
     const isPenaltyOutcome = next.type === "chance"
       && (next.detail === "penalty_missed" || next.detail === "penalty_saved");
@@ -239,32 +398,42 @@ export default function MatchReplayPage() {
       if (isShot) {
         setFlash("attacking");
         setFlashEvent(next);
-        const atkDur = speed === "fast" ? 1800 : 3500;
-        setTimeout(() => {
+        later(stepMs("attack"), () => {
           if (next.type === "goal") {
             if (next.teamId === 1) setHg((s) => s + 1); else setAg((s) => s + 1);
             setFlash("goal");
             setIdx((i) => i + 1);
-            setTimeout(() => { setFlash(null); setFlashEvent(null); animating.current = false; setTick((t) => t + 1); }, 6000);
+            later(stepMs("goal"), endStep);
           } else {
             setFlash("chance");
             setIdx((i) => i + 1);
-            setTimeout(() => { setFlash(null); setFlashEvent(null); animating.current = false; setTick((t) => t + 1); }, 3000);
+            later(stepMs("chance"), endStep);
           }
-        }, atkDur);
+        });
       } else {
         setFlashEvent(next);
         setFlash(next.type === "card" ? "card" : isPenaltyOutcome ? "chance" : "injury");
         setIdx((i) => i + 1);
-        const dur = speed === "fast" ? 2500 : 4000;
-        setTimeout(() => { setFlash(null); setFlashEvent(null); animating.current = false; setTick((t) => t + 1); }, dur);
+        later(stepMs("drama"), endStep);
       }
-      return; // No cleanup — timeouts are fire-and-forget
+      return;
     }
 
-    const t = setTimeout(() => { setIdx((i) => i + 1); }, SPEED_MS[speed]);
-    return () => clearTimeout(t);
-  }, [match, idx, speed, finished, htPause, htDone, tick, markSeen]);
+    // Ve 3D mají vlastní krok i scény, které 2D záznam jen vypíše: rozehrání před šancí nebo kartou (roh, standardka,
+    // faul), střídání a kop v rozstřelu.
+    if (long3d && scened?.[idx]) {
+      animating.current = true;
+      setIdx((i) => i + 1);
+      // Hromadné střídání je jedna scéna: její krok si střídání rozdělí, ať se vystřídají titulky všech.
+      const together = substitutionsTogether(match.events, idx);
+      later(next.type === "corner" || next.type === "freekick" || next.type === "foul" ? sceneMs("setup")
+        : together > 1 ? sceneMs("drama") / together : sceneMs(next.type === "substitution" ? "substitution" : "drama"), endStep);
+      return;
+    }
+    // Po skoku se nečeká a událost se ukáže hned, ve stejném kroku jako zmizí stojící snímek.
+    if (afterJump) { setIdx((i) => i + 1); return; }
+    return later(stepMs("plain"), () => setIdx((i) => i + 1));
+  }, [match, idx, speed, finished, htPause, htDone, tick, markSeen, long3d, scened, cue]);
 
   if (loading) return <div className="flex items-center justify-center min-h-[60vh]"><Spinner /></div>;
   if (!match || match.events.length === 0) return (
@@ -276,7 +445,9 @@ export default function MatchReplayPage() {
 
   const hc = match.home_color;
   const ac = match.away_color;
-  const activeTeamColor = cur ? (cur.teamId === 1 ? hc : ac) : "#666";
+  // Dres v záhlaví a barva týmu u hřiště jsou podle dresů, ve kterých se hrálo (hosté mohli nastoupit ve venkovních).
+  const homeKit = match.detail.home_kit as ReplayKit, awayKit = match.detail.away_kit as ReplayKit;
+  const activeTeamColor = cur ? (cur.teamId === 1 ? homeKit : awayKit).shirt : "#666";
 
   return (
     <div className="max-w-4xl mx-auto px-3 py-2 space-y-1.5">
@@ -287,7 +458,7 @@ export default function MatchReplayPage() {
           <div className="flex flex-col sm:flex-row items-center sm:gap-2 gap-2 flex-1 min-w-0">
             <div className="flex items-center gap-2">
               <BadgePreview primary={hc} secondary={match.home_secondary} pattern={match.home_badge as BadgePattern} initials={ini(match.home_name)} size={36} />
-              <JerseyPreview primary={hc} secondary={match.home_secondary} size={28} />
+              <JerseyPreview primary={homeKit.shirt} secondary={homeKit.secondary} pattern={homeKit.pattern} size={28} />
             </div>
             <span className="font-heading font-bold text-white text-xs sm:text-lg text-center sm:text-left break-words leading-tight">{match.home_name}</span>
           </div>
@@ -304,7 +475,7 @@ export default function MatchReplayPage() {
           </div>
           <div className="flex flex-col sm:flex-row items-center sm:gap-2 gap-2 flex-1 min-w-0 sm:justify-end">
             <div className="flex items-center gap-2 sm:order-last">
-              <JerseyPreview primary={ac} secondary={match.away_secondary} size={28} />
+              <JerseyPreview primary={awayKit.shirt} secondary={awayKit.secondary} pattern={awayKit.pattern} size={28} />
               <BadgePreview primary={ac} secondary={match.away_secondary} pattern={match.away_badge as BadgePattern} initials={ini(match.away_name)} size={36} />
             </div>
             <span className="font-heading font-bold text-white text-xs sm:text-lg text-center sm:text-right break-words leading-tight">{match.away_name}</span>
@@ -330,7 +501,7 @@ export default function MatchReplayPage() {
       {/* ═══ PITCH VISUALIZATION (bet365/Sportradar style) ═══ */}
       <div className="rounded-b-xl overflow-hidden relative" style={{ background: "#1a2a1a" }}>
         {/* Pitch area */}
-        <div className="relative mx-3 my-3" style={{ aspectRatio: "2.2/1" }}>
+        <div className="relative mx-3 my-3 overflow-hidden rounded-control" style={{ aspectRatio: VIEWER_ASPECT }}>
           {/* Dark pitch with subtle lines */}
           <svg viewBox="0 0 100 45" className="absolute inset-0 w-full h-full">
             {/* Pitch background — color reflects pitch condition (lighter = better visible) */}
@@ -507,9 +678,38 @@ export default function MatchReplayPage() {
             )}
           </svg>
 
+          {/* 3D záznam kreslí totéž co 2D hřiště pod ním; potřebuje uložené sestavy. */}
+          {can3d && (
+            <>
+              {view3d && failed3d && (
+                <div className="absolute inset-0 z-20 flex flex-col items-center justify-center gap-1 px-6 bg-[#0a0a0a]/90 text-center font-heading text-white">
+                  <div className="font-[900] text-base sm:text-2xl">Video se nepodařilo přehrát</div>
+                  <div className="text-xs sm:text-base text-white/75">Přepni vlevo nahoře na Tracker a zápas dohraj tam.</div>
+                </div>
+              )}
+              {view3d && !failed3d && Replay3D && (
+                <Replay3D detail={match.detail} events={match.events} onReady={() => setReady3d(true)} onFailure={() => setFailed3d(true)}
+                  progress={{ take, idx, flash, intro, kickoff, halfTime: htPause, finished, paused, cue, fast: speed === "fast", homeGoals: hg, awayGoals: ag }} />
+              )}
+              <button onClick={switchView} title={view3d ? "Přepnout na tracker" : "Přepnout na video"}
+                // Pod horními nápisy videa a stejně daleko od kraje: `top` je v procentech výšky okna, proto poměr stran.
+                style={{ top: `calc(${BANNERS_BOTTOM * VIEWER_ASPECT * 100}% + ${OVERLAY_GAP}px)`, left: `${BANNERS_INSET * 100}%` }}
+                className={`${OVERLAY_BUTTON} z-30 px-2 ${videoTried ? OVERLAY_FAINT : ""}`}>
+                {view3d ? "Tracker" : "Video"}
+                {/* Kdo video ještě nezkusil, tomu na tlačítko ukazuje žlutá bublina. */}
+                {!videoTried && (
+                  <span className="absolute left-full top-0 ml-2.5 h-7 px-2 flex items-center rounded-md bg-yellow-400 text-black whitespace-nowrap shadow-md pointer-events-none">
+                    {/* Šipka z levého kraje bubliny k tlačítku. */}
+                    <span className="absolute right-full top-1/2 -translate-y-1/2 border-y-[5px] border-y-transparent border-r-[6px] border-r-yellow-400" />
+                    Vyzkoušej video
+                  </span>
+                )}
+              </button>
+            </>
+          )}
           {/* Team color side bars */}
-          <div className="absolute left-0 top-0 bottom-0 w-2 rounded-l" style={{ backgroundColor: hc }} />
-          <div className="absolute right-0 top-0 bottom-0 w-2 rounded-r" style={{ backgroundColor: ac }} />
+          <div className="absolute left-0 top-0 bottom-0 w-1.5" style={{ backgroundColor: homeKit.shirt }} />
+          <div className="absolute right-0 top-0 bottom-0 w-1.5" style={{ backgroundColor: awayKit.shirt }} />
 
           {/* GOAL: full overlay with CSS animation */}
           {flash === "goal" && (
@@ -608,25 +808,38 @@ export default function MatchReplayPage() {
         {/* Team labels under pitch */}
         <div className="flex justify-between px-4 pt-2">
           <div className="flex items-center gap-2">
-            <div className="w-3 h-3 rounded-tight" style={{ backgroundColor: hc }} />
+            <div className="w-3 h-3 rounded-tight" style={{ backgroundColor: homeKit.shirt }} />
             <span className="font-heading font-bold text-white text-sm">{match.home_name}</span>
           </div>
           <div className="flex items-center gap-2">
             <span className="font-heading font-bold text-white text-sm">{match.away_name}</span>
-            <div className="w-3 h-3 rounded-tight" style={{ backgroundColor: ac }} />
+            <div className="w-3 h-3 rounded-tight" style={{ backgroundColor: awayKit.shirt }} />
           </div>
         </div>
 
         {/* Stats under pitch */}
         <div className="px-4 pb-3 space-y-1">
-          <StatBar label="Střely" home={st.hs} away={st.as} hc={hc} ac={ac} />
-          <StatBar label="Fauly" home={st.hf} away={st.af} hc={hc} ac={ac} />
-          {(st.hc > 0 || st.ac > 0) && <StatBar label="Karty" home={st.hc} away={st.ac} hc={hc} ac={ac} />}
+          <StatBar label="Střely" home={st.hs} away={st.as} hc={homeKit.shirt} ac={awayKit.shirt} />
+          <StatBar label="Fauly" home={st.hf} away={st.af} hc={homeKit.shirt} ac={awayKit.shirt} />
+          {(st.hc > 0 || st.ac > 0) && <StatBar label="Karty" home={st.hc} away={st.ac} hc={homeKit.shirt} ac={awayKit.shirt} />}
         </div>
       </div>
 
       {/* ═══ CONTROLS ═══ */}
-      <div className="flex justify-center gap-3 py-2">
+      <div className="flex flex-wrap justify-center items-center gap-3 py-2">
+        {/* Přetáčení po akcích a pauza; čára je dělí od rychlosti přehrávání. */}
+        <div className="flex gap-3 pr-3 border-r-2 border-black/15">
+          {([
+            ["Předchozí akce", "\u2759\u25C0", () => (previousAction !== undefined ? jumpTo(previousAction) : begin(long3d)), false],
+            [paused ? "Pokračovat" : "Pauza", paused ? "\u25B6" : "\u275A\u275A", () => setPaused((p) => !p), finished || htPause],
+            ["Další akce", "\u25B6\u2759", () => nextAction !== undefined && jumpTo(nextAction), nextAction === undefined],
+          ] as const).map(([title, label, onClick, disabled], n) => (
+            <button key={n}onClick={onClick} disabled={disabled} title={title}
+              className="w-12 py-3 rounded-xl text-base font-heading font-bold uppercase tracking-wide bg-white text-muted hover:text-ink shadow-md transition-all disabled:opacity-40 disabled:hover:text-muted">{label}</button>
+          ))}
+        </div>
+        {/* Rychlost drží pohromadě: když se řada nevejde, spadne pod přetáčení celá. */}
+        <div className="flex gap-3">
         {!finished && !htPause && (["live", "fast", "instant"] as Speed[]).map((s) => (
           <button key={s} onClick={() => setSpeed(s)}
             className={`px-6 py-3 rounded-xl text-base font-heading font-bold uppercase tracking-wide transition-all ${
@@ -637,6 +850,7 @@ export default function MatchReplayPage() {
         {/* Pozadím je dres domácích — u bílého (#FFFFFF) by bílý popisek zmizel a tlačítko nešlo přečíst. */}
         {htPause && <button onClick={() => { setHtPause(false); setHtDone(true); setKickoff("2nd"); }} className={`px-8 py-3 rounded-xl text-base font-heading font-bold uppercase shadow-lg ${bestTextOn(hc) === "light" ? "text-white" : "text-gray-900"}`} style={{ backgroundColor: hc }}>2. poločas {"\u25B6"}</button>}
         {finished && <button onClick={() => router.push(`/zapas/${matchId}`)} className={`px-10 py-3 rounded-xl text-lg font-heading font-bold uppercase shadow-lg ${bestTextOn(hc) === "light" ? "text-white" : "text-gray-900"}`} style={{ backgroundColor: hc }}>Pokračovat na přehled</button>}
+        </div>
       </div>
 
       {/* ═══ TICKER ═══ */}
@@ -689,12 +903,12 @@ export default function MatchReplayPage() {
       </div>
 
       {/* ═══ KEY EVENTS TIMELINE — bottom ═══ */}
-      {vis.some((e) => e.type === "goal" || e.type === "card" || e.type === "injury") && (
+      {vis.some((e) => e.type === "goal" || e.type === "card" || e.type === "injury" || e.type === "substitution") && (
         <div className="card rounded-xl overflow-hidden px-4 py-2">
-          {vis.filter((e) => e.type === "goal" || e.type === "card" || e.type === "injury").map((e, i) => {
+          {vis.filter((e) => e.type === "goal" || e.type === "card" || e.type === "injury" || e.type === "substitution").map((e, i) => {
             const isHome = e.teamId === 1;
-            const icon = e.type === "goal" ? "\u26BD" : e.type === "card" ? (e.detail === "red" ? "\u{1F7E5}" : "\u{1F7E8}") : "\u{1F3E5}";
-            const color = e.type === "goal" ? "text-green-700 font-bold" : e.type === "card" ? (e.detail === "red" ? "text-red-600" : "text-yellow-600") : "text-red-500";
+            const icon = e.type === "goal" ? "\u26BD" : e.type === "card" ? (e.detail === "red" ? "\u{1F7E5}" : "\u{1F7E8}") : e.type === "substitution" ? "\u{1F501}" : "\u{1F3E5}";
+            const color = e.type === "goal" ? "text-green-700 font-bold" : e.type === "card" ? (e.detail === "red" ? "text-red-600" : "text-yellow-600") : e.type === "substitution" ? "text-muted" : "text-red-500";
             return (
               <div key={i} className="flex items-center gap-2 py-1 text-base font-heading">
                 <div className="flex-1 text-right">{isHome && <span className={color}>{e.playerName} {icon}</span>}</div>

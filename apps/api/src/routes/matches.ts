@@ -7,6 +7,7 @@ import type { Bindings } from "../index";
 import { requireAdmin, requireTeamOwnership } from "../auth/middleware";
 import { getSession, getTokenFromRequest } from "../auth/session";
 import { logger } from "../lib/logger";
+import { loadMatchLook } from "../lib/match-look";
 import { mustSeason } from "../lib/season";
 import { STAND_COLUMNS, standFacilities, type StandSide } from "../stadium/stands-model";
 import { cupKickoffIso, pragueKickoffIso } from "../lib/match-tick-schedule";
@@ -978,9 +979,13 @@ matchesRouter.get("/matches/:id", async (c) => {
       merge(awayLineup);
     } catch (e) { logger.warn({ module: "matches" }, "merge squad numbers", e); }
   }
+  // Dresy a vzhled hráčů pro 3D záznam zápasu.
+  const look = await loadMatchLook(c.env.DB, { teamId: row.home_team_id as string | null }, { teamId: row.away_team_id as string | null },
+    homeLineup, awayLineup, row.calendar_at as string | null);
 
   return c.json({
     ...row,
+    ...look,
     events: JSON.parse((row.events as string) ?? "[]"),
     commentary: JSON.parse((row.commentary as string) ?? "[]"),
     player_ratings: JSON.parse((row.player_ratings as string) ?? "{}"),
@@ -1043,9 +1048,14 @@ matchesRouter.get("/cup-matches/:id", async (c) => {
       }
     } catch (e) { logger.warn({ module: "matches" }, "merge cup squad numbers", e); }
   }
+  // Velkoklub nemá řádek v teams: dres v barvě z cup_teams.
+  const look = await loadMatchLook(c.env.DB, { teamId: row.home_real_id as string | null, fallbackColor: row.home_color as string | null },
+    { teamId: row.away_real_id as string | null, fallbackColor: row.away_color as string | null }, homeLineup, awayLineup,
+    cupKickoffIso(row.scheduled_at as string));
 
   return c.json({
     ...row,
+    ...look,
     id: row.id,
     isCup: true,
     round: null,

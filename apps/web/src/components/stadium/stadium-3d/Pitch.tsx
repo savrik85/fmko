@@ -4,7 +4,7 @@ import { useMemo, useRef } from "react";
 import { useFrame } from "@react-three/fiber";
 import { useWind } from "./wind";
 import * as THREE from "three";
-import { PITCH, pitchColor, type WeatherType, type TimeOfDay, PITCH_SURFACE_Y } from "./constants";
+import { GOAL_NAME, PITCH, pitchColor, type WeatherType, type TimeOfDay, PITCH_SURFACE_Y } from "./constants";
 import { GrassBlades } from "./GrassBlades";
 import { generatePitchSurface, generateSnowPitchSurface, type MowingPattern } from "./grassTexture";
 import { generateNetTexture, type NetPattern, type NetStyle } from "./materialTextures";
@@ -36,6 +36,8 @@ interface PitchProps {
   /** Stébla trávy u nízkých kamer (jen počítač — na mobilu by stála moc výkonu). */
   grassBlades?: boolean;
   timeOfDay?: TimeOfDay;
+  /** Záznam zápasu: bez míče na středu (má vlastní) a se širšími čárami, které jsou z televizní kamery vidět celé. */
+  broadcast?: boolean;
 }
 
 /**
@@ -192,6 +194,7 @@ export function Pitch({
   snowCleared = false,
   grassBlades = false,
   timeOfDay = "day",
+  broadcast = false,
 }: PitchProps) {
   // Vyhřívání roztaví sníh na hrací ploše — okolí, střídačky ani terén ale
   // zasněžené zůstanou, takže je zelený obdélník uprostřed bílého areálu vidět.
@@ -201,9 +204,10 @@ export function Pitch({
   // Ohrnuté hřiště se kreslí jako tráva (rozbředlá), ne jako sněhová pokrývka.
   const isCleared = snowFalling && snowCleared;
   const isSnow = snowFalling && !snowCleared;
-  const hasLines = condition >= 20;
-  const hasCenter = condition >= 40;
-  const hasFull = condition >= 65;
+  // Zápas se bez nalajnovaného hřiště nehraje: v záznamu jsou čáry všechny, i na zničeném trávníku.
+  const hasLines = broadcast || condition >= 20;
+  const hasCenter = broadcast || condition >= 40;
+  const hasFull = broadcast || condition >= 65;
   const hasStripes = condition >= 50;
 
   // Hřiště je naplocho na zemi (rotation -π/2 kolem X)
@@ -334,7 +338,8 @@ export function Pitch({
       ))}
 
       {/* Čáry hřiště */}
-      <PitchLines hasFull={hasFull} hasCenter={hasCenter} opacity={hasLines ? (condition < 35 ? 0.75 : 0.92) : 0} />
+      {/* Bez čar se nekreslí nic: neviditelné čáry by zapsaly hloubku a vyřízly se do kaluží. */}
+      {hasLines && <PitchLines hasFull={hasFull} hasCenter={hasCenter} wide={broadcast} opacity={condition < 35 ? 0.75 : 0.92} />}
 
       {/* Rohové praporky */}
       <CornerFlags />
@@ -348,7 +353,7 @@ export function Pitch({
       {isCleared && <SnowPiles />}
 
       {/* Zápasový fotbalový míč na středu */}
-      {hasCenter && <MatchBall />}
+      {hasCenter && !broadcast && <MatchBall />}
 
       {/* Branky */}
       <Goal
@@ -504,10 +509,11 @@ function MatchBall() {
   );
 }
 
-function PitchLines({ hasFull, hasCenter, opacity }: { hasFull: boolean; hasCenter: boolean; opacity: number }) {
+function PitchLines({ hasFull, hasCenter, wide, opacity }: { hasFull: boolean; hasCenter: boolean; wide: boolean; opacity: number }) {
   const lineY = LINE_Y;
   const lineColor = "#fff";
-  const lineWidth = hasFull ? 0.25 : 0.15;
+  // Z nízké kamery za lajnou je čára podél hřiště tenčí než bod obrazu a trhá se, proto je při záznamu širší.
+  const lineWidth = wide ? 0.55 : hasFull ? 0.25 : 0.15;
 
   return (
     <group>
@@ -532,17 +538,18 @@ function PitchLines({ hasFull, hasCenter, opacity }: { hasFull: boolean; hasCent
         <meshBasicMaterial color={lineColor} transparent opacity={opacity} />
       </mesh>
 
-      {/* Pokutová území - velké */}
-      <Rect x={0} z={-HALF_D + 9} w={22} h={18} y={lineY} color={lineColor} width={lineWidth} opacity={opacity} />
-      <Rect x={0} z={HALF_D - 9}  w={22} h={18} y={lineY} color={lineColor} width={lineWidth} opacity={opacity} />
-
-      {/* Brankovista - malá (jen na full) */}
-      {hasFull && (
-        <>
-          <Rect x={0} z={-HALF_D + 3.5} w={14} h={7} y={lineY} color={lineColor} width={lineWidth} opacity={opacity} />
-          <Rect x={0} z={HALF_D - 3.5}  w={14} h={7} y={lineY} color={lineColor} width={lineWidth} opacity={opacity} />
-        </>
-      )}
+      {[-1, 1].map((end) => (
+        <group key={end}>
+          {/* Pokutové území a značka pokutového kopu */}
+          <Rect x={0} z={end * (HALF_D - PITCH.penaltyArea.depth / 2)} w={PITCH.penaltyArea.width} h={PITCH.penaltyArea.depth} y={lineY} color={lineColor} width={lineWidth} opacity={opacity} />
+          <mesh position={[0, lineY + 0.01, end * (HALF_D - PITCH.penaltySpot)]} rotation={[-Math.PI / 2, 0, 0]}>
+            <circleGeometry args={[0.3, 8]} />
+            <meshBasicMaterial color={lineColor} transparent opacity={opacity} />
+          </mesh>
+          {/* Brankoviště (jen na full) */}
+          {hasFull && <Rect x={0} z={end * (HALF_D - PITCH.goalArea.depth / 2)} w={PITCH.goalArea.width} h={PITCH.goalArea.depth} y={lineY} color={lineColor} width={lineWidth} opacity={opacity} />}
+        </group>
+      ))}
     </group>
   );
 }
@@ -688,7 +695,7 @@ function Goal({
   const braceColor = "#94A3B8";
 
   return (
-    <group position={position}>
+    <group position={position} name={GOAL_NAME}>
       {/* ─── Hlavní bílý rám branky ─── */}
       {/* Levý sloupek */}
       <mesh position={[-goalWidth / 2, goalHeight / 2, 0]} castShadow>
