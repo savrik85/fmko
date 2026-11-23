@@ -5,10 +5,11 @@ import { apiFetch } from "@/lib/api";
 import { builtExtensionsOf } from "@/components/stadium/stadium-3d/stand-levels";
 import type { WeatherType } from "@/components/stadium/stadium-3d/constants";
 import { Stadium3D } from "@/components/stadium/stadium-3d/Stadium3D";
+import { VideoLoading } from "./VideoLoading";
 import { venueExtensions, venueFacilities } from "@/app/(hra)/turnaj/venue-scene";
 import { ReplayScene, type ReplayStep } from "./ReplayScene";
 import { CoachCard, EventCard, EventLabel, initials, ReplayMark, ScoreBug } from "./graphics";
-import { BANNERS_BOTTOM, BANNERS_INSET, OVERLAY_BUTTON, OVERLAY_FAINT, OVERLAY_GAP, OVERLAY_HIDDEN, OVERLAY_SHOWN_MS } from "./overlay";
+import { BANNERS_BOTTOM, BANNERS_INSET, OVERLAY_BUTTON, OVERLAY_GAP, OVERLAY_HIDDEN, OVERLAY_SHOWN_MS } from "./overlay";
 import { Replay, shootoutScore, sideOf, type ReplayCoach, type ReplayEvent, type ReplayKit, type ReplayLineup } from "./scenes";
 
 /** Šířka okna záznamu, pro kterou je grafika navržená (px); v jiném okně se zmenší nebo zvětší celá, jako obraz videa. */
@@ -31,6 +32,8 @@ interface ReplayProgress {
   /** Po skoku na akci: událost, jejíž scéna má chvíli stát na prvním snímku. */
   cue: number | null;
   fast: boolean;
+  /** Minuta akce v obraze; stejnou má záhlaví záznamu nad videem. */
+  minute: number;
   homeGoals: number;
   awayGoals: number;
 }
@@ -68,7 +71,7 @@ export function Replay3D({ onFailure, ...props }: Replay3DProps & { /** 3D zázn
 }
 
 function Replay3DView({ detail, events, progress, onReady, onSecondHalf }: Replay3DProps) {
-  const { take, idx, flash, intro, kickoff, halfTime, finished, paused, cue, fast, homeGoals, awayGoals } = progress;
+  const { take, idx, flash, intro, kickoff, halfTime, finished, paused, cue, fast, homeGoals, awayGoals, minute } = progress;
   const homeName = detail.home_name as string;
   const kits = useMemo(() => ({ home: detail.home_kit as ReplayKit, away: detail.away_kit as ReplayKit }), [detail]);
   const pens = shootoutScore(detail);
@@ -83,8 +86,10 @@ function Replay3DView({ detail, events, progress, onReady, onSecondHalf }: Repla
   // Krok záznamu → záběr: „ŠANCE“ je útočná fáze události, která teprve přijde; jinak je v obraze poslední akce
   // (nebo výkop) a běží dál. Po skoku stojí cílová akce na prvním snímku (u šance na začátku útoku).
   const shot = flash === "attacking";
-  /** Událost, které patří grafika. */
+  /** Událost, na které záznam je (komu se připisuje gól). */
   const index = cue ?? (shot ? idx : idx - 1);
+  /** Akce, která je v obraze, a té patří nápis a titulek; -1 = výkop. Události bez scény obraz nemění, tak ani grafiku. */
+  const pictured = cue ?? (shot ? idx : replay.shownBefore(idx));
   const scene = useMemo(() => (cue !== null ? replay.scene(cue) : intro ? replay.intro() : finished ? replay.finale() : shot ? replay.scene(idx) : replay.before(idx)), [replay, cue, intro !== null, finished, shot, idx]); // eslint-disable-line react-hooks/exhaustive-deps
   const attack = cue !== null ? scene.split > scene.start : shot;
   // Skok začíná nový záběr, i když míří na akci, která zrovna běží.
@@ -128,7 +133,7 @@ function Replay3DView({ detail, events, progress, onReady, onSecondHalf }: Repla
     return () => observer.disconnect();
   }, []);
   const buttonsTop = fit.scale * GRAPHICS_WIDTH * BANNERS_BOTTOM + OVERLAY_GAP, buttonsRight = fit.scale * GRAPHICS_WIDTH * BANNERS_INSET;
-  // Na celé obrazovce jsou tlačítka vidět jen chvíli po pohybu myši nebo klepnutí.
+  // Tlačítka jsou vidět jen chvíli po pohybu myši nad obrazem nebo po klepnutí; když myš obraz opustí, zmizí hned.
   const [stirred, setStirred] = useState(false);
   const calm = useRef<ReturnType<typeof setTimeout>>(undefined);
   const stir = () => {
@@ -137,14 +142,12 @@ function Replay3DView({ detail, events, progress, onReady, onSecondHalf }: Repla
     calm.current = setTimeout(() => setStirred(false), OVERLAY_SHOWN_MS);
   };
   useEffect(() => () => clearTimeout(calm.current), []);
-  const buttonsShown = !fullscreen ? OVERLAY_FAINT : stirred ? "transition-opacity" : OVERLAY_HIDDEN;
-  const veil = useRef<HTMLCanvasElement>(null);
-  // Představení trenérů, výkop, přestávka a konec zápasu grafiku události nemají. Události bez scény taky ne: roh
-  // nebo standardka bez zakončení by jinak na okamžik ukázaly „ŠANCE“ nad obrazem předchozí akce.
-  const event = (cue === null && (intro !== null || kickoff !== null || halfTime || finished)) || !replay.scened[index] ? undefined : events[index];
+  const buttonsShown = stirred ? "transition-opacity" : OVERLAY_HIDDEN;
+  // Představení trenérů, výkop, přestávka a konec zápasu grafiku události nemají.
+  const event = (cue === null && (intro !== null || kickoff !== null || halfTime || finished)) || pictured < 0 ? undefined : events[pictured];
   const coachSide = intro === "home" || intro === "away" ? intro : null;
   const attendance = detail.attendance as number | null;
-  const graphics = { detail, events, index, event, attack };
+  const graphics = { detail, events, index: pictured, event, attack };
   const fixedLabel = finished ? { text: "KONEC ZÁPASU", sub: finalScore, tone: "info" as const }
     : coachSide ? { text: coachSide === "home" ? "TRENÉR DOMÁCÍCH" : "TRENÉR HOSTŮ", tone: "info" as const }
     : kickoff ? { text: "VÝKOP", sub: kickoff === "2nd" ? "2. poločas" : undefined, tone: "info" as const } : undefined;
@@ -153,7 +156,7 @@ function Replay3DView({ detail, events, progress, onReady, onSecondHalf }: Repla
   const scored = flash === "goal" && cue === null ? sideOf(events[index].teamId) : null;
 
   return (
-    <div ref={frame} onPointerMove={stir} onPointerDown={stir} className={`group/shot bg-black ${fullscreen ? "fixed inset-0 z-50" : "absolute inset-0 z-20"}`}>
+    <div ref={frame} onPointerMove={stir} onPointerDown={stir} onPointerLeave={(e) => { if (e.pointerType === "mouse") setStirred(false); }} className={`group/shot bg-black ${fullscreen ? "fixed inset-0 z-50" : "absolute inset-0 z-20"}`}>
       {stadiumKnown && <Stadium3D
         pitchCondition={(detail.pitch_condition as number | null) ?? 85}
         pitchType={(venue?.look?.pitch_type as string) ?? (detail.pitch_type as string) ?? "natural"}
@@ -170,18 +173,20 @@ function Replay3DView({ detail, events, progress, onReady, onSecondHalf }: Repla
         attendanceRatio={attendance !== null && stadium?.capacity ? Math.min(1, attendance / stadium.capacity) : undefined}
         initialWeather={(detail.weather as WeatherType | null) ?? "sunny"}
         showControls={false}
-        frozen={paused}
+        // Dokud se scéna načítá, kreslí se i při pauze: jinak by se plynulosti nedočkala.
+        frozen={paused && ready}
         // Pohled „z tribuny“ nemá rozostření okrajů, které stadion používá u pohledů z dálky.
         initialViewpoint="main_stand"
-        replay={<ReplayScene replay={replay} kits={kits} snow={detail.weather === "snow"} overview={overview} step={step} root={frame} veil={veil} onReady={() => { setReady(true); onReady(); }} />}
+        replay={<ReplayScene replay={replay} kits={kits} snow={detail.weather === "snow"} overview={overview} step={step} root={frame} onReady={() => { setReady(true); onReady(); }} />}
       />}
-      {/* Při střihu tu doznívá poslední snímek starého záběru (kreslí a zprůhledňuje ho scéna); grafika zůstává nad ním. */}
-      <canvas ref={veil} style={{ opacity: 0 }} className="absolute inset-0 z-10 w-full h-full pointer-events-none" />
+      {/* Načítání zakrývá scénu, dokud se nekreslí plynule: první snímky se zadrhávají. */}
+      {!ready && <VideoLoading />}
 
       {ready && <div className="absolute top-0 left-0 z-30 origin-top-left pointer-events-none" style={{ width: GRAPHICS_WIDTH, height: fit.height, transform: `scale(${fit.scale})` }}>
         {/* Nahoře vedle sebe: vlevo výsledková tabulka, vpravo nápis akce. */}
         <div className="absolute top-2 inset-x-2 flex items-start gap-2">
-          <ScoreBug detail={detail} homeGoals={homeGoals} awayGoals={awayGoals} minute={events[index]?.minute} scored={scored} fast={fast} />
+          {/* O přestávce a po konci zápasu v obraze žádná akce není, tabulka je bez minuty. */}
+          <ScoreBug detail={detail} homeGoals={homeGoals} awayGoals={awayGoals} minute={halfTime || finished ? undefined : minute} scored={scored} fast={fast} />
           <EventLabel {...graphics} override={fixedLabel} />
         </div>
         <ReplayMark />
