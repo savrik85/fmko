@@ -36,6 +36,7 @@ import clubPrefixRouter from "./routes/club-prefix";
 import { clubWebsiteRouter } from "./routes/club-website";
 import { squadAnalysisRouter } from "./routes/squad-analysis";
 import { menuBadgesRouter } from "./routes/menu-badges";
+import { uiPrefsRouter } from "./routes/ui-prefs";
 import { adminAiClubsRouter } from "./routes/admin-ai-clubs";
 import { adminAiCoachRouter } from "./routes/admin-ai-coach";
 import { guardTeamReads } from "./auth/team-read-guard";
@@ -181,6 +182,7 @@ app.route("/api", tournamentRouter);
 app.route("/api", clubPrefixRouter);
 app.route("/api", squadAnalysisRouter);
 app.route("/api", menuBadgesRouter);
+app.route("/api", uiPrefsRouter);
 app.route("/api/admin/ai-clubs", adminAiClubsRouter);
 app.route("/api/admin/ai-coach", adminAiCoachRouter);
 
