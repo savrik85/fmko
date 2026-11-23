@@ -25,7 +25,7 @@ export interface ReplayStep {
 /** Co má figura na sobě; vzor dresu mají jen hráči v poli. */
 type Outfit = Pick<ReplayKit, "shirt" | "shorts" | "socks">;
 const REFEREE_KIT: Outfit = { shirt: "#111827", shorts: "#111827", socks: "#111827" };
-/** Trenér má bundu v barvě dresu svého týmu a tmavé kalhoty. */
+/** Trenér má mikinu v barvě dresu svého týmu a tmavé kalhoty. */
 const COACH_TROUSERS = "#1F2937";
 /**
  * Brankář dostane první barvu, která se neplete s dresy obou týmů, s rozhodčím ani s druhým brankářem.
@@ -96,7 +96,7 @@ const PARTS: PartDef[] = [
   { id: "boot", geometry: new THREE.BoxGeometry(0.14, 0.11, 0.25).translate(0, 0, 0.05), on: "knee", drop: 0.43, color: (_, __, fig) => (fig.team === "referee" || fig.coach ? "#111111" : "#9CA3AF") },
   { id: "torso", geometry: new THREE.BoxGeometry(0.44, 0.56, 0.25), on: [0, 1.2, 0], drop: 0, color: (_, shirt) => shirt },
   { id: "sleeve", geometry: new THREE.BoxGeometry(0.13, 0.27, 0.14), on: "shoulder", drop: 0.12, color: (_, shirt) => shirt },
-  // Trenér má dlouhý rukáv (mikina nebo bunda).
+  // Trenér má dlouhý rukáv (mikina).
   { id: "forearm", geometry: new THREE.BoxGeometry(0.1, 0.3, 0.11), on: "elbow", drop: 0.14, color: (kit, shirt, fig) => (fig.coach ? shirt : skin(kit, shirt, fig)) },
   { id: "head", geometry: new THREE.SphereGeometry(0.13, 12, 10), on: [0, 1.63, 0], drop: 0, color: skin },
   { id: "hair", geometry: new THREE.BoxGeometry(0.25, 0.09, 0.26), on: [0, 1.73, -0.01], drop: 0, color: (_, __, fig) => fig.player.hairColor ?? null },
@@ -196,11 +196,6 @@ export function ReplayScene({ replay, kits, snow, overview, step, root, veil, on
   const frame = useMemo(() => emptyFrame(count), [count]);
   const states = useMemo<FigureState[]>(() => replay.figures.map(() => ({ x: 0, z: 0, yaw: 0, phase: 0, speed: 0 })), [replay]);
   const keepers = useMemo(() => keeperShirts(kits.home, kits.away), [kits]);
-  // Trenér má mikinu v barvě klubu; když sněží, tmavší bundu.
-  const coachTops = useMemo(() => {
-    const top = (side: Side) => (snow ? `#${new THREE.Color(kits[side].shirt).multiplyScalar(0.45).getHexString()}` : kits[side].shirt);
-    return { home: top("home"), away: top("away") };
-  }, [kits, snow]);
   const shirts = useMemo(() => {
     const canvas = document.createElement("canvas");
     canvas.width = TILE * Object.keys(SHIRT_TILES).length;
@@ -280,7 +275,7 @@ export function ReplayScene({ replay, kits, snow, overview, step, root, veil, on
       const mesh = meshes.current[p];
       if (!mesh) return;
       replay.figures.forEach((fig, i) => {
-        const kit: Outfit = fig.team === "referee" ? REFEREE_KIT : fig.coach ? { shirt: coachTops[fig.team], shorts: COACH_TROUSERS, socks: COACH_TROUSERS } : kits[fig.team];
+        const kit: Outfit = fig.team === "referee" ? REFEREE_KIT : fig.coach ? { shirt: kits[fig.team].shirt, shorts: COACH_TROUSERS, socks: COACH_TROUSERS } : kits[fig.team];
         const shirt = fig.team !== "referee" && clip.keepers.has(i) ? keepers[fig.team] : kit.shirt;
         // Hráč v poli má dres se vzorem svého týmu: trup bere barvy z textury, rukávy jsou u vzoru „sleeves“ doplňkové.
         const design = fig.team !== "referee" && !fig.coach && !clip.keepers.has(i) ? kits[fig.team] : null;
