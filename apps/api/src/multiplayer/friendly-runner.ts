@@ -344,7 +344,9 @@ export async function simulateFriendlyMatches(db: D1Database): Promise<number> {
       {
         if (!isNeutral) {
           const { applyPitchWear } = await import("../stadium/pitch-wear");
-          await applyPitchWear(db, homeTeamId, weather);
+          const care = await applyPitchWear(db, homeTeamId, weather);
+          const { saveStadiumSnapshot } = await import("../stadium/match-snapshot");
+          await saveStadiumSnapshot(db, "matches", matchId, homeTeamId, care.service);
         }
       }
 

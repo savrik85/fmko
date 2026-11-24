@@ -946,7 +946,10 @@ export async function runScheduledMatches(
                 // Devadesát minut na hřišti trávník stojí — nese to domácí tým.
                 {
                     const { applyPitchWear } = await import("../stadium/pitch-wear");
-                    await applyPitchWear(db, homeTeamId, weather);
+                    const care = await applyPitchWear(db, homeTeamId, weather);
+                    // Video ze zápasu ukáže stadion, jak vypadal při něm (i s tím, co se na trávníku zapnulo).
+                    const { saveStadiumSnapshot } = await import("../stadium/match-snapshot");
+                    await saveStadiumSnapshot(db, "matches", matchId, homeTeamId, care.service);
                 }
             }
 
