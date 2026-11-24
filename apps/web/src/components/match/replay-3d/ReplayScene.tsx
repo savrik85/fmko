@@ -4,7 +4,8 @@ import { useEffect, useLayoutEffect, useMemo, useRef, type RefObject } from "rea
 import * as THREE from "three";
 import { useFrame, useThree } from "@react-three/fiber";
 import { FENCE_BOUNDS, GOAL_NAME, PITCH_SURFACE_Y } from "@/components/stadium/stadium-3d/constants";
-import { emptyFrame, GOAL_TEXT, HALF_L, HALF_W, REPLAY, sampleClip, sceneTime, type Clip, type Figure, type Replay, type ReplayKit, type Scene, type Side } from "./scenes";
+import { crowdMood } from "@/components/stadium/stadium-3d/crowdMood";
+import { crowdExcitement, emptyFrame, GOAL_TEXT, HALF_L, HALF_W, REPLAY, sampleClip, sceneTime, type Clip, type Figure, type Replay, type ReplayKit, type Scene, type Side } from "./scenes";
 
 /** Záběr: scéna a její část. Nový objekt znamená hrát od začátku, i když jde o tutéž scénu (skok zpět na její začátek). */
 interface ReplayPlay {
@@ -268,6 +269,7 @@ export function ReplayScene({ replay, kits, snow, overview, step, root, onReady 
   const goalSignShown = useRef(0);
   const world = useThree((s) => s.scene);
   useEffect(() => () => { if (scored.current) tintGoal(scored.current, false); }, []);
+  useEffect(() => () => { crowdMood.home = crowdMood.away = 0; }, []);
   const camera = useThree((s) => s.camera) as THREE.PerspectiveCamera;
   const gl = useThree((s) => s.gl);
   /** Co se kreslilo minule: podle toho se pozná střih (hráči pak neběží, stojí rovnou na místě). */
@@ -453,6 +455,12 @@ export function ReplayScene({ replay, kits, snow, overview, step, root, onReady 
     const shown = scene.card && t >= scene.card.at && frame.figures[replay.referee].pose === "armUp" ? scene.card : null;
     // Gól: ve scéně, která končí gólem, branka zezelená (barva nápisu „GÓÓÓL!“), jakmile je míč za brankovou čárou.
     const inGoal = scene.goal && Math.abs(frame.ballZ) > HALF_L;
+    // Diváci: gól slaví fanoušci střelce a fanoušci soupeře po něm ztichnou; po zahozené šanci se pár lidí na chvíli
+    // zvedne. Řídí se časem klipu, takže v opakovaném záběru gólu se zvednou znovu až s míčem v síti.
+    const fansOf = replay.figures[scene.focus[0]]?.team;
+    const excitement = crowdExcitement(scene, t, inGoal), conceded = scene.goal ? -excitement : 0;
+    crowdMood.home = fansOf === "home" ? excitement : fansOf === "away" ? conceded : 0;
+    crowdMood.away = fansOf === "away" ? excitement : fansOf === "home" ? conceded : 0;
     const goal = inGoal ? world.getObjectsByProperty("name", GOAL_NAME).find((g) => Math.sign(g.getWorldPosition(vPos).z) === Math.sign(frame.ballZ)) ?? null : null;
     if (goal !== scored.current) {
       if (scored.current) tintGoal(scored.current, false);

@@ -329,6 +329,18 @@ export function sceneTime(scene: Scene, attack: boolean, elapsed: number): numbe
   return attack ? Math.min(scene.start + elapsed, scene.split) : Math.min(scene.split + elapsed, scene.end - 2 * CUT);
 }
 
+/**
+ * Jak moc (0–1) prožívají čas `t` klipu diváci týmu, o který ve scéně jde: po gólu naplno, po zahozené šanci jen
+ * krátce a slabě. Řídí se časem klipu, ne hodinami: v opakovaném záběru gólu se dav zvedne znovu až s míčem v síti.
+ * `inGoal` = míč je za brankovou čárou (kop v rozstřelu útočnou fázi nemá, pozná se jen podle míče).
+ */
+export function crowdExcitement(scene: Scene, t: number, inGoal: boolean): number {
+  const since = scene.split > scene.start ? t - scene.split : scene.goal && inGoal ? 1 : -1;
+  if (since < 0) return 0;
+  const rise = Math.min(1, since / 0.3);
+  return scene.goal ? rise : 0.3 * rise * clamp((1.6 - since) / 0.6, 0, 1);
+}
+
 /** Stav klipu v čase `t`, zapsaný do `out`. */
 export interface Frame {
   figures: { visible: boolean; x: number; y: number; z: number; pose: Pose | null }[];

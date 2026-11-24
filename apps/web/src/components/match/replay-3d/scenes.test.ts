@@ -1,6 +1,6 @@
 // Spouští se z kořene repa: npx vitest run --root apps/web
 import { describe, expect, it } from "vitest";
-import { actionStarts, breakOf, emptyFrame, HALF_L, HALF_W, Replay, replayOrder, sampleClip, scenedEvents, sceneTime, shootoutEvents, substitutionsTogether, type ReplayEvent, type ReplayInput, type ReplayPlayer, type Scene } from "./scenes";
+import { actionStarts, breakOf, crowdExcitement, emptyFrame, HALF_L, HALF_W, Replay, replayOrder, sampleClip, scenedEvents, sceneTime, shootoutEvents, substitutionsTogether, type ReplayEvent, type ReplayInput, type ReplayPlayer, type Scene } from "./scenes";
 
 const squad = (prefix: string): ReplayPlayer[] => ["GK", "DEF", "DEF", "DEF", "DEF", "MID", "MID", "MID", "MID", "FWD", "FWD"]
   .map((position, n) => ({ name: `${prefix} ${n}`, position }));
@@ -123,6 +123,18 @@ describe("scény 3D záznamu", () => {
     expect(Math.hypot(ball.x - at.x, ball.z - at.z)).toBeCloseTo(0.4, 1);
     sampleClip(scene.clip, scene.start, frame);
     expect(Math.hypot(ball.x - header.x, ball.z - header.z)).toBeCloseTo(Math.hypot(at.x - header.x, at.z - header.z) + 0.4, 1);
+  });
+
+  it("diváci reagují podle času scény: gól slaví až s míčem v síti, i v opakovaném záběru; po šanci jen krátce", () => {
+    const goal = replay.scene(1), miss = replay.scene(all.findIndex((e) => e.type === "chance" && e.detail === "vedle"));
+    expect(goal.replay!.from).toBeLessThan(goal.split);
+    // Začátek opakovaného záběru je před gólem: dav ještě neslaví. Na jeho konci a při oslavě ano.
+    expect([goal.replay!.from, goal.split - 0.1, goal.split + 0.15, goal.replay!.to, goal.split + 3].map((t) => Math.round(crowdExcitement(goal, t, false) * 100) / 100)).toEqual([0, 0, 0.5, 1, 1]);
+    expect([miss.split - 0.1, miss.split + 0.5, miss.split + 2].map((t) => crowdExcitement(miss, t, false))).toEqual([0, 0.3, 0]);
+    // Karta, střídání ani výkop diváky nezvednou; kop v rozstřelu až s míčem za čárou.
+    const card = replay.scene(all.findIndex((e) => e.type === "card")), kick = replay.scene(all.findIndex((e) => e.detail === "shootout:goal"));
+    expect([crowdExcitement(card, card.end, false), crowdExcitement(replay.kickoff(0), 3, false)]).toEqual([0, 0]);
+    expect([crowdExcitement(kick, kick.start + 1, false), crowdExcitement(kick, kick.start + 2, true)]).toEqual([0, 1]);
   });
 
   it("střela vedle a nad skončí za brankovou čárou mimo hřiště", () => {

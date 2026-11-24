@@ -6,6 +6,7 @@ import { PITCH, STAND_DIMS, type WeatherType, type StadiumMode } from "./constan
 import { canopyPlan, type RoofTier, type SceneSide, type SideLevels } from "./stand-levels";
 import { generateCorrugatedTexture } from "./materialTextures";
 import { useWind } from "./wind";
+import { crowdLift, crowdMood } from "./crowdMood";
 
 const STAND_GAP = 2.5;
 
@@ -654,6 +655,14 @@ export function HostujiciSektor({
   strana: "kotel" | "hlavni" | "za_branou";
   mode?: StadiumMode;
 }) {
+  // Při gólu a šanci hostů v záznamu zápasu část z nich vyskakuje, každý ve svém rytmu.
+  const fans = useRef<(THREE.Mesh | null)[]>([]);
+  useFrame(({ clock }) => {
+    const mood = crowdMood.away;
+    fans.current.forEach((fan, i) => {
+      if (fan) fan.position.y = 0.85 + crowdLift(mood, (i * 0.618) % 1) * Math.max(0, Math.sin(clock.elapsedTime * 6.5 + i * 1.7)) * 0.25;
+    });
+  });
   if (pocet <= 0 || mode === "training_day") return null;
 
   // Naproti domácímu kotli. Když kotel stojí na podélné straně, hosté jdou za branku.
@@ -683,7 +692,7 @@ export function HostujiciSektor({
         const x = -sirka / 2 + ((i + 0.5) / pole.length) * sirka;
         const z = 0.5 + (i % 3) * 0.45;
         return (
-          <mesh key={i} position={[x, 0.85, z]} castShadow>
+          <mesh key={i} ref={(m) => { fans.current[i] = m; }} position={[x, 0.85, z]} castShadow>
             <capsuleGeometry args={[0.16, 0.62, 3, 6]} />
             <meshStandardMaterial color={barva} roughness={0.9} />
           </mesh>
