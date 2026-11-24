@@ -933,7 +933,9 @@ async function simulateCupTie(
     // U velkoklubu (homeReal == null) se nehraje na našem hřišti, takže nic.
     if (homeReal) {
       const { applyPitchWear } = await import("../stadium/pitch-wear");
-      await applyPitchWear(db, homeReal, weather);
+      const care = await applyPitchWear(db, homeReal, weather);
+      const { saveStadiumSnapshot } = await import("../stadium/match-snapshot");
+      await saveStadiumSnapshot(db, "cup_matches", cupMatchId, homeReal, care.service);
     }
 
     // Bilance sudího — bez tohohle by pohárové zápasy v jeho profilu i v žebříčku

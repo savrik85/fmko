@@ -1640,24 +1640,11 @@ gameRouter.get("/teams/:teamId/stadium", async (c) => {
   }
 
   // Customizace
+  const { stadiumCustomization } = await import("../stadium/match-snapshot");
   const customization = {
-    fenceColor: (stadium.fence_color as string | null) ?? null,
-    standColor: (stadium.stand_color as string | null) ?? null,
-    seatColor: (stadium.seat_color as string | null) ?? null,
-    roofColor: (stadium.roof_color as string | null) ?? null,
-    accentColor: (stadium.accent_color as string | null) ?? null,
-    scoreboardLevel: (stadium.scoreboard_level as number | null) ?? 0,
-    flagSize: (stadium.flag_size as number | null) ?? 0,
-    ultrasText: (stadium.ultras_text as string | null) ?? null,
+    ...stadiumCustomization(stadium),
     // Proč na plachtě visí zrovna tohle. Prázdné, dokud si nápis píše manažer.
     ultrasTextDuvod: (stadium.ultras_text_duvod as string | null) ?? null,
-    ultrasBannerColor: (stadium.ultras_banner_color as string | null) ?? null,
-    ultrasTextColor: (stadium.ultras_text_color as string | null) ?? null,
-    flagColor: (stadium.flag_color as string | null) ?? null,
-    mowingPattern: (stadium.mowing_pattern as string | null) ?? "stripes",
-    netPattern: (stadium.net_pattern as string | null) ?? "white",
-    netStyle: (stadium.net_style as string | null) ?? "loose",
-    surroundSurface: (stadium.surround_surface as string | null) ?? "grass",
     // Co má klub ZAPLACENÉ. Přepnutí na vlastněný povrch je zdarma, takže to FE
     // potřebuje vědět, aby u něj neukazovalo cenu.
     surroundOwned: vlastnenePovrchy(stadium.surround_owned as string | null, stadium.surround_surface as string | null),
