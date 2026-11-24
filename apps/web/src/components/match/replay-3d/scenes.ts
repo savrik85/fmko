@@ -10,6 +10,8 @@ const PENALTY_SPOT = PITCH.penaltySpot, BOX_DEPTH = PITCH.penaltyArea.depth;
 /** Střídačky stojí u západní lajny. */
 const BENCH_X = -HALF_W;
 const MAX_SPEED = 9;
+/** Volný klus střídajícího, který jde o přestávce na své místo: nemá kam spěchat (m/s). */
+const STROLL = 2.5;
 /** Klus, kterým hráči bez úkolu drží tvar týmu (m/s). */
 const JOG = 4.5;
 /** O tolik dřív před střihem figury a míč ještě stojí na starém místě. */
@@ -142,6 +144,8 @@ const celebrationSpot = (gz: number): Point => ({ x: HALF_W - 9, z: gz - Math.si
 const inView = (p: Point): Point => ({ x: Math.min(p.x, 9), z: p.z });
 /** Bod před brankou `gz`: `across` metrů do strany, `out` metrů do hřiště. */
 const inFront = (gz: number, across: number, out: number): Point => ({ x: across, z: gz - Math.sign(gz) * out });
+/** Místo hráče před výkopem: týmy stojí na svých polovinách. */
+const lineUp = (slot: { base: SlotBase }, side: Side): Point => uvToWorld(side, Math.min(slot.base.u * 0.8, 0.42), slot.base.v);
 
 function seededRng(seed: string) {
   let a = 0;
@@ -178,6 +182,38 @@ export function chanceResult(e: ReplayEvent): ShotResult {
 
 /** Kdo při střídání odchází: „X za Y“, u vyloučeného brankáře „X jde do brány za vyloučeného gólmana, ven jde Y“. */
 export const substitutedOut = (e: ReplayEvent) => e.description.match(/(?: za | ven jde )([^,]+)$/)?.[1].trim();
+
+/** Plánované střídání ve 45. minutě je střídání o přestávce. */
+const isBreakSub = (e: ReplayEvent) => e.type === "substitution" && e.minute === 45 && e.description.startsWith("Plánované střídání");
+
+/**
+ * Pořadí, ve kterém záznam události hraje: střídání o přestávce jdou až za první poločas, před výkop druhého,
+ * nejdřív domácí, pak hosté. Drobná událost střídajícího ze zbytku 45. minuty (hádka, uklouznutí) se tak vypíše
+ * dřív, než nastoupí. Když v ní ale dostal kartu, střídání zůstává na svém místě: karta má scénu a ta ho
+ * potřebuje na hřišti.
+ */
+export function replayOrder(events: ReplayEvent[]): number[] {
+  const second = events.findLastIndex((e) => e.minute <= 45) + 1;
+  const scened = scenedEvents(events);
+  const moved = events.flatMap((e, i) => {
+    if (i >= second || !isBreakSub(e)) return [];
+    const inScene = events.slice(i + 1, second).some((x, n) => scened[i + 1 + n] && x.teamId === e.teamId && x.playerName === e.playerName);
+    return inScene ? [] : [i];
+  }).sort((a, b) => events[a].teamId - events[b].teamId);
+  const rest = events.map((_, i) => i).filter((i) => !moved.includes(i));
+  const first = second - moved.length;
+  return [...rest.slice(0, first), ...moved, ...rest.slice(first)];
+}
+
+/**
+ * Přestávka v událostech seřazených podle replayOrder: od `start` jdou střídání o přestávce, od `end` druhý poločas
+ * (jeho výkop). Bez střídání o přestávce je to jedno místo.
+ */
+export function breakOf(events: ReplayEvent[]): { start: number; end: number } {
+  const start = events.findLastIndex((e) => e.minute <= 45 && !isBreakSub(e)) + 1;
+  const end = events.findIndex((e, i) => i >= start && !isBreakSub(e));
+  return { start, end: end < 0 ? events.length : end };
+}
 
 const SET_PIECES = ["corner", "freekick", "penalty"];
 const isFinish = (e: ReplayEvent) => e.type === "goal" || e.type === "chance";
@@ -606,8 +642,10 @@ export class Replay {
   readonly referee: number;
   private readonly events: ReplayEvent[];
   private readonly staff: Staff;
-  /** První událost druhého poločasu (-1, když záznam druhý poločas nemá); od ní mají týmy vyměněné strany. */
-  private readonly secondHalf: number;
+  /** Přestávka (breakOf): od `start` mají týmy vyměněné strany, od `end` se hraje druhý poločas. */
+  private readonly halfTime: { start: number; end: number };
+  /** Kdo o přestávce podle plánu střídá a zůstal v kabině: na hřišti už není. */
+  private readonly absent = new Set<number>();
   /** Engine id hráče („home:7“) → figura. */
   private readonly ids = new Map<string, number>();
   /** Kdo je na hřišti před každou událostí a kdo po té poslední. */
@@ -627,7 +665,7 @@ export class Replay {
     this.events = input.events;
     this.heads = actionHeads(input.events);
     this.scened = scenedEvents(input.events);
-    this.secondHalf = input.events.findIndex((e) => e.minute > 45);
+    this.halfTime = breakOf(input.events);
     let roster: Roster = { home: [], away: [], bench: { home: [], away: [] } };
     for (const side of SIDES) {
       const bases = slotBases(input[side].starters);
@@ -662,6 +700,8 @@ export class Replay {
         const figure = seat >= 0 ? bench[seat] : this.figures.push({ team: side, player: { name: e.playerName, position: out.role } }) - 1;
         this.ids.set(`${side}:${e.playerId}`, figure);
         this.swaps.set(i, { incoming: figure, outgoing: out.figure });
+        // Brankář v bráně zůstává, dokud ho náhradník nevystřídá: bez něj by do ní šel hráč z pole.
+        if (this.atBreak(i) && out.role !== "GK") this.absent.add(out.figure);
         const swapped = roster[side].map((s) => (s === out ? { figure, base: out.base, role: out.role } : s));
         // Do brány jde náhradník za brankáře, nebo když to engine napíše (za vyloučeného brankáře střídá hráč z pole).
         roster = { ...roster, [side]: e.description.includes("do brány") ? inGoal(swapped, figure) : swapped, bench: { ...roster.bench, [side]: roster.bench[side].filter((f) => f !== figure) } };
@@ -679,6 +719,18 @@ export class Replay {
     return new Stage(this.figures.length, roster, seededRng(`${this.input.matchId}:${seed}`), this.staff, mirror);
   }
 
+  private atBreak(index: number): boolean {
+    return index >= this.halfTime.start && index < this.halfTime.end;
+  }
+
+  /** Kdo je na hřišti před událostí `index`; o přestávce bez těch, kdo zůstali v kabině. */
+  private rosterAt(index: number): Roster {
+    const roster = this.rosters[index] ?? this.finalRoster;
+    if (!this.atBreak(index)) return roster;
+    const present = (slot: Slot) => !this.absent.has(slot.figure);
+    return { ...roster, home: roster.home.filter(present), away: roster.away.filter(present) };
+  }
+
   private figureOf(e: ReplayEvent): number {
     const figure = this.ids.get(`${sideOf(e.teamId)}:${e.playerId}`);
     if (figure === undefined) throw new Error(`Událost ${e.type} v ${e.minute}. minutě: hráč ${e.playerName} (${e.playerId}) není v sestavě`);
@@ -693,7 +745,7 @@ export class Replay {
     let built = this.clips.get(head);
     if (!built) {
       const group = this.heads.flatMap((h, i) => (h === head ? [i] : []));
-      const stage = this.stage(this.rosters[head], head, this.secondHalf >= 0 && head >= this.secondHalf);
+      const stage = this.stage(this.rosterAt(head), head, head >= this.halfTime.start);
       const windows = new Map<number, Window>();
       this.play(stage, group, windows);
       built = { clip: stage.finish(), windows };
@@ -709,22 +761,24 @@ export class Replay {
   /**
    * Co je v obraze před událostí `next`: poslední akce téhož poločasu, a když v něm ještě žádná nebyla, výkop.
    * Události bez vlastní scény (držení míče, počasí…) tak obraz nemění, poslední akce v něm běží dál.
+   * `breakSubs` = hrají se střídání o přestávce: výkop druhého poločasu přijde až po nich.
    */
-  before(next: number): Scene {
-    const shown = this.shownBefore(next);
-    return shown < 0 ? this.kickoff(this.halfStart(next)) : this.scene(shown);
+  before(next: number, breakSubs = false): Scene {
+    const shown = this.shownBefore(next, breakSubs);
+    return shown < 0 ? this.kickoff(this.halfStart(next, breakSubs)) : this.scene(shown);
   }
 
   /** Akce, která je v obraze před událostí `next`; -1, když v tom poločase ještě žádná nebyla (v obraze je výkop). */
-  shownBefore(next: number): number {
+  shownBefore(next: number, breakSubs = false): number {
     // Záporný začátek by lastIndexOf počítal od konce pole: před první událostí by vrátil poslední akci zápasu.
     const shown = next > 0 ? this.scened.lastIndexOf(true, next - 1) : -1;
-    return shown < this.halfStart(next) ? -1 : shown;
+    return shown < this.halfStart(next, breakSubs) ? -1 : shown;
   }
 
-  /** První událost poločasu, do kterého patří `next`. */
-  private halfStart(next: number): number {
-    return this.secondHalf >= 0 && next >= this.secondHalf ? this.secondHalf : 0;
+  /** První událost úseku, do kterého patří `next`: první poločas, přestávka se svými střídáními, druhý poločas. */
+  private halfStart(next: number, breakSubs: boolean): number {
+    const { start, end } = this.halfTime;
+    return next >= end && !breakSubs ? end : next >= start ? start : 0;
   }
 
   /**
@@ -754,7 +808,7 @@ export class Replay {
     if (coaches.length === 2) camera.push({ t: walk, from: { x: BENCH_X + 13, y: 4, z: 0 }, at: { x: BENCH_X, y: 1.3, z: 0 }, ease: true });
     // Hráči nestojí kameře ve výhledu: pruh podél lajny a prostor před místem podání rukou jsou volné.
     const clear: Zone[] = [...[-12, -8, -4, 0, 4, 8, 12].map((z) => ({ x: BENCH_X + 3.5, z, r: 4.5 })), { x: BENCH_X + 9, z: 0, r: 4.5 }, { x: 0, z: 0, r: 6 }];
-    st.layout({ x: 0, z: 0 }, (slot, sd) => uvToWorld(sd, Math.min(slot.base.u * 0.8, 0.42), slot.base.v),
+    st.layout({ x: 0, z: 0 }, lineUp,
       new Map([[this.referee, { x: 0, z: 2 }], ...coaches.map((c): [number, Point] => [c.figure, c.from])]), clear);
     const hug = coaches.length === 2 && this.input.goodTerms;
     for (const c of coaches) {
@@ -782,7 +836,8 @@ export class Replay {
     if (cached) return cached;
     const second = index > 0;
     const side: Side = second ? "away" : "home", fwd = attackSign(side);
-    const roster = this.rosters[index];
+    // Před střídáními o přestávce stojí týmy bez těch, kdo zůstali v kabině.
+    const roster = this.rosterAt(index);
     const st = this.stage(roster, `kickoff:${second}`, second);
     // Nejvýš postavení hráči: dva u míče, třetí čeká na přihrávku dozadu, čtvrtý vyběhne po křídle.
     const [taker, partner, back, wide] = roster[side].filter((x) => x.role !== "GK").sort((a, b) => b.base.u - a.base.u).map((x) => x.figure);
@@ -790,7 +845,7 @@ export class Replay {
     [taker, partner].forEach((f, n) => { if (f !== undefined) fixed.set(f, { x: n * 2.4 - 0.5, z: -fwd * 0.8 }); });
     if (back !== undefined) fixed.set(back, { x: 3, z: -fwd * 9 });
     const wing = { x: -13, z: fwd * 5 };
-    st.layout({ x: 0, z: 0 }, (slot, sd) => uvToWorld(sd, Math.min(slot.base.u * 0.8, 0.42), slot.base.v), fixed,
+    st.layout({ x: 0, z: 0 }, lineUp, fixed,
       [{ x: 0, z: 0, r: 6 }, { x: 3, z: -fwd * 9, r: 3 }, { x: 3, z: -fwd * 4, r: 2.6 }, { x: 8, z: fwd * 13, r: 2.6 }, { x: -7, z: fwd * 13, r: 2.6 }, { ...wing, r: 2.6 }]);
     st.pose(this.referee, "armUp", 0.8, 0.3);
     SIDES.forEach((sd) => st.coach(sd, "shout", 0.3));
@@ -830,7 +885,7 @@ export class Replay {
   finale(): Scene {
     if (this.closing) return this.closing;
     const roster = this.finalRoster, winner = this.input.winner;
-    const st = this.stage(roster, "finale", this.secondHalf >= 0);
+    const st = this.stage(roster, "finale", this.halfTime.start < this.events.length);
     // Při remíze „hostují“ domácí: chodí za soupeři, ale nikdo neslaví.
     const up: Side = winner ?? "home", down = other(up);
     const figures = (side: Side) => roster[side].map((x) => x.figure);
@@ -1061,7 +1116,7 @@ export class Replay {
       }
       case "substitution": {
         // Všichni se vymění v jedné scéně, titulky se v ní vystřídají po stejných dílech.
-        const pairs = this.substitution(st, group);
+        const pairs = this.substitution(st, group, this.atBreak(head));
         group.forEach((i, n) => window(i, (n * DRAMA_STEP) / group.length, { focus: pairs[n] }));
         return;
       }
@@ -1415,29 +1470,40 @@ export class Replay {
 
   /**
    * Střídání (i několik najednou): střih k postranní čáře u střídaček, hráči si plácnou a vymění se.
-   * Vrací [přicházející, odcházející] pro každé střídání.
+   * `atBreak` = o přestávce: týmy stojí před výkopem a nikdo neodchází, střídaní zůstali v kabině.
+   * Vrací [přicházející, odcházející] pro každé střídání (o přestávce jen přicházející).
    */
-  private substitution(st: Stage, indices: number[]): number[][] {
-    const swaps = indices.map((i) => this.swaps.get(i)!);
+  private substitution(st: Stage, indices: number[], atBreak: boolean): number[][] {
+    const swaps = indices.map((i) => {
+      const { incoming, outgoing } = this.swaps.get(i)!, side = sideOf(this.events[i].teamId);
+      // O přestávce běží střídající tam, kde bude při výkopu stát: na místo toho, koho střídá.
+      const post = atBreak ? lineUp(this.rosters[i][side].find((s) => s.figure === outgoing)!, side) : null;
+      return { incoming, leaving: atBreak ? [] : [outgoing], post };
+    });
     const end = st.t + DRAMA;
     // Střídá se u půlicí čáry; víc dvojic stojí těsně vedle sebe kolem ní.
     const at = (n: number) => (n - (swaps.length - 1) / 2) * 1.6;
-    const ball = { x: 3, z: 9 };
+    const ball = atBreak ? { x: 0, z: 0 } : { x: 3, z: 9 };
     const spot = this.playSpot("home");
-    st.layout(ball, (slot, side) => spot(slot, side, ball), new Map([
-      ...swaps.flatMap(({ incoming, outgoing }, n): [number, Point][] => [[outgoing, { x: BENCH_X + 4.5, z: at(n) + 0.6 }], [incoming, { x: BENCH_X - 1.6, z: at(n) }]]),
+    st.layout(ball, atBreak ? lineUp : (slot, side) => spot(slot, side, ball), new Map([
+      ...swaps.flatMap(({ incoming, leaving }, n): [number, Point][] => [...leaving.map((f): [number, Point] => [f, { x: BENCH_X + 4.5, z: at(n) + 0.6 }]), [incoming, { x: BENCH_X - 1.6, z: at(n) }]]),
       [this.referee, { x: BENCH_X + 4, z: at(0) - 4 }],
     ]), swaps.map((_, n) => ({ x: BENCH_X + 4, z: at(n) + 1, r: 5 })));
     st.coach(sideOf(this.events[indices[0]].teamId), "shout", 1.2);
-    swaps.forEach(({ outgoing }, n) => st.go(outgoing, { x: BENCH_X + 0.5, z: at(n) }, 1.2));
+    swaps.forEach(({ leaving }, n) => leaving.forEach((f) => st.go(f, { x: BENCH_X + 0.5, z: at(n) }, 1.2)));
     st.wait(1);
     st.wait(0.3);
-    swaps.forEach(({ incoming, outgoing }, n) => {
+    swaps.forEach(({ incoming, leaving, post }, n) => {
       // Střídající běží rovně do hřiště, odcházející ho míjí bokem.
-      st.go(incoming, { x: BENCH_X + 8, z: at(n) - 0.4 }, 2);
-      st.go(outgoing, { x: BENCH_X - 1.3, z: at(n) + 2 }, 1.2);
+      if (!post) st.go(incoming, { x: BENCH_X + 8, z: at(n) - 0.4 }, 2);
+      leaving.forEach((f) => st.go(f, { x: BENCH_X - 1.3, z: at(n) + 2 }, 1.2));
+      if (!post) return;
+      // Dojde, kam do konce scény stihne; stojí-li tam někdo, zastaví se o kus dřív.
+      const from = st.pos(incoming), seconds = end - st.t, reach = Math.min(dist(from, post), STROLL * seconds);
+      const to = [0, 1.5, 3].map((back) => toward(from, post, reach - back)).find((p) => st.free(p, 1.2));
+      if (to) st.go(incoming, to, seconds);
     });
     st.t = end;
-    return swaps.map(({ incoming, outgoing }) => [incoming, outgoing]);
+    return swaps.map(({ incoming, leaving }) => [incoming, ...leaving]);
   }
 }

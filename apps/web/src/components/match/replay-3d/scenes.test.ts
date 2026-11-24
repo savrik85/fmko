@@ -1,6 +1,6 @@
 // Spouští se z kořene repa: npx vitest run --root apps/web
 import { describe, expect, it } from "vitest";
-import { actionStarts, emptyFrame, HALF_L, HALF_W, Replay, sampleClip, scenedEvents, sceneTime, shootoutEvents, substitutionsTogether, type ReplayEvent, type ReplayInput, type ReplayPlayer, type Scene } from "./scenes";
+import { actionStarts, breakOf, emptyFrame, HALF_L, HALF_W, Replay, replayOrder, sampleClip, scenedEvents, sceneTime, shootoutEvents, substitutionsTogether, type ReplayEvent, type ReplayInput, type ReplayPlayer, type Scene } from "./scenes";
 
 const squad = (prefix: string): ReplayPlayer[] => ["GK", "DEF", "DEF", "DEF", "DEF", "MID", "MID", "MID", "MID", "FWD", "FWD"]
   .map((position, n) => ({ name: `${prefix} ${n}`, position }));
@@ -219,6 +219,46 @@ describe("scény 3D záznamu", () => {
     };
     expect(poses(true)).toEqual(["hug", "hug"]);
     expect(poses(false)).toEqual(["shake", "shake"]);
+  });
+
+  it("plánované střídání ve 45. minutě se odehraje o přestávce před výkopem a nikdo při něm neodchází", () => {
+    const planned = event(45, "substitution", 1, 11, { description: "Plánované střídání: Sub 1 za H 5" });
+    // Střídající je ve zbytku 45. minuty ještě v drobné události bez scény: ta se vypíše dřív, než nastoupí.
+    const list = [event(40, "chance", 1, 9, { detail: "vedle" }), planned, event(45, "special", 1, 11, { detail: "possession" }),
+      event(45, "special", 1, 0, { detail: "half_time" }), event(46, "chance", 2, 9, { detail: "vedle" }), event(60, "chance", 1, 9, { detail: "vedle" })];
+    expect(replayOrder(list)).toEqual([0, 2, 3, 1, 4, 5]);
+    // Karta střídajícího ve zbytku minuty má scénu, střídání proto zůstává na místě. Zůstává i střídání
+    // za zraněného a plánované střídání ve 46. minutě.
+    expect(replayOrder(list.with(2, event(45, "card", 1, 11, { detail: "yellow" })))).toEqual([0, 1, 2, 3, 4, 5]);
+    expect(replayOrder(list.with(1, { ...planned, description: "Střídání: Sub 1 za H 5" }))).toEqual([0, 1, 2, 3, 4, 5]);
+    expect(replayOrder([list[0], list[3], list[4], { ...planned, minute: 46 }, list[5]])).toEqual([0, 1, 2, 3, 4]);
+
+    const ordered = replayOrder(list).map((i) => list[i]);
+    expect(breakOf(ordered)).toEqual({ start: 3, end: 4 });
+    expect(breakOf(list)).toEqual({ start: 4, end: 4 });
+    const replay = new Replay(input(ordered));
+    expect(checkAll(replay, ordered, "přestávka")).toEqual([]);
+    const figure = (name: string) => replay.figures.findIndex((f) => f.player.name === name);
+    const frame = emptyFrame(replay.figures.length);
+    const onPitch = (scene: Scene, name: string) => {
+      sampleClip(scene.clip, sceneTime(scene, false, Infinity), frame);
+      const f = frame.figures[figure(name)];
+      return f.visible && f.x > -HALF_W;
+    };
+    // O přestávce stojí týmy před výkopem bez střídaného, ten je v kabině; střídající je ještě na střídačce.
+    const hold = replay.before(3), sub = replay.scene(3), kickoff = replay.before(4);
+    expect([onPitch(hold, "H 5"), onPitch(hold, "Sub 1")]).toEqual([false, false]);
+    expect(replay.before(4, true)).toBe(sub);
+    expect(sub.focus).toEqual([figure("Sub 1")]);
+    expect([onPitch(sub, "H 5"), onPitch(sub, "Sub 1")]).toEqual([false, true]);
+    // Střídající nejde doprostřed, ale volným klusem na svoje místo: k tomu, kde při výkopu stojí.
+    const place = (scene: Scene, t: number) => { sampleClip(scene.clip, t, frame); const f = frame.figures[figure("Sub 1")]; return { x: f.x, z: f.z }; };
+    const post = place(kickoff, kickoff.start), gap = (p: { x: number; z: number }) => Math.hypot(p.x - post.x, p.z - post.z);
+    expect(gap(place(sub, sceneTime(sub, false, Infinity)))).toBeLessThan(gap(place(sub, sub.start)) - 3);
+    // Výkop druhého poločasu přijde až po střídání a drží se v obraze do první akce.
+    expect(kickoff).not.toBe(hold);
+    expect([onPitch(kickoff, "H 5"), onPitch(kickoff, "Sub 1")]).toEqual([false, true]);
+    expect([replay.shownBefore(4), replay.shownBefore(5), replay.shownBefore(6)]).toEqual([-1, 4, 5]);
   });
 
   it("událost hráče, který není v sestavě, je chyba", () => {

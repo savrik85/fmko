@@ -26,6 +26,8 @@ interface ReplayProgress {
   intro: "home" | "away" | "handshake" | null;
   kickoff: "1st" | "2nd" | null;
   halfTime: boolean;
+  /** Hrají se střídání o přestávce; výkop druhého poločasu přijde až po nich. */
+  breakSubs: boolean;
   finished: boolean;
   /** Pauza: obraz stojí celý, i sníh, vlajky a diváci. */
   paused: boolean;
@@ -71,7 +73,7 @@ export function Replay3D({ onFailure, ...props }: Replay3DProps & { /** 3D zázn
 }
 
 function Replay3DView({ detail, events, progress, onReady, onSecondHalf }: Replay3DProps) {
-  const { take, idx, flash, intro, kickoff, halfTime, finished, paused, cue, fast, homeGoals, awayGoals, minute } = progress;
+  const { take, idx, flash, intro, kickoff, halfTime, breakSubs, finished, paused, cue, fast, homeGoals, awayGoals, minute } = progress;
   const homeName = detail.home_name as string;
   const kits = useMemo(() => ({ home: detail.home_kit as ReplayKit, away: detail.away_kit as ReplayKit }), [detail]);
   const pens = shootoutScore(detail);
@@ -89,8 +91,8 @@ function Replay3DView({ detail, events, progress, onReady, onSecondHalf }: Repla
   /** Událost, na které záznam je (komu se připisuje gól). */
   const index = cue ?? (shot ? idx : idx - 1);
   /** Akce, která je v obraze, a té patří nápis a titulek; -1 = výkop. Události bez scény obraz nemění, tak ani grafiku. */
-  const pictured = cue ?? (shot ? idx : replay.shownBefore(idx));
-  const scene = useMemo(() => (cue !== null ? replay.scene(cue) : intro ? replay.intro() : finished ? replay.finale() : shot ? replay.scene(idx) : replay.before(idx)), [replay, cue, intro !== null, finished, shot, idx]); // eslint-disable-line react-hooks/exhaustive-deps
+  const pictured = cue ?? (shot ? idx : replay.shownBefore(idx, breakSubs));
+  const scene = useMemo(() => (cue !== null ? replay.scene(cue) : intro ? replay.intro() : finished ? replay.finale() : shot ? replay.scene(idx) : replay.before(idx, breakSubs)), [replay, cue, intro !== null, finished, shot, idx, breakSubs]); // eslint-disable-line react-hooks/exhaustive-deps
   const attack = cue !== null ? scene.split > scene.start : shot;
   // Skok začíná nový záběr, i když míří na akci, která zrovna běží.
   const play = useMemo(() => ({ scene, attack }), [scene, attack, cue !== null, take]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -185,8 +187,8 @@ function Replay3DView({ detail, events, progress, onReady, onSecondHalf }: Repla
       {ready && <div className="absolute top-0 left-0 z-30 origin-top-left pointer-events-none" style={{ width: GRAPHICS_WIDTH, height: fit.height, transform: `scale(${fit.scale})` }}>
         {/* Nahoře vedle sebe: vlevo výsledková tabulka, vpravo nápis akce. */}
         <div className="absolute top-2 inset-x-2 flex items-start gap-2">
-          {/* Před první akcí (minuta 0), o přestávce a po konci zápasu v obraze žádná akce není, tabulka je bez minuty. */}
-          <ScoreBug detail={detail} homeGoals={homeGoals} awayGoals={awayGoals} minute={halfTime || finished || minute === 0 ? undefined : minute} scored={scored} fast={fast} />
+          {/* Při výkopu (než přijde první akce poločasu), o přestávce i při jejích střídáních a po konci zápasu se nehraje, tabulka je bez minuty. */}
+          <ScoreBug detail={detail} homeGoals={homeGoals} awayGoals={awayGoals} minute={halfTime || breakSubs || finished || pictured < 0 ? undefined : minute} scored={scored} fast={fast} />
           <EventLabel {...graphics} override={fixedLabel} />
         </div>
         <ReplayMark />
