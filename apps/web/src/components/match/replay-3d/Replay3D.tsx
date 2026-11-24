@@ -74,6 +74,17 @@ function parseSnapshot(raw: string | null | undefined): StadiumSnapshot | null {
   }
 }
 
+/** Kolik hostů na zápas přijelo (matches.away_fans); pohár a starší zápasy to uložené nemají. */
+function awayFanCount(raw: unknown): number {
+  try {
+    const fans = (typeof raw === "string" ? JSON.parse(raw) : raw) as { pocet?: unknown } | null;
+    return typeof fans?.pocet === "number" ? fans.pocet : 0;
+  } catch (e) {
+    console.warn("hosté na zápase:", e);
+    return 0;
+  }
+}
+
 const extensionSlots = (extensions: { slot: string; kind: string; level: number }[]) =>
   ({ slots: extensions.map((e) => ({ slot: e.slot, built: { kind: e.kind, level: e.level } })) });
 
@@ -222,6 +233,8 @@ function Replay3DView({ detail, events, progress, onReady, onSecondHalf }: Repla
         adBoardColor={venue ? "#C8006A" : undefined}
         stadiumName={(detail.stadium_name as string | null) ?? `Stadion ${homeName}`}
         // Na tribunách tolik lidí, kolik na zápas přišlo.
+        // Sektor hostů: tolik, kolik jich přijelo, v barvě jejich klubu.
+        awayFans={{ pocet: awayFanCount(detail.away_fans), barva: detail.away_color as string }}
         attendanceRatio={attendance !== null && stadium?.capacity ? Math.min(1, attendance / stadium.capacity) : undefined}
         initialWeather={(detail.weather as WeatherType | null) ?? "sunny"}
         showControls={false}
