@@ -18,6 +18,8 @@ const JOG = 4.5;
 const CUT = 1e-3;
 /** Výška výskoku na hlavičku. */
 const HOP = 0.7;
+/** Výška míče při hlavičce: u hlavy hráče ve výskoku (figura v ReplayScene má hlavu ve 2 m, míč se měří od spodku). */
+const HEADER_H = HOP + 1.75;
 /**
  * Délky scén (s). Rozehrání (`SETUP`) a útok (`ATTACK`) trvají přesně jako jejich krok záznamu (STEP_SECONDS),
  * protože na ně další část téže akce navazuje bez střihu. Ostatní scény jsou o kus delší než jejich krok, ať se
@@ -1336,7 +1338,8 @@ export class Replay {
     st.wait(ATTACK - 2.4);
     st.go(taker, toward(st.ball, target, -0.5), 0.5);
     st.wait(0.5);
-    st.ballTo(target, 1.4, { h: 2.2, arc: 3.5 });
+    // Míč letí před hlavičkujícího, do jeho náběhu: k čelu, ne skrz něj ani za něj.
+    st.ballTo(toward(target, st.pos(header), -0.4), 1.4, { h: HEADER_H, arc: 3.5 });
     st.go(header, target, 1.1, 0.3);
     if (marker !== null) {
       st.chase(marker, toward(target, { x: 0, z: gz }, 1.2), 1.1, 0.3);
