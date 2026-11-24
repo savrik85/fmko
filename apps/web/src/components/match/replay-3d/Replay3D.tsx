@@ -213,7 +213,11 @@ function Replay3DView({ detail, events, progress, onReady, onSecondHalf }: Repla
         teamColor={(venue?.look?.primary as string) ?? (detail.home_color as string)}
         secondaryColor={(venue?.look?.secondary as string) ?? (detail.home_secondary as string)}
         badgePattern={venue ? "shield" : (detail.home_badge as string)}
-        badgeInitials={venue ? "PM" : initials(homeName)}
+        badgeInitials={venue ? "PM" : (detail.home_badge_initials as string | null) || initials(homeName)}
+        // Znak na klubové vlajce jako na stránce Stadion: se symbolem a vlastními barvami znaku.
+        badgeSymbol={venue ? null : (detail.home_badge_symbol as string | null)}
+        badgePrimary={venue ? null : (detail.home_badge_primary as string | null)}
+        badgeSecondary={venue ? null : (detail.home_badge_secondary as string | null)}
         sponsors={venue ? ["P-Mobile"] : stadium?.sponsors}
         adBoardColor={venue ? "#C8006A" : undefined}
         stadiumName={(detail.stadium_name as string | null) ?? `Stadion ${homeName}`}
