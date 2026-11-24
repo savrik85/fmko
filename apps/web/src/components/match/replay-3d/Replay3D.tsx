@@ -4,7 +4,7 @@ import { Component, useEffect, useMemo, useRef, useState, type ReactNode } from 
 import { apiFetch } from "@/lib/api";
 import { builtExtensionsOf } from "@/components/stadium/stadium-3d/stand-levels";
 import type { WeatherType } from "@/components/stadium/stadium-3d/constants";
-import { Stadium3D } from "@/components/stadium/stadium-3d/Stadium3D";
+import { Stadium3D, type Stadium3DCustomization } from "@/components/stadium/stadium-3d/Stadium3D";
 import { VideoLoading } from "./VideoLoading";
 import { venueExtensions, venueFacilities } from "@/app/(hra)/turnaj/venue-scene";
 import { ReplayScene, type ReplayStep } from "./ReplayScene";
@@ -40,11 +40,42 @@ interface ReplayProgress {
   awayGoals: number;
 }
 
+/** Stadion ve videu, kreslený stejně jako na stránce Stadion (jen bez zavlažování: při zápase se nekropí). */
 interface StadiumData {
   capacity?: number;
   facilities: Record<string, number>;
   standExtensions?: { slots: { slot: string; built?: { kind: string; level: number } | null }[] };
+  pitchType?: string;
+  pitchMoisture?: number;
+  mowerLevel?: number;
+  customization?: Stadium3DCustomization;
+  /** Sponzoři s reklamou u hřiště. */
+  sponsors?: string[];
+  /** Úroveň vyhřívání trávníku; na vyhřívaném hřišti sníh neleží. */
+  pitchHeating?: number;
+  /** Sníh z hřiště uklidila objednaná parta. */
+  snowCleared?: boolean;
 }
+
+/** Podoba stadionu uložená při zápase (API: stadium/match-snapshot.ts). */
+interface StadiumSnapshot extends Omit<StadiumData, "standExtensions" | "pitchHeating" | "snowCleared"> {
+  care: "heating" | "irrigation" | "snow_clearing" | null;
+  extensions: { slot: string; kind: string; level: number }[];
+}
+
+/** Poškozený zápis podoby stadionu video neshodí: ukáže se stadion, jak vypadá dnes. */
+function parseSnapshot(raw: string | null | undefined): StadiumSnapshot | null {
+  if (!raw) return null;
+  try {
+    return JSON.parse(raw) as StadiumSnapshot;
+  } catch (e) {
+    console.error("podoba stadionu u zápasu:", e);
+    return null;
+  }
+}
+
+const extensionSlots = (extensions: { slot: string; kind: string; level: number }[]) =>
+  ({ slots: extensions.map((e) => ({ slot: e.slot, built: { kind: e.kind, level: e.level } })) });
 
 interface Replay3DProps {
   detail: Record<string, unknown>;
@@ -103,15 +134,24 @@ function Replay3DView({ detail, events, progress, onReady, onSecondHalf }: Repla
   // Stadion domácích; turnaj se hraje na hřišti z losu a velkoklub z poháru stadion ve hře nemá.
   const venue = detail.isTournament === true ? (detail.venue as { capacity?: number; look?: Record<string, unknown> } | null) : null;
   const homeTeamId = detail.home_team_id as string | null;
+  // Zápas si pamatuje, jak stadion vypadal, když se hrál. Starší zápasy to nemají: u nich je stadion, jak vypadá dnes.
+  const snapshot = useMemo(() => parseSnapshot(detail.stadium_snapshot as string | null | undefined), [detail]);
   const [stadium, setStadium] = useState<StadiumData | null>(null);
   useEffect(() => {
     if (venue?.look) {
       const look = venue.look;
-      setStadium({ capacity: venue.capacity, facilities: venueFacilities(look), standExtensions: { slots: venueExtensions(look).map((e) => ({ slot: e.slot, built: { kind: e.kind, level: e.level } })) } });
+      setStadium({ capacity: venue.capacity, facilities: venueFacilities(look), standExtensions: extensionSlots(venueExtensions(look)) });
+    } else if (snapshot) {
+      const { care, extensions, ...look } = snapshot;
+      setStadium({ ...look, standExtensions: extensionSlots(extensions), pitchHeating: care === "heating" ? 1 : 0, snowCleared: care === "snow_clearing" });
     } else if (homeTeamId) {
-      apiFetch<StadiumData>(`/api/teams/${homeTeamId}/stadium`).then(setStadium).catch((e) => console.error("stadion pro 3D záznam:", e));
+      // Reklamy u hřiště jsou na stránce Stadion z vlastního dotazu; bez nich se stadion ukáže taky.
+      const banners = apiFetch<{ bannerContracts?: { sponsorName: string }[] }>(`/api/teams/${homeTeamId}/sponsors`)
+        .then((s) => s.bannerContracts?.map((b) => b.sponsorName) ?? []).catch((e) => { console.warn("sponzoři pro 3D záznam:", e); return []; });
+      Promise.all([apiFetch<StadiumData>(`/api/teams/${homeTeamId}/stadium`), banners])
+        .then(([live, sponsors]) => setStadium({ ...live, sponsors })).catch((e) => console.error("stadion pro 3D záznam:", e));
     }
-  }, [venue, homeTeamId]);
+  }, [venue, snapshot, homeTeamId]);
   // Scéna se staví, až je známo, jak stadion vypadá: jinak by se záznam rozběhl na výchozím hřišti a tribuny by
   // naskočily až během něj. Dokud se podoba nenačte, záznam čeká (hráč může přepnout na tracker). Velkoklub
   // z poháru stadion ve hře nemá, hraje se na výchozím.
@@ -161,14 +201,20 @@ function Replay3DView({ detail, events, progress, onReady, onSecondHalf }: Repla
     <div ref={frame} onPointerMove={stir} onPointerDown={stir} onPointerLeave={(e) => { if (e.pointerType === "mouse") setStirred(false); }} className={`group/shot bg-black ${fullscreen ? "fixed inset-0 z-50" : "absolute inset-0 z-20"}`}>
       {stadiumKnown && <Stadium3D
         pitchCondition={(detail.pitch_condition as number | null) ?? 85}
-        pitchType={(venue?.look?.pitch_type as string) ?? (detail.pitch_type as string) ?? "natural"}
+        pitchType={(venue?.look?.pitch_type as string) ?? stadium?.pitchType ?? (detail.pitch_type as string) ?? "natural"}
+        // Vyhřívaný nebo uklizený trávník je i za sněžení zelený.
+        pitchHeating={stadium?.pitchHeating ?? 0}
+        snowClearingOrdered={stadium?.snowCleared ?? false}
+        pitchMoisture={stadium?.pitchMoisture}
+        mowerLevel={stadium?.mowerLevel}
+        customization={stadium?.customization}
         facilities={stadium?.facilities ?? { stands: 1, fence: 1, entrance_gate: 1 }}
         standExtensions={builtExtensionsOf(stadium?.standExtensions)}
         teamColor={(venue?.look?.primary as string) ?? (detail.home_color as string)}
         secondaryColor={(venue?.look?.secondary as string) ?? (detail.home_secondary as string)}
         badgePattern={venue ? "shield" : (detail.home_badge as string)}
         badgeInitials={venue ? "PM" : initials(homeName)}
-        sponsors={venue ? ["P-Mobile"] : undefined}
+        sponsors={venue ? ["P-Mobile"] : stadium?.sponsors}
         adBoardColor={venue ? "#C8006A" : undefined}
         stadiumName={(detail.stadium_name as string | null) ?? `Stadion ${homeName}`}
         // Na tribunách tolik lidí, kolik na zápas přišlo.
