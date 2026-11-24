@@ -109,6 +109,22 @@ describe("scény 3D záznamu", () => {
     expect(Math.abs(frame.ballZ)).toBeGreaterThan(HALF_L);
   });
 
+  it("hlavičkující trefí míč ve výskoku, míč je u jeho hlavy", () => {
+    const scene = replay.scene(all.findIndex((e) => e.minute === 30 && e.type === "goal"));
+    const frame = emptyFrame(replay.figures.length);
+    // Míč letí od hlavy k bráně půl vteřiny.
+    sampleClip(scene.clip, scene.split - 0.5, frame);
+    const header = frame.figures[replay.figures.findIndex((f) => f.player.name === "H 3")];
+    expect(header.y).toBeGreaterThan(0.6);
+    // Hlava stojící figury je 2 m nad zemí, míč se měří od spodku (poloměr 0,28 m).
+    expect(frame.ballY + 0.28 - header.y).toBeCloseTo(2, 1);
+    // Míč je před ním ve směru náběhu, ne za ním.
+    const ball = { x: frame.ballX, z: frame.ballZ }, at = { x: header.x, z: header.z };
+    expect(Math.hypot(ball.x - at.x, ball.z - at.z)).toBeCloseTo(0.4, 1);
+    sampleClip(scene.clip, scene.start, frame);
+    expect(Math.hypot(ball.x - header.x, ball.z - header.z)).toBeCloseTo(Math.hypot(at.x - header.x, at.z - header.z) + 0.4, 1);
+  });
+
   it("střela vedle a nad skončí za brankovou čárou mimo hřiště", () => {
     const frame = emptyFrame(replay.figures.length);
     for (const index of [4, 15]) {
