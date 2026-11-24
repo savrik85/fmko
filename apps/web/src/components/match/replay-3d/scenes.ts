@@ -39,7 +39,7 @@ export const REPLAY = { after: 3.6, seconds: 3.2 };
 export type Side = "home" | "away";
 const SIDES = ["home", "away"] as const;
 type Role = "GK" | "DEF" | "MID" | "FWD";
-type Pose = "down" | "diveLeft" | "diveRight" | "celebrate" | "armUp" | "slide" | "shake" | "hug" | "sit" | "rest" | "sitUp";
+type Pose = "down" | "diveLeft" | "diveRight" | "celebrate" | "armUp" | "slide" | "tackle" | "shake" | "hug" | "sit" | "rest" | "sitUp";
 export type ShotResult = "goal" | "saved" | "post" | "bar" | "wide" | "over" | "blocked";
 type CardColor = "yellow" | "red";
 
@@ -1149,8 +1149,9 @@ export class Replay {
    * Střela od nohy (nebo hlavy) střelce, u kterého míč právě je. Vrací čas, kdy míč doletí k bráně.
    * S `playsOn` se po nevyužité šanci hraje dál (v rozstřelu ne): bránící tým vyráží od brány a útočící se vrací.
    */
-  private shoot(st: Stage, side: Side, shooter: number, result: ShotResult, after: number, gz: number, blocker: number | null, playsOn: boolean): number {
+  private shoot(st: Stage, side: Side, shooter: number, result: ShotResult, after: number, gz: number, blocker: number | null, playsOn: boolean, lunge = false): number {
     const s = Math.sign(gz), sgn = st.rng() < 0.5 ? -1 : 1, fly = 0.5;
+    const origin = { x: st.ball.x, z: st.ball.z };
     const gk = st.keeper(other(side));
     const split = st.t + fly;
     const line = (x: number): Point => ({ x, z: gz });
@@ -1205,6 +1206,18 @@ export class Replay {
       st.ballTo(line(x), fly, { h: result === "over" ? 3.6 : 0.3 + st.rng(), arc: 0.4 });
       st.wait(fly);
       st.ballTo({ x: x * 1.2, z: gz + s * (result === "over" ? 10 : 7) }, 0.7, { arc: result === "over" ? 0.6 : 0 });
+    }
+    // Střela ze hry (`lunge`): obránce u střelce se většinou pokusí ránu zblokovat, jako brankář skáče po míči,
+    // na který nedosáhne. Buď do ní vykročí, nebo jde skluzem nohama k míči (jen když nestojí hned u střelce,
+    // tam by mu vjel do nohou, ani daleko); občas jen stojí. Střela, kterou opravdu zblokuje, má vlastní větev výš.
+    if (lunge && blocker !== null && result !== "blocked") {
+      const from = st.pos(blocker), gap = dist(from, origin), roll = st.rng();
+      if (roll < 0.35 && gap > 2 && gap < 7) {
+        st.go(blocker, toward(from, origin, Math.min(2, gap - 1.5)), 0.45, -fly);
+        st.pose(blocker, "tackle", 1.2, 0.15 - fly);
+      } else if (roll < 0.85 && gap > 1.3) {
+        st.go(blocker, toward(from, origin, Math.min(1.2, gap - 1)), 0.35, -fly);
+      }
     }
     if (playsOn && result !== "goal") {
       const spot = this.playSpot(other(side)), restart = { x: 0, z: gz * 0.3 };
@@ -1301,7 +1314,7 @@ export class Replay {
       st.wait(0.4);
     }
     st.chase(this.referee, refereeSpot, 3, -3);
-    return this.shoot(st, side, shooter, result, result === "goal" ? GOAL : CHANCE, gz, marker, true);
+    return this.shoot(st, side, shooter, result, result === "goal" ? GOAL : CHANCE, gz, marker, true, true);
   }
 
   /** Roh, centr ze strany nebo přímý kop: střih na rozestavení ve vápně; hráč, který kope, se hlásí o míč. */
