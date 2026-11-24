@@ -294,7 +294,7 @@ export default function U21Page() {
         value={tab}
         onChange={setTab}
         ariaLabel="U21"
-        className="[&_[role=tablist]]:grid [&_[role=tablist]]:grid-cols-6 [&_[role=tablist]]:gap-0 [&_[role=tab]]:min-w-0 [&_[role=tab]]:px-1 [&_[role=tab]]:text-xs sm:[&_[role=tab]]:text-sm sm:[&_[role=tab]]:px-3 [&>div:last-child]:hidden"
+        className="[&_[role=tablist]]:grid [&_[role=tablist]]:grid-cols-6 [&_[role=tablist]]:gap-0 [&_[role=tab]]:min-w-0 [&_[role=tab]]:px-1 [&_[role=tab]]:text-xs sm:[&_[role=tab]]:text-sm sm:[&_[role=tab]]:px-3 [&>[aria-hidden=true]]:hidden"
         items={[
           { key: "kadr", label: "Kádr" },
           { key: "atributy", label: "Atributy" },
