@@ -28,7 +28,7 @@ import { CameraController } from "./CameraController";
 import { PostFX } from "./PostFX";
 import { PerformanceMonitor } from "@react-three/drei";
 import { WindContext, windStrength } from "./wind";
-import { BakedShadows } from "./BakedShadows";
+import { BakedShadowContext, BakedShadows, bakedShadowLook } from "./BakedShadows";
 import { Spinner } from "@/components/ui/spinner";
 import {
   getStadiumLayout,
@@ -157,6 +157,9 @@ interface Stadium3DProps {
   /** Které pohledy vyfotit; bez zadání jen `initialViewpoint`. */
   snapshotViewpoints?: CameraViewpoint[];
 }
+
+/** Snímková frekvence, pod kterou se videu ze zápasu sníží rozlišení, a nad kterou se mu vrátí. */
+const REPLAY_FPS_BOUNDS: [number, number] = [20, 30];
 
 export function Stadium3D({
   standExtensions,
@@ -340,6 +343,8 @@ export function Stadium3D({
     setTimeout(() => setStatusToast(null), 900);
   };
   const fxActive = fxEnabled && !isMobile;
+  /** Záznam zápasu podle toho na mobilu kreslí stíny hráčů (viz BakedShadowContext). */
+  const mobileShadowLook = useMemo(() => (isMobile ? bakedShadowLook(timeOfDay, weather) : null), [isMobile, timeOfDay, weather]);
 
   // ── Úspora baterie ──
   // Plátno mimo obrazovku (odscrollované) se nekreslí; dřív se animovalo dál, i když
@@ -353,7 +358,9 @@ export function Stadium3D({
     io.observe(el);
     return () => io.disconnect();
   }, []);
-  const maxDpr = isMobile ? 1.25 : 1.75;
+  // Video ze zápasu má na telefonu stejné rozlišení jako na počítači; když ho telefon nestíhá, sníží se samo
+  // (PerformanceMonitor níž).
+  const maxDpr = isMobile && !replay ? 1.25 : 1.75;
   const [dpr, setDpr] = useState(maxDpr);
   useEffect(() => setDpr(maxDpr), [maxDpr]);
 
@@ -470,8 +477,8 @@ export function Stadium3D({
 
   return (
     <div ref={rootRef} className="relative w-full h-full select-none">
-      {/* Decentní úvodní indikátor načítání 3D scény */}
-      {!isSceneReady && (
+      {/* Decentní úvodní indikátor načítání 3D scény. Video ze zápasu má vlastní načítání (VideoLoading), tohle se v něm nekreslí. */}
+      {!isSceneReady && !replay && (
         <div className="absolute inset-0 z-30 flex flex-col items-center justify-center bg-[#141b26] text-white transition-opacity duration-300 pointer-events-none select-none">
           <div className="mb-3">
             <Spinner size="lg" />
@@ -511,6 +518,8 @@ export function Stadium3D({
         gl={{
           antialias: true,
           alpha: false,
+          // Stíny hráčů v záznamu na mobilu (ReplayScene): bez šablony by se překrývající části těla ztmavily dvakrát.
+          stencil: true,
           powerPreference: "high-performance",
           toneMapping: THREE.ACESFilmicToneMapping,
           toneMappingExposure: timeOfDay === "night" ? 1.15 : timeOfDay === "sunset" ? 1.05 : 0.95,
@@ -519,21 +528,23 @@ export function Stadium3D({
         <WindContext.Provider value={windStrength(weather)}>
         <CaptureBridge captureRef={captureRef} />
         <PerformanceMonitor
+          // Video ze zápasu sníží rozlišení až pod 20 fps a vrátí ho nad 30 fps: sleduje se jako přenos, 30 fps mu
+          // stačí. Stránka Stadion má výchozí hranice knihovny (40 a 60 fps).
+          bounds={replay ? () => REPLAY_FPS_BOUNDS : undefined}
           onDecline={() => setDpr(1)}
           onIncline={() => setDpr(maxDpr)}
         />
         {/* Dynamická obloha a osvětlení (den, západ, noc + počasí) */}
         <LightingAndAtmosphere timeOfDay={timeOfDay} weather={weather} isMobile={isMobile} enhanced={fxActive} />
 
-        {/* Mobil: stíny spočítané jednou (v reálném čase jsou vypnuté kvůli výkonu). Ve videu ze zápasu ne: hráči
-            se hýbou a stín by na mobilu mít nemohli, tak je tam bez stínů celý obraz. */}
-        {isMobile && isSceneReady && !replay && <BakedShadows timeOfDay={timeOfDay} weather={weather} />}
+        {/* Mobil: stíny spočítané jednou (v reálném čase jsou vypnuté kvůli výkonu) */}
+        {isMobile && isSceneReady && <BakedShadows timeOfDay={timeOfDay} weather={weather} />}
 
         {/* 3D efekty počasí (déšť, sníh, vítr, blesky, mraky) */}
         <WeatherEffects weather={weather} timeOfDay={timeOfDay} isMobile={isMobile} />
 
         {/* Plynulý kontrolér kamery a filmový oblet */}
-        {replay ?? <CameraController viewpoint={viewpoint} isMobile={isMobile} viewpoints={viewpoints} instant={!!onSnapshotReady} />}
+        {replay ? <BakedShadowContext.Provider value={mobileShadowLook}>{replay}</BakedShadowContext.Provider> : <CameraController viewpoint={viewpoint} isMobile={isMobile} viewpoints={viewpoints} instant={!!onSnapshotReady} />}
 
         {/* Post-processing: ambient occlusion, záře světel, vinětace, tone mapping (jen desktop) */}
         {fxActive && isSceneReady && <PostFX timeOfDay={timeOfDay} miniature={viewpoint === "overview" || viewpoint === "orbit"} />}
