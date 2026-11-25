@@ -240,6 +240,7 @@ function Replay3DView({ detail, events, progress, onReady, onSecondHalf }: Repla
         showControls={false}
         // Dokud se scéna načítá, kreslí se i při pauze: jinak by se plynulosti nedočkala.
         frozen={paused && ready}
+        watchFrameRate={ready}
         // Pohled „z tribuny“ nemá rozostření okrajů, které stadion používá u pohledů z dálky.
         initialViewpoint="main_stand"
         replay={<ReplayScene replay={replay} kits={kits} snow={detail.weather === "snow"} overview={overview} step={step} root={frame} onReady={() => { setReady(true); onReady(); }} />}

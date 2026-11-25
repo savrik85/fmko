@@ -128,6 +128,11 @@ interface Stadium3DProps {
   replay?: React.ReactNode;
   /** Zastavený obraz (pauza záznamu): scéna se přestane kreslit, takže stojí i sníh, vlajky a diváci. */
   frozen?: boolean;
+  /**
+   * Hlídá se snímková frekvence a podle ní rozlišení. Záznam zápasu hlídání zapíná až po načtení: první snímky
+   * se zadrhávají vždy a rozlišení by kvůli nim spadlo hned.
+   */
+  watchFrameRate?: boolean;
   initialWeather?: WeatherType;
   weather?: WeatherType;
   initialMode?: StadiumMode;
@@ -158,6 +163,9 @@ interface Stadium3DProps {
   snapshotViewpoints?: CameraViewpoint[];
 }
 
+/** Pod kolik snímků za sekundu musí video ze zápasu trvale klesnout, aby se mu snížilo rozlišení. */
+const REPLAY_MIN_FPS = 20;
+
 export function Stadium3D({
   standExtensions,
   extensionPreview,
@@ -185,6 +193,7 @@ export function Stadium3D({
   initialViewpoint = "overview",
   replay,
   frozen = false,
+  watchFrameRate = true,
   initialWeather = "sunny",
   weather: weatherProp,
   initialMode = "match_day",
@@ -318,8 +327,8 @@ export function Stadium3D({
     return () => mq.removeEventListener("change", update);
   }, []);
   // Video ze zápasu se na úzké obrazovce nešetří: vypadá všude stejně, i když hráč telefon otočí na šířku
-  // (tím se obrazovka rozšíří přes hranici a obraz by se uprostřed zápasu změnil). Když se zadrhává, sníží se
-  // samo rozlišení (PerformanceMonitor níž).
+  // (tím se obrazovka rozšíří přes hranici a obraz by se uprostřed zápasu změnil). Když se trvale zadrhává,
+  // sníží se mu jednou rozlišení (PerformanceMonitor níž).
   const isMobile = isNarrow && !replay;
 
   // Vylepšená grafika (post-processing + obloha s prostředím) — jen desktop, přepínač v liště.
@@ -522,10 +531,15 @@ export function Stadium3D({
       >
         <WindContext.Provider value={windStrength(weather)}>
         <CaptureBridge captureRef={captureRef} />
-        <PerformanceMonitor
-          onDecline={() => setDpr(1)}
-          onIncline={() => setDpr(maxDpr)}
-        />
+        {watchFrameRate && (
+          <PerformanceMonitor
+            // Video ze zápasu sníží rozlišení až pod REPLAY_MIN_FPS a zpátky ho nezvedá, ať se obraz během zápasu
+            // nemění tam a zpět. Stránka Stadion má výchozí hranice knihovny (40 a 60 fps) a rozlišení vrací.
+            bounds={replay ? () => [REPLAY_MIN_FPS, Infinity] : undefined}
+            onDecline={() => setDpr(1)}
+            onIncline={() => setDpr(maxDpr)}
+          />
+        )}
         {/* Dynamická obloha a osvětlení (den, západ, noc + počasí) */}
         <LightingAndAtmosphere timeOfDay={timeOfDay} weather={weather} isMobile={isMobile} enhanced={fxActive} />
 
