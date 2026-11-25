@@ -7,9 +7,9 @@ import type { WeatherType } from "@/components/stadium/stadium-3d/constants";
 import { Stadium3D, type Stadium3DCustomization } from "@/components/stadium/stadium-3d/Stadium3D";
 import { VideoLoading } from "./VideoLoading";
 import { venueExtensions, venueFacilities } from "@/app/(hra)/turnaj/venue-scene";
-import { ReplayScene, type ReplayStep } from "./ReplayScene";
+import { ReplayScene, type ReplayClock } from "./ReplayScene";
 import { CoachCard, EventCard, EventLabel, initials, ReplayMark, ScoreBug } from "./graphics";
-import { BANNERS_BOTTOM, BANNERS_INSET, OVERLAY_BUTTON, OVERLAY_GAP, OVERLAY_HIDDEN, OVERLAY_SHOWN_MS } from "./overlay";
+import { BANNERS_BOTTOM, BANNERS_INSET, OVERLAY_BUTTON, OVERLAY_GAP, OVERLAY_HIDDEN, OVERLAY_SHOWN_MS, VIEWER_ASPECT } from "./overlay";
 import { Replay, shootoutScore, sideOf, type ReplayCoach, type ReplayEvent, type ReplayKit, type ReplayLineup } from "./scenes";
 
 /** Šířka okna záznamu, pro kterou je grafika navržená (px); v jiném okně se zmenší nebo zvětší celá, jako obraz videa. */
@@ -33,7 +33,8 @@ interface ReplayProgress {
   paused: boolean;
   /** Po skoku na akci: událost, jejíž scéna má chvíli stát na prvním snímku. */
   cue: number | null;
-  fast: boolean;
+  /** Jak rychle běží hodiny záznamu proti skutečnému času (0 = stojí, 2 = „Rychle“). */
+  pace: number;
   /** Minuta akce v obraze; stejnou má záhlaví záznamu nad videem. */
   minute: number;
   homeGoals: number;
@@ -92,6 +93,8 @@ interface Replay3DProps {
   detail: Record<string, unknown>;
   events: ReplayEvent[];
   progress: ReplayProgress;
+  /** Hodiny záznamu: scéna z nich bere, kde v záběru je. */
+  clock: ReplayClock;
   /** Scéna se poprvé vykreslila; záznam do té doby čeká s výkopem. */
   onReady: () => void;
   /** Hráč o přestávce pustil druhý poločas tlačítkem v obraze (na celé obrazovce není tlačítko stránky vidět). */
@@ -114,8 +117,8 @@ export function Replay3D({ onFailure, ...props }: Replay3DProps & { /** 3D zázn
   return <FailureGuard onFailure={onFailure}><Replay3DView {...props} /></FailureGuard>;
 }
 
-function Replay3DView({ detail, events, progress, onReady, onSecondHalf }: Replay3DProps) {
-  const { take, idx, flash, intro, kickoff, halfTime, breakSubs, finished, paused, cue, fast, homeGoals, awayGoals, minute } = progress;
+function Replay3DView({ detail, events, progress, clock, onReady, onSecondHalf }: Replay3DProps) {
+  const { take, idx, flash, intro, kickoff, halfTime, breakSubs, finished, paused, cue, pace, homeGoals, awayGoals, minute } = progress;
   const homeName = detail.home_name as string;
   const kits = useMemo(() => ({ home: detail.home_kit as ReplayKit, away: detail.away_kit as ReplayKit }), [detail]);
   const pens = shootoutScore(detail);
@@ -127,6 +130,9 @@ function Replay3DView({ detail, events, progress, onReady, onSecondHalf }: Repla
     away: { coach: detail.away_coach as ReplayCoach | null, ...(detail.away_lineup_data as ReplayLineup) },
   }), [detail, events, margin]);
 
+  // Choreografie všech akcí se spočítá hned, za načítáním, ne až ve střihu na akci.
+  useEffect(() => replay.prepare(), [replay]);
+
   // Krok záznamu → záběr: „ŠANCE“ je útočná fáze události, která teprve přijde; jinak je v obraze poslední akce
   // (nebo výkop) a běží dál. Po skoku stojí cílová akce na prvním snímku (u šance na začátku útoku).
   const shot = flash === "attacking";
@@ -136,11 +142,10 @@ function Replay3DView({ detail, events, progress, onReady, onSecondHalf }: Repla
   const pictured = cue ?? (shot ? idx : replay.shownBefore(idx, breakSubs));
   const scene = useMemo(() => (cue !== null ? replay.scene(cue) : intro ? replay.intro() : finished ? replay.finale() : shot ? replay.scene(idx) : replay.before(idx, breakSubs)), [replay, cue, intro !== null, finished, shot, idx, breakSubs]); // eslint-disable-line react-hooks/exhaustive-deps
   const attack = cue !== null ? scene.split > scene.start : shot;
-  // Skok začíná nový záběr, i když míří na akci, která zrovna běží.
-  const play = useMemo(() => ({ scene, attack }), [scene, attack, cue !== null, take]); // eslint-disable-line react-hooks/exhaustive-deps
-  // O přestávce stojí týmy připravené na výkop druhého poločasu.
-  const step = useRef<ReplayStep>({ play, rate: 1, hold: false });
-  step.current = { play, rate: fast ? 2 : 1, hold: halfTime || cue !== null };
+  // Po skoku stojí záběr na prvním snímku a o přestávce stojí týmy připravené na výkop druhého poločasu.
+  const hold = halfTime || cue !== null;
+  // Záběr začíná ve chvíli, kdy vznikl. Skok začíná nový záběr, i když míří na akci, která zrovna běží.
+  const play = useMemo(() => ({ scene, attack, hold, at: clock.now() }), [scene, attack, hold, take, clock]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Stadion domácích; turnaj se hraje na hřišti z losu a velkoklub z poháru stadion ve hře nemá.
   const venue = detail.isTournament === true ? (detail.venue as { capacity?: number; look?: Record<string, unknown> } | null) : null;
@@ -171,8 +176,47 @@ function Replay3DView({ detail, events, progress, onReady, onSecondHalf }: Repla
   // Nápisy patří k videu: dokud se scéna načítá, nejsou vidět.
   const [ready, setReady] = useState(false);
   const [fullscreen, setFullscreen] = useState(false);
+  const shell = useRef<HTMLDivElement>(null);
+  // Celá obrazovka je opravdová tam, kde to prohlížeč umí (Android, počítač): bez lišt prohlížeče a na telefonu
+  // otočená na šířku. Kde to neumí (iPhone), video se jen roztáhne přes okno stránky; obojí vypadá stejně.
+  const toggleFullscreen = () => {
+    if (fullscreen) {
+      setFullscreen(false);
+      if (document.fullscreenElement) document.exitFullscreen().catch((e) => console.warn("Celou obrazovku se nepodařilo opustit:", e));
+      return;
+    }
+    setFullscreen(true);
+    if (!shell.current?.requestFullscreen) return;
+    shell.current.requestFullscreen().then(() => {
+      // Otočit obraz jde jen na dotykovém zařízení; odemkne se sám s koncem celé obrazovky.
+      const orientation = screen.orientation as ScreenOrientation & { lock?: (orientation: "landscape") => Promise<void> };
+      if (!orientation.lock || !window.matchMedia("(pointer: coarse)").matches) return;
+      return orientation.lock("landscape").catch((e) => console.warn("Video se nepodařilo otočit na šířku:", e));
+    }).catch((e) => console.warn("Prohlížeč celou obrazovku nepovolil, video je roztažené přes okno:", e));
+  };
+  // Celou obrazovku jde opustit i mimo tlačítko (Esc, gesto zpět).
+  useEffect(() => {
+    const sync = () => { if (!document.fullscreenElement) setFullscreen(false); };
+    document.addEventListener("fullscreenchange", sync);
+    return () => document.removeEventListener("fullscreenchange", sync);
+  }, []);
   // Pohled: televizní kamera z tribuny, nebo celý stadion z výšky.
   const [overview, setOverview] = useState(false);
+  // Animace a přechody grafiky přes obraz (vyjetí titulku, prolnutí nápisu, let znaku na tabulku) běží stejně
+  // rychle jako hodiny záznamu: při pauze stojí, při „Rychle“ jsou dvakrát rychlejší. Platí pro rozběhnuté i nové.
+  const graphicsLayer = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const layer = graphicsLayer.current;
+    if (!layer) return;
+    const follow = (e: Event) => { for (const animation of (e.target as Element).getAnimations()) animation.playbackRate = pace; };
+    for (const animation of layer.getAnimations({ subtree: true })) animation.playbackRate = pace;
+    layer.addEventListener("animationstart", follow);
+    layer.addEventListener("transitionrun", follow);
+    return () => {
+      layer.removeEventListener("animationstart", follow);
+      layer.removeEventListener("transitionrun", follow);
+    };
+  }, [pace, ready]);
   const frame = useRef<HTMLDivElement>(null);
   // Grafika je rozvržená na šířku GRAPHICS_WIDTH a s oknem se zvětšuje a zmenšuje celá.
   const [fit, setFit] = useState({ scale: 1, height: 0 });
@@ -199,7 +243,7 @@ function Replay3DView({ detail, events, progress, onReady, onSecondHalf }: Repla
   const event = (cue === null && (intro !== null || kickoff !== null || halfTime || finished)) || pictured < 0 ? undefined : events[pictured];
   const coachSide = intro === "home" || intro === "away" ? intro : null;
   const attendance = detail.attendance as number | null;
-  const graphics = { detail, events, index: pictured, event, attack };
+  const graphics = { detail, events, index: pictured, event, attack, clock };
   // Skóre je na tabulce vedle; u nápisu je jen výsledek rozstřelu, který na ní není.
   const fixedLabel = finished ? { text: "KONEC ZÁPASU", sub: pens ? `pen. ${pens.home}:${pens.away}` : undefined, tone: "info" as const }
     : coachSide ? { text: coachSide === "home" ? "TRENÉR DOMÁCÍCH" : "TRENÉR HOSTŮ", tone: "info" as const }
@@ -209,7 +253,11 @@ function Replay3DView({ detail, events, progress, onReady, onSecondHalf }: Repla
   const scored = flash === "goal" && cue === null ? sideOf(events[index].teamId) : null;
 
   return (
-    <div ref={frame} onPointerMove={stir} onPointerDown={stir} onPointerLeave={(e) => { if (e.pointerType === "mouse") setStirred(false); }} className={`group/shot bg-black ${fullscreen ? "fixed inset-0 z-50" : "absolute inset-0 z-20"}`}>
+    // Na celé obrazovce má video stejný poměr stran jako v okně, tedy i stejný záběr: je co největší, celé vidět
+    // a zbytek obrazovky je černý (pruhy nahoře a dole, nebo po stranách).
+    <div ref={shell} className={fullscreen ? "fixed inset-0 z-50 flex items-center justify-center bg-black" : "absolute inset-0 z-20"}>
+    <div ref={frame} onPointerMove={stir} onPointerDown={stir} onPointerLeave={(e) => { if (e.pointerType === "mouse") setStirred(false); }}
+      className={`group/shot relative bg-black ${fullscreen ? "" : "h-full w-full"}`} style={fullscreen ? { width: `min(100vw, ${VIEWER_ASPECT * 100}dvh)`, aspectRatio: VIEWER_ASPECT } : undefined}>
       {stadiumKnown && <Stadium3D
         pitchCondition={(detail.pitch_condition as number | null) ?? 85}
         pitchType={(venue?.look?.pitch_type as string) ?? stadium?.pitchType ?? (detail.pitch_type as string) ?? "natural"}
@@ -242,16 +290,16 @@ function Replay3DView({ detail, events, progress, onReady, onSecondHalf }: Repla
         frozen={paused && ready}
         // Pohled „z tribuny“ nemá rozostření okrajů, které stadion používá u pohledů z dálky.
         initialViewpoint="main_stand"
-        replay={<ReplayScene replay={replay} kits={kits} snow={detail.weather === "snow"} overview={overview} step={step} root={frame} onReady={() => { setReady(true); onReady(); }} />}
+        replay={<ReplayScene replay={replay} kits={kits} snow={detail.weather === "snow"} overview={overview} play={play} clock={clock} root={frame} onReady={() => { setReady(true); onReady(); }} />}
       />}
       {/* Načítání zakrývá scénu, dokud se nekreslí plynule: první snímky se zadrhávají. */}
       {!ready && <VideoLoading />}
 
-      {ready && <div className="absolute top-0 left-0 z-30 origin-top-left pointer-events-none" style={{ width: GRAPHICS_WIDTH, height: fit.height, transform: `scale(${fit.scale})` }}>
+      {ready && <div ref={graphicsLayer} className="absolute top-0 left-0 z-30 origin-top-left pointer-events-none" style={{ width: GRAPHICS_WIDTH, height: fit.height, transform: `scale(${fit.scale})` }}>
         {/* Nahoře vedle sebe: vlevo výsledková tabulka, vpravo nápis akce. */}
         <div className="absolute top-2 inset-x-2 flex items-start gap-2">
           {/* Při výkopu (než přijde první akce poločasu), o přestávce i při jejích střídáních a po konci zápasu se nehraje, tabulka je bez minuty. */}
-          <ScoreBug detail={detail} homeGoals={homeGoals} awayGoals={awayGoals} minute={halfTime || breakSubs || finished || pictured < 0 ? undefined : minute} scored={scored} fast={fast} />
+          <ScoreBug detail={detail} homeGoals={homeGoals} awayGoals={awayGoals} minute={halfTime || breakSubs || finished || pictured < 0 ? undefined : minute} scored={scored} clock={clock} />
           <EventLabel {...graphics} override={fixedLabel} />
         </div>
         <ReplayMark />
@@ -278,10 +326,11 @@ function Replay3DView({ detail, events, progress, onReady, onSecondHalf }: Repla
           {overview ? "Pohled z tribuny" : "Pohled z paneláku"}
         </button>
       )}
-      <button onClick={() => setFullscreen((v) => !v)} title={fullscreen ? "Zmenšit" : "Na celou obrazovku"}
+      <button onClick={toggleFullscreen} title={fullscreen ? "Zmenšit" : "Na celou obrazovku"}
         style={{ top: buttonsTop, right: buttonsRight }} className={`${OVERLAY_BUTTON} ${buttonsShown} z-40 w-7`}>
         <span className="text-base leading-none">{fullscreen ? "✕" : "⛶"}</span>
       </button>
+    </div>
     </div>
   );
 }

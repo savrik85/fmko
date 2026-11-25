@@ -8,7 +8,8 @@ import { Spinner, BadgePreview, JerseyPreview } from "@/components/ui";
 import { PositionBadge } from "@/components/ui/position-badge";
 import { bestTextOn } from "@/lib/team-color";
 import type { BadgePattern } from "@/components/ui";
-import { actionStarts, breakOf, replayOrder, scenedEvents, shootoutEvents, STEP_SECONDS, substitutionsTogether, type ReplayKit } from "@/components/match/replay-3d/scenes";
+import { VIEWER_ASPECT } from "@/components/match/replay-3d/overlay";
+import { actionStarts, attackSeconds, setPieceSeconds, breakOf, replayOrder, scenedEvents, shootoutEvents, STEP_SECONDS, substitutionsTogether, type ReplayKit } from "@/components/match/replay-3d/scenes";
 import { cachedReplayView, DEFAULT_REPLAY_VIEW, fetchReplayView, type ReplayView } from "@/lib/ui-prefs";
 import { PitchIcon, VideoIcon } from "@/components/match/replay-view-icons";
 import { VideoLoading } from "@/components/match/replay-3d/VideoLoading";
@@ -39,8 +40,8 @@ type Speed = "live" | "fast" | "instant";
 const FLAT_MS = { kickoff: 3000, secondHalf: 2500, plain: 3500, attack: 3500, goal: 6000, chance: 3000, drama: 4000, penalty: 7000 };
 const FLAT_FAST_MS = { ...FLAT_MS, plain: 600, attack: 1800, drama: 2500, penalty: 4000 };
 /**
- * Ve 3D drží krok tak dlouho jako jeho scéna („Rychle“ ji přehrává dvakrát rychleji) a hned po něm přijde další,
- * ať obraz po odehrané akci nestojí; události bez scény proběhnou okamžitě (`plain`). `setup` je rozehrání před
+ * Ve 3D drží krok tak dlouho jako jeho scéna (při „Rychle“ běží hodiny záznamu dvakrát rychleji) a hned po něm
+ * přijde další, ať obraz po odehrané akci nestojí; události bez scény proběhnou okamžitě (`plain`). `setup` je rozehrání před
  * šancí nebo kartou (roh, standardka, faul): útok nebo karta na ně navazují bez střihu. Gól končí opakovaným
  * záběrem. `substitution` je jedno střídání; hromadné si dělí krok `drama`. Kroky, jejichž délku určuje scéna,
  * jsou ze STEP_SECONDS.
@@ -52,43 +53,46 @@ const SCENE_MS = {
 };
 /** Před touhle minutou zápasu (tedy jen v nulté) jde video rovnou od začátku; později se záznam zeptá, odkud ho pustit. */
 const VIDEO_ASKS_FROM = 1;
-/** Poměr stran okna záznamu (šířka : výška). */
-const VIEWER_ASPECT = 2.2;
 /** Po skoku na akci stojí její první snímek, než se rozběhne (ať je vidět, kam se skočilo). */
 const CUE_MS = 700;
 
 /**
- * Časovač kroků záznamu. Běží vždy jen jeden: další krok se plánuje, až ten předchozí skončí, a nový plán
- * (skok na jinou akci) ten rozběhnutý ruší. Pauza ho zastaví a po ní doběhne zbytek.
+ * Hodiny záznamu: jediný čas, podle kterého se střídají kroky záznamu i hraje 3D scéna (ta si z nich bere, kde
+ * v záběru je, takže se s kroky nemůže rozejít). Běží `rate`krát rychleji než skutečný čas a při pauze stojí.
+ * Krok na nich čeká vždy jen jeden: další se plánuje, až ten předchozí skončí, a nový plán (skok na jinou akci)
+ * ten rozběhnutý ruší.
  */
-function useStepTimer(paused: boolean) {
-  const slot = useRef<{ fn: () => void; left: number; armedAt: number; id?: ReturnType<typeof setTimeout> } | null>(null);
-  const halted = useRef(paused);
-  const arm = () => {
-    const s = slot.current;
-    if (!s || halted.current) return;
-    s.armedAt = performance.now();
-    s.id = setTimeout(() => { slot.current = null; s.fn(); }, s.left);
-  };
-  useEffect(() => {
-    halted.current = paused;
-    const s = slot.current;
-    if (!s) return;
-    if (!paused) return arm();
-    clearTimeout(s.id);
-    s.left -= performance.now() - s.armedAt;
-  }, [paused]);
-  const cancel = () => { clearTimeout(slot.current?.id); slot.current = null; };
-  useEffect(() => cancel, []);
-  /** Naplánuje krok a vrátí funkci, která ho zruší (pokud mezitím nebyl naplánován jiný). */
-  const later = (ms: number, fn: () => void) => {
-    cancel();
-    const s: NonNullable<typeof slot.current> = { fn, left: ms, armedAt: 0 };
-    slot.current = s;
-    arm();
-    return () => { if (slot.current === s) cancel(); };
-  };
-  return { later, cancel };
+function useReplayClock(paused: boolean, rate: number) {
+  const [clock] = useState(() => {
+    // Čas hodin = `base` + skutečný čas od `since` × `speed`; při `speed` 0 stojí.
+    let base = 0, since = 0, speed = 0;
+    let slot: { fn: () => void; at: number; id?: ReturnType<typeof setTimeout> } | null = null;
+    const now = () => base + (performance.now() - since) * speed;
+    const arm = () => {
+      const s = slot;
+      if (!s) return;
+      clearTimeout(s.id);
+      if (speed > 0) s.id = setTimeout(() => { slot = null; s.fn(); }, (s.at - now()) / speed);
+    };
+    const cancel = () => { clearTimeout(slot?.id); slot = null; };
+    return {
+      now,
+      cancel,
+      /** Hodiny poběží rychlostí `next` (0 = stojí); rozběhnutý krok doběhne podle nich. */
+      run: (next: number) => { base = now(); since = performance.now(); speed = next; arm(); },
+      /** Naplánuje krok za `ms` času hodin a vrátí funkci, která ho zruší (pokud mezitím nebyl naplánován jiný). */
+      later: (ms: number, fn: () => void) => {
+        cancel();
+        const s = { fn, at: now() + ms };
+        slot = s;
+        arm();
+        return () => { if (slot === s) cancel(); };
+      },
+    };
+  });
+  useEffect(() => clock.run(paused ? 0 : rate), [clock, paused, rate]);
+  useEffect(() => clock.cancel, [clock]);
+  return clock;
 }
 
 function ini(n: string) { return n.split(" ").map((w) => w[0]).filter(Boolean).slice(0, 2).join("").toUpperCase(); }
@@ -221,8 +225,7 @@ export default function MatchReplayPage() {
   // 3D záznam ukazuje jen důležité akce; události bez scény (držení míče, počasí…) v něm proběhnou hned.
   const can3d = !!match?.home_lineup_data && !!match?.away_lineup_data;
   const long3d = view3d && can3d;
-  const sceneMs = (step: keyof typeof SCENE_MS) => SCENE_MS[step] / (speed === "fast" ? 2 : 1);
-  const stepMs = (step: keyof typeof FLAT_MS, video = long3d) => (video ? sceneMs(step) : (speed === "fast" ? FLAT_FAST_MS : FLAT_MS)[step]);
+  const stepMs = (step: keyof typeof FLAT_MS, video = long3d) => (video ? SCENE_MS : speed === "fast" ? FLAT_FAST_MS : FLAT_MS)[step];
   // 3D záznam se stáhne, až když ho hráč má zapnutý (po chybě znovu, až se na něj vrátí).
   useEffect(() => {
     if (!long3d || Replay3D) return;
@@ -234,7 +237,10 @@ export default function MatchReplayPage() {
   const scened = useMemo(() => (match && can3d ? scenedEvents(match.events) : null), [match, can3d]);
   // Pauza a skok na předchozí/další akci.
   const [paused, setPaused] = useState(false);
-  const { later, cancel } = useStepTimer(paused || failed3d || choosingVideo || (long3d && !ready3d));
+  // „Rychle“ ve videu zrychlí hodiny; 2D záznam má pro „Rychle“ vlastní délky kroků (FLAT_FAST_MS).
+  const halted = paused || failed3d || choosingVideo || (long3d && !ready3d), rate = long3d && speed === "fast" ? 2 : 1;
+  const clock = useReplayClock(halted, rate);
+  const { later, cancel } = clock;
   const starts = useMemo(() => (match ? actionStarts(match.events) : []), [match]);
   const halfTime = useMemo(() => breakOf(match?.events ?? []), [match]);
   /** Po skoku: akce, jejíž první snímek chvíli stojí, než se rozběhne. */
@@ -271,7 +277,7 @@ export default function MatchReplayPage() {
     const run = (n: number) => {
       if (n < steps.length) {
         setIntro(steps[n]);
-        later(sceneMs(steps[n] === "handshake" ? "handshake" : "coach"), () => run(n + 1));
+        later(SCENE_MS[steps[n] === "handshake" ? "handshake" : "coach"], () => run(n + 1));
         return;
       }
       setIntro(null);
@@ -458,7 +464,8 @@ export default function MatchReplayPage() {
       if (isShot) {
         setFlash("attacking");
         setFlashEvent(next);
-        later(stepMs("attack"), () => {
+        // Ve videu trvá útok tak dlouho jako ve scéně: u standardky a penalty kratší dobu než v akci ze hry.
+        later(long3d ? attackSeconds(match.events, idx) * 1000 : stepMs("attack"), () => {
           if (next.type === "goal") {
             if (next.teamId === 1) setHg((s) => s + 1); else setAg((s) => s + 1);
             setFlash("goal");
@@ -486,8 +493,8 @@ export default function MatchReplayPage() {
       setIdx((i) => i + 1);
       // Hromadné střídání je jedna scéna: její krok si střídání rozdělí, ať se vystřídají titulky všech.
       const together = substitutionsTogether(match.events, idx);
-      later(next.type === "corner" || next.type === "freekick" || next.type === "foul" ? sceneMs("setup")
-        : together > 1 ? sceneMs("drama") / together : sceneMs(next.type === "substitution" ? "substitution" : "drama"), endStep);
+      later(next.type === "corner" || next.type === "freekick" ? setPieceSeconds(next) * 1000 : next.type === "foul" ? SCENE_MS.setup
+        : together > 1 ? SCENE_MS.drama / together : SCENE_MS[next.type === "substitution" ? "substitution" : "drama"], endStep);
       return;
     }
     // Po skoku se nečeká a událost se ukáže hned, ve stejném kroku jako zmizí stojící snímek.
@@ -761,8 +768,8 @@ export default function MatchReplayPage() {
               {/* Kód videa se teprve stahuje. */}
               {view3d && !failed3d && !Replay3D && <VideoLoading />}
               {view3d && !failed3d && Replay3D && (
-                <Replay3D detail={match.detail} events={match.events} onReady={() => setReady3d(true)} onFailure={() => setFailed3d(true)} onSecondHalf={startSecondHalf}
-                  progress={{ take, idx, flash, intro, kickoff, halfTime: htPause, breakSubs, finished, paused, cue, fast: speed === "fast", homeGoals: hg, awayGoals: ag, minute: videoMin }} />
+                <Replay3D detail={match.detail} events={match.events} clock={clock} onReady={() => setReady3d(true)} onFailure={() => setFailed3d(true)} onSecondHalf={startSecondHalf}
+                  progress={{ take, idx, flash, intro, kickoff, halfTime: htPause, breakSubs, finished, paused, cue, pace: halted ? 0 : rate, homeGoals: hg, awayGoals: ag, minute: videoMin }} />
               )}
             </>
           )}
