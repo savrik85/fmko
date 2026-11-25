@@ -52,14 +52,17 @@ function plain(text: string): string {
   return text.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase();
 }
 
-/** Výzva přijít, sama o sobě o docházce: „přijď“, „přijdeš?“, „dorazíš?“, „aspoň poločas“, „beru zpátky“. */
-const ATTEND_URGE_RE = /\b(prijd|prijdes|prijed|prijedes|doraz|dorazis|aspon (polocas|jeden polocas|na polocas|na chvili|na lavicku)|beru (to )?zpatky|nakonec (prijd\w*|doraz\w*))/;
+/**
+ * Výzva přijít, sama o sobě o docházce: „přijď“, „přijdeš?“, „dorazíš?“, „aspoň poločas“, „beru zpátky“,
+ * i infinitivem „musíš přijet / přijít / být“ (Janoušek, 25. 11.). „Přijít o místo“ ani „musíš být v klidu“ ne.
+ */
+const ATTEND_URGE_RE = /\b(prijd|prijdes|prijed|prijedes|prijet\b|prijit\b(?! o\b)|doraz|dorazis|aspon (polocas|jeden polocas|na polocas|na chvili|na lavicku)|beru (to )?zpatky|nakonec (prijd\w*|doraz\w*)|musis (tam )?b(y|ej)t(?=\s*(?:[,.!?;]|$)|\s+tam\b|\s+na (?:zapas|trenin|hrist)))/;
 /** Prosba a naléhání („potřebuju tě“, „udělej to pro mě“, „bez tebe“): o docházce jen spolu s tématem. */
 const SOFT_URGE_RE = /\b(potrebuj\w* te|potreboval\w* te|udelej to pro|udelas to pro|prosim|bez tebe|kluci (na tebe )?cekaj\w*|pocitam s tebou|nenechavej nas)/;
 /** Téma docházky: zápas, trénink, den, poločas, lavička, sestava, hrát. */
 const ATTEND_TOPIC_RE = /(zapas|trenin|pratelak|zitr|dnes|v (pondeli|utery|stredu|ctvrtek|patek|sobotu|nedeli)|polocas|lavick|sestav|nastoup|hrat|hrajem|utok|vepred|zaloz)/;
-/** Nabídka řešení: odvoz, hlídání, výměna směny. Zvedá šanci. */
-const OFFER_RE = /\b(vyzvednu|odvezu|vezmu te|hodim te|zavezu|pro tebe (prijedu|dojedu|zajedu)|pohlida|vymenim|zaridim|zaplatim ti)/;
+/** Nabídka řešení: odvoz, hlídání, výměna směny, peníze („dám ti 1000 Kč“, „dostaneš prémii“). Zvedá šanci. */
+const OFFER_RE = /\b(vyzvednu|odvezu|vezmu te|hodim te|zavezu|pro tebe (prijedu|dojedu|zajedu)|pohlida|vymenim|zaridim|zaplatim ti|premi|\d[\d ]* ?(kc|korun))/;
 
 /**
  * Přemlouvá trenér hráče, ať přijde? Výzva „přijď“, „dorazíš?“ stačí sama, prosba („potřebuju tě“,

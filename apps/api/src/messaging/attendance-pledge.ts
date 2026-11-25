@@ -235,8 +235,11 @@ const REPLY_HEDGE_RE = /\b(asi|spis|nejspis|uvidime|uvidim|uvidi se|mozna|tezko|
 const SEE_YOU_RE = /\buvidime se\b/g;
 /** Hráč sám jmenuje, o co jde (trénink, zápas): k tématu, i když se trenér neptal. */
 const EVENT_WORD_RE = /(tr[eé]nin|z[aá]pas|p[rř][aá]tel[aá]k|utk[aá]n|ma[cč]\b)/i;
-/** Trenér psal o docházce (nebo o volnu): odpověď „nepřijdu“ je k tématu. */
-const COACH_ATTENDANCE_RE = /(tr[eé]nin|z[aá]pas|p[rř][aá]tel[aá]k|doraz|omluv|chod[ií]t|p[rř][ií]j[dď]|p[rř]ijede|nedostav|chyb[eě]t|volno|pauz|odpo[cč]|vynech|bude[sš] tam|po[cč][ií]t[aá]m s tebou|nastoup|sestav)/i;
+/**
+ * Trenér psal o docházce (nebo o volnu): odpověď „nepřijdu“ je k tématu. I infinitivem: „musíš přijet / přijít /
+ * být“ (Janoušek, 25. 11.: „dorazím“ se zahodilo). „Přijít o místo“ ani „musíš být v klidu“ o docházce nejsou.
+ */
+const COACH_ATTENDANCE_RE = /(tr[eé]nin|z[aá]pas|p[rř][aá]tel[aá]k|doraz|omluv|chod[ií]t|p[rř][ií]j[dď]|p[rř]ije([dď]|t\b)|p[rř][ií]j[ií]t\b(?! o\b)|nedostav|chyb[eě]t|volno|pauz|odpo[cč]|vynech|bude[sš] tam|mus[ií][sš] (tam )?b([yý]|ej)t(?=\s*(?:[,.!?;]|$)|\s+tam\b|\s+na (?:z[aá]pas|tr[eé]nin|h[rř]i[sš]t))|po[cč][ií]t[aá]m s tebou|nastoup|sestav)/i;
 
 /**
  * Je to jasný slib k tématu? Váhavé „asi nepřijdu“ ne (Šimon Nový, E2E 22. 11.: model ho
@@ -682,6 +685,34 @@ export async function recordAttendancePledge(
 }
 
 /**
+ * Oprava dat (admin): hráč trenérovi slíbil, že na příští zápas přijde (nebo nepřijde), a hra to
+ * nezapsala (Janoušek, 25. 11.). Zapíše slib stejně jako z odpovědi hráče: odpověď do kabiny
+ * zápasu a poznámka trenérovi do chatu s hráčem. `excused` = platí po zápisu omluvenka.
+ */
+export async function recordMatchPledgeByAdmin(
+  db: D1Database, playerId: string, intent: PledgeIntent, now: Date = new Date(),
+): Promise<{ ok: true; pledge: MatchPledge; excused: boolean } | { ok: false; error: string }> {
+  const p = await db.prepare(
+    `SELECT p.first_name, p.team_id, COALESCE(t.parent_team_id, t.id) AS club_id
+       FROM players p JOIN teams t ON t.id = p.team_id WHERE p.id = ?`,
+  ).bind(playerId).first<{ first_name: string; team_id: string; club_id: string }>()
+    .catch((e) => { logger.warn({ module: M }, `hráč ${playerId} pro slib od admina`, e); return null; });
+  if (!p) return { ok: false, error: "Hráč nenalezen nebo nemá tým." };
+  const conv = await db.prepare(
+    "SELECT id FROM conversations WHERE type = 'player' AND participant_id = ? AND team_id = ? ORDER BY created_at DESC LIMIT 1",
+  ).bind(playerId, p.club_id).first<{ id: string }>()
+    .catch((e) => { logger.warn({ module: M }, `chat s hráčem ${playerId} pro slib od admina`, e); return null; });
+  if (!conv) return { ok: false, error: "Trenér s hráčem nemá chat." };
+  const stored = await recordAttendancePledge(db, {
+    clubTeamId: p.club_id, convId: conv.id, playerId, playerFirstName: p.first_name, pledge: { event: "match", intent, when: "next" }, now,
+  });
+  if (!stored || !("matchKey" in stored)) return { ok: false, error: "Slib se nezapsal (žádný zápas do týdne, zranění nebo stopka)." };
+  const { recordedExcuses } = await import("../events/match-absences");
+  const excused = (await recordedExcuses(db, p.team_id, stored.matchKey))?.has(playerId) ?? false;
+  return { ok: true, pledge: stored, excused };
+}
+
+/**
  * Bude hráč v herní den `day` ještě zraněný? Denní tick trénuje (bez zraněných, `days_remaining > 0`)
  * dřív, než zranění o den zkrátí, takže v den `gameDay + k` je mimo, když `days_remaining >= k`.
  * Přetest 3 (Antonín, koleno na 5 dní): slib tréninku, který se nikdy nevyhodnotí.
@@ -691,7 +722,9 @@ async function injuredOn(db: D1Database, playerId: string, gameDay: string, day:
     .bind(playerId).first<{ days: number | null }>()
     .catch((e) => { logger.warn({ module: M }, `zranění hráče ${playerId}`, e); return null; });
   const k = Math.round((Date.parse(`${day.slice(0, 10)}T12:00:00Z`) - Date.parse(`${gameDay.slice(0, 10)}T12:00:00Z`)) / 86_400_000);
-  return (row?.days ?? 0) >= k;
+  // Bez zranění nikdy: `?? 0` dělalo v den zápasu (k = 0) ze zdravého hráče zraněného a slib
+  // na dnešní zápas se nezapsal nikomu (prod 23.–25. 11.: 19 slibů, Janoušek).
+  return row?.days != null && row.days >= k;
 }
 
 /** Má hráč stopku na příští zápas? Trénovat smí (tick ho na trénink pouští), hrát ne. */
@@ -720,18 +753,25 @@ export async function recentCoachText(db: D1Database, convId: string, now: Date)
 async function answerInMatchGroup(
   db: D1Database, o: { teamId: string; playerId: string; name: string; pledge: MatchPledge; now: Date },
 ): Promise<void> {
-  const conv = await db.prepare(
-    `SELECT c.id FROM conversations c JOIN messages m ON m.conversation_id = c.id
-      WHERE c.team_id = ? AND c.type = 'squad_group' AND json_extract(m.metadata, '$.calendarId') = ? LIMIT 1`,
-  ).bind(o.teamId, o.pledge.matchKey).first<{ id: string }>();
-  if (!conv) return;
+  // Ke kolu bývají dvě kabiny: den předem „⚽ vs …“, ráno v den zápasu obecná Kabina. Omluvenky
+  // (`recordedExcuses`) berou poslední odpověď hráče napříč oběma, takže i tady: slib jde do kabiny,
+  // kde je jeho poslední odpověď, jinak do té s nejnovější zprávou ke kolu (Janoušek, 25. 11.:
+  // „přijdu“ z ⚽ vs přebíjelo ranní „zaspal jsem“ v Kabině a slib se nezapsal).
   const last = await db.prepare(
-    `SELECT json_extract(metadata, '$.response') AS response FROM messages
-      WHERE conversation_id = ? AND sender_type = 'player' AND sender_id = ? AND json_extract(metadata, '$.response') IS NOT NULL
-      ORDER BY julianday(sent_at) DESC LIMIT 1`,
-  ).bind(conv.id, o.playerId).first<{ response: string | null }>();
+    `SELECT m.conversation_id AS conv_id, json_extract(m.metadata, '$.response') AS response
+       FROM messages m JOIN conversations c ON c.id = m.conversation_id
+      WHERE c.team_id = ? AND c.type = 'squad_group' AND m.sender_type = 'player' AND m.sender_id = ?
+        AND json_extract(m.metadata, '$.calendarId') = ? AND json_extract(m.metadata, '$.response') IS NOT NULL
+      ORDER BY julianday(m.sent_at) DESC LIMIT 1`,
+  ).bind(o.teamId, o.playerId, o.pledge.matchKey).first<{ conv_id: string; response: string | null }>();
   const wanted = o.pledge.intent === "attend" ? "yes" : "no";
   if (last?.response === wanted) return;
+  const conv = last ? { id: last.conv_id } : await db.prepare(
+    `SELECT c.id FROM conversations c JOIN messages m ON m.conversation_id = c.id
+      WHERE c.team_id = ? AND c.type = 'squad_group' AND json_extract(m.metadata, '$.calendarId') = ?
+      ORDER BY julianday(m.sent_at) DESC LIMIT 1`,
+  ).bind(o.teamId, o.pledge.matchKey).first<{ id: string }>();
+  if (!conv) return;
   // Věta, kterou v téhle kabině ještě nikdo nenapsal, a k trenérovi v tvaru, jakým mu hráč píše.
   const said = await db.prepare(
     "SELECT body FROM messages WHERE conversation_id = ? AND sender_type = 'player' AND TRIM(COALESCE(body, '')) != '' ORDER BY julianday(sent_at), rowid",

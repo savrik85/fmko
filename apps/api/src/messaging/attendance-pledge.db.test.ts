@@ -4,7 +4,7 @@
  */
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { Miniflare } from "miniflare";
-import { BROKEN_PLEDGE_SMS, BROKEN_PLEDGE_RELATION, MATCH_ATTEND_PLEDGE_TEXTS, recordAttendancePledge, settleAttendancePledges } from "./attendance-pledge";
+import { BROKEN_PLEDGE_SMS, BROKEN_PLEDGE_RELATION, MATCH_ATTEND_PLEDGE_TEXTS, recordAttendancePledge, recordMatchPledgeByAdmin, settleAttendancePledges } from "./attendance-pledge";
 import { afterPlayerReply, applyResolutionAndClose } from "./ai-player-spawn";
 import { recordedExcuses } from "../events/match-absences";
 import type { PlayerSnapshot } from "./ai-player-scenarios";
@@ -298,6 +298,48 @@ describe("slib k zápasu a kabina zápasu", () => {
     // Podruhé stejný slib do kabiny nic nepíše.
     await recordAttendancePledge(db, { clubTeamId: "club", convId: "c1", playerId: "p1", playerFirstName: "Petr", pledge: { event: "match", intent: "attend", when: "next" } });
     expect((await db.prepare("SELECT COUNT(*) AS n FROM messages WHERE conversation_id = 'g1'").first<{ n: number }>())?.n).toBe(3);
+  });
+
+  // Janoušek (Vlachovo Březí, 25. 11.): den předem „Budu tam“ ve skupině „⚽ vs …“, ráno omluvenka
+  // „Zaspal jsem“ v obecné Kabině. Slib „přijdu“ musí přebít poslední odpověď napříč oběma.
+  it("dvě kabiny ke stejnému kolu: „přijdu“ přebije ranní omluvenku z druhé kabiny", async () => {
+    await db.batch([
+      db.prepare("INSERT INTO conversations (id, team_id, type, title, created_at) VALUES ('g1', 'club', 'squad_group', '⚽ vs Katovice', '2026-11-21')"),
+      db.prepare("INSERT INTO conversations (id, team_id, type, title, created_at) VALUES ('g2', 'club', 'squad_group', 'Kabina', '2026-10-01')"),
+      db.prepare(`INSERT INTO messages (id, conversation_id, sender_type, sender_id, sender_name, body, metadata, sent_at) VALUES
+        ('a1', 'g1', 'user', 'club', 'Trenér', 'Kdo může?', '{"type":"match_announce","calendarId":"cal1"}', '2026-11-21 05:15:51'),
+        ('a2', 'g1', 'player', 'p1', 'Petr Šimek', 'Budu tam o půl hodiny dřív', '{"type":"attendance","response":"yes","timing":"day_before","calendarId":"cal1"}', '2026-11-21 05:16:02'),
+        ('a3', 'g2', 'player', 'p1', 'Petr Šimek', 'Zaspal jsem, budík nezvonil.', '{"type":"attendance","response":"no","timing":"match_day","calendarId":"cal1"}', '2026-11-22 05:11:24'),
+        ('a4', 'g2', 'system', NULL, 'Systém', '⚠️ Nové omluvenky v den zápasu:', '{"type":"match_day_announce","calendarId":"cal1"}', '2026-11-22 05:11:44')`),
+      db.prepare("UPDATE teams SET game_date = '2026-11-22T00:00:00Z' WHERE id = 'club'"),
+    ]);
+    expect((await recordedExcuses(db, "club", "cal1"))?.has("p1")).toBe(true);
+    await recordAttendancePledge(db, { clubTeamId: "club", convId: "c1", playerId: "p1", playerFirstName: "Petr", pledge: { event: "match", intent: "attend", when: "next" }, now: new Date("2026-11-22T13:24:15Z") });
+    expect((await recordedExcuses(db, "club", "cal1"))?.has("p1")).toBe(false);
+    const pledged = await db.prepare("SELECT conversation_id FROM messages WHERE json_extract(metadata, '$.timing') = 'pledge'").all<{ conversation_id: string }>();
+    expect(pledged.results.map((r) => r.conversation_id)).toEqual(["g2"]);
+  });
+});
+
+describe("oprava dat: slib k zápasu zapsaný adminem", () => {
+  it("omluvený hráč „přijde“: omluvenka neplatí, trenér vidí poznámku v chatu s hráčem", async () => {
+    await db.batch([
+      db.prepare("INSERT INTO conversations (id, team_id, type, title, created_at) VALUES ('g2', 'club', 'squad_group', 'Kabina', '2026-10-01')"),
+      db.prepare(`INSERT INTO messages (id, conversation_id, sender_type, sender_id, sender_name, body, metadata, sent_at) VALUES
+        ('a3', 'g2', 'player', 'p1', 'Petr Šimek', 'Zaspal jsem, budík nezvonil.', '{"type":"attendance","response":"no","timing":"match_day","calendarId":"cal1"}', '2026-11-22 05:11:24')`),
+      db.prepare("UPDATE teams SET game_date = '2026-11-22T00:00:00Z' WHERE id = 'club'"),
+    ]);
+    const r = await recordMatchPledgeByAdmin(db, "p1", "attend", new Date("2026-11-22T14:00:00Z"));
+    expect(r).toMatchObject({ ok: true, excused: false, pledge: { intent: "attend", matchKey: "cal1" } });
+    expect((await recordedExcuses(db, "club", "cal1"))?.has("p1")).toBe(false);
+    expect(await notes()).toEqual(["📝 Petr slíbil, že přijde na zápas v neděli 22. 11."]);
+  });
+
+  it("neznámý hráč nebo hráč bez chatu: chyba, nic se nezapíše", async () => {
+    expect(await recordMatchPledgeByAdmin(db, "nikdo", "attend")).toMatchObject({ ok: false });
+    await db.prepare("DELETE FROM conversations WHERE id = 'c1'").run();
+    expect(await recordMatchPledgeByAdmin(db, "p1", "attend")).toMatchObject({ ok: false });
+    expect((await life()).matchPledge).toBeUndefined();
   });
 });
 

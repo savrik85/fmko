@@ -7790,6 +7790,17 @@ gameRouter.post("/admin/players/:playerId/revert-broken-pledge", async (c) => {
   return c.json({ ok: true, ...await revertBrokenMinutesPledge(c.env.DB, c.req.param("playerId")) });
 });
 
+// Oprava dat 2026-11-25: hráč trenérovi slíbil „přijdu“ na příští zápas a hra slib nezapsala
+// (Janoušek, messaging/attendance-pledge.ts). Body: { intent: "attend" | "skip" }.
+gameRouter.post("/admin/players/:playerId/match-pledge", async (c) => {
+  const body = await c.req.json<{ intent?: unknown }>()
+    .catch((e) => { logger.warn({ module: "game.ts" }, "match pledge body", e); return null; });
+  if (body?.intent !== "attend" && body?.intent !== "skip") return c.json({ error: "intent musí být attend nebo skip" }, 400);
+  const { recordMatchPledgeByAdmin } = await import("../messaging/attendance-pledge");
+  const r = await recordMatchPledgeByAdmin(c.env.DB, c.req.param("playerId"), body.intent);
+  return r.ok ? c.json(r) : c.json({ error: r.error }, 400);
+});
+
 gameRouter.post("/admin/transfer-offers/reject-without-cooldown", async (c) => {
   const body = await c.req.json<{ offerIds?: unknown; message?: unknown }>()
     .catch((e) => { logger.warn({ module: "game.ts" }, "reject without cooldown body", e); return null; });
