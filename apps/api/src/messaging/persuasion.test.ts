@@ -15,6 +15,10 @@ describe("pozná, že trenér hráče přemlouvá", () => {
     "Chápu, ale fakt tě potřebuju, bez tebe tam vepředu nikoho nemáme. Malá může jet s námi, je o ni postaráno. Uděláš to pro kluky a přijdeš?",
     "Filipe, zítra tě v Hradčanech potřebuju. Přijď, jo?",
     "Šimone, změna plánu. Jirka se zranil, zítra tě v Hradčanech nakonec potřebuju. To volno beru zpátky, promiň. Přijdeš?",
+    // Janoušek (Vlachovo Březí, 25. 11.): ráno „zaspal jsem“, odpoledne trenér přemlouval infinitivem.
+    "Hele dneska prostě musíš být, klidně ti dám 1000kč. Ale prostě musíš přijet",
+    "Musíš přijít, bez tebe nemáme obranu.",
+    "Dneska musis byt na zapase, nikoho nemame.",
   ])("přemlouvá: %s", (text) => {
     expect(isPersuasion(text)).toBe(true);
   });
@@ -24,6 +28,8 @@ describe("pozná, že trenér hráče přemlouvá", () => {
     "Prosím tě, kdo ukradl ty dresy?",
     "Díky za info, uzdrav se.",
     "Tak co, ukradl jsi ty dresy, nebo ne?",
+    "Musíš být v klidu, to se vyřeší.",
+    "Za tohle můžeš přijít o místo v sestavě.",
   ])("nepřemlouvá: %s", (text) => {
     expect(isPersuasion(text)).toBe(false);
   });
@@ -32,6 +38,13 @@ describe("pozná, že trenér hráče přemlouvá", () => {
     expect(offersHelp("zítra v pět tě vyzvednu autem")).toBe(true);
     expect(offersHelp("Bohoušova žena ji na tribuně pohlídá")).toBe(true);
     expect(offersHelp("Přijď, jo?")).toBe(false);
+  });
+
+  it("nabídnuté peníze pozná jako nabídku (Janoušek, 25. 11.: „klidně ti dám 1000kč“)", () => {
+    expect(offersHelp("Hele dneska prostě musíš být, klidně ti dám 1000kč. Ale prostě musíš přijet")).toBe(true);
+    expect(offersHelp("Přijď, dostaneš prémii.")).toBe(true);
+    expect(offersHelp("Přijeď, zaplatím ti benzín.")).toBe(true);
+    expect(offersHelp("Přijď, potřebujeme tě.")).toBe(false);
   });
 });
 

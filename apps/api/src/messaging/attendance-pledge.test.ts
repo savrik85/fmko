@@ -305,6 +305,23 @@ describe("váhání bez slovesa docházky", () => {
   });
 });
 
+// Janoušek (Vlachovo Březí, 25. 11.): ráno omluvenka „zaspal jsem“, trenér psal infinitivem
+// („musíš přijet“, „musíš být“) a „dorazím“ se zahodilo jako odpověď mimo téma.
+describe("trenér psal o docházce infinitivem", () => {
+  it.each([
+    "Hele dneska prostě musíš být, klidně ti dám 1000kč. Ale prostě musíš přijet",
+    "Musíš přijít, bez tebe to nedáme.",
+    "musis prijit, fakt",
+    "Dneska musíš bejt, jinak to prohrajem.",
+  ])("„%s“ je k tématu", (coach) => {
+    expect(isClearPledge("Pás se mi zasekl, nestíhám, ale za ten litr se vyhrabu a dorazím! Držím vás za slovo. 🤝", coach)).toBe(true);
+  });
+
+  it("„musíš být v klidu“ o docházce není", () => {
+    expect(isClearPledge("Jasně, dorazím.", "Musíš být v klidu, to se vyřeší.")).toBe(false);
+  });
+});
+
 // final3 Chyba 5 (E2E 22. 11., Stehlík, ZEFA, ráno po hospodě): na „A dorazíš v pátek na trénink?“
 // odpověděl „…v patek budu musím si to rozmyslet…“ a dostal 📝 „přijde na trénink v pátek 4. 12.“.
 describe("rozmyslím si to, dám vědět, zkusím: slib to není", () => {
