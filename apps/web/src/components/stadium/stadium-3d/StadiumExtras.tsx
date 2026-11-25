@@ -641,6 +641,16 @@ function UltrasCapoStand({ position, primaryColor }: { position: [number, number
  *
  * Bez lidí (`pocet === 0`) se nekreslí nic: prázdný oplocený kout by lhal.
  */
+/**
+ * Stojící fanoušek hostů: výšky dílů (m) a barvy, které se mezi postavami střídají. Trup a hlava jsou stejně velké
+ * jako u diváků na tribunách (Stand.tsx).
+ */
+const AWAY_FAN = {
+  legs: 0.78, torso: 0.46, head: 0.26,
+  trousers: ["#1F2937", "#374151", "#1E3A5F", "#4B5563"],
+  skin: ["#E0B48C", "#C99A6E", "#F0C9A0", "#8D5A3B"],
+};
+
 export function HostujiciSektor({
   pocet,
   barva,
@@ -656,11 +666,11 @@ export function HostujiciSektor({
   mode?: StadiumMode;
 }) {
   // Při gólu a šanci hostů v záznamu zápasu část z nich vyskakuje, každý ve svém rytmu.
-  const fans = useRef<(THREE.Mesh | null)[]>([]);
+  const fans = useRef<(THREE.Group | null)[]>([]);
   useFrame(({ clock }) => {
     const mood = crowdMood.away;
     fans.current.forEach((fan, i) => {
-      if (fan) fan.position.y = 0.85 + crowdLift(mood, (i * 0.618) % 1) * Math.max(0, Math.sin(clock.elapsedTime * 6.5 + i * 1.7)) * 0.25;
+      if (fan) fan.position.y = crowdLift(mood, (i * 0.618) % 1) * Math.max(0, Math.sin(clock.elapsedTime * 6.5 + i * 1.7)) * 0.25;
     });
   });
   if (pocet <= 0 || mode === "training_day") return null;
@@ -683,21 +693,32 @@ export function HostujiciSektor({
         <planeGeometry args={[sirka, vyska]} />
         <meshStandardMaterial color="#6B7280" transparent opacity={0.35} side={2} roughness={0.6} />
       </mesh>
-      {/* Vlajka hostů uprostřed */}
-      <mesh position={[0, vyska * 0.62, 0.05]}>
+      {/* Vlajka hostů uprostřed, nahoře na plotě: fanoušci stojí za ním a níž by jim zakrývala hlavy */}
+      <mesh position={[0, vyska - 0.4, 0.05]}>
         <planeGeometry args={[Math.min(3.2, sirka * 0.5), 0.8]} />
         <meshStandardMaterial color={barva} side={2} roughness={0.85} />
       </mesh>
-      {/* Postavy v jejich barvě, ať je poznat, že to nejsou domácí */}
+      {/* Postavy jako diváci na tribunách (nohy, trup, hlava), jen vestoje. Trup mají v barvě svého klubu, ať je
+          poznat, že to nejsou domácí; kalhoty a pleť se střídají. */}
       {Array.from({ length: Math.min(24, Math.max(4, Math.round(pocet / 4))) }).map((_, i, pole) => {
         const x = -sirka / 2 + ((i + 0.5) / pole.length) * sirka;
         // Za plotem, dál od hřiště (osa z sektoru míří ke hřišti). Dřív stáli před ním, tedy v síti branky.
         const z = -(0.5 + (i % 3) * 0.45);
         return (
-          <mesh key={i} ref={(m) => { fans.current[i] = m; }} position={[x, 0.85, z]} castShadow>
-            <capsuleGeometry args={[0.16, 0.62, 3, 6]} />
-            <meshStandardMaterial color={barva} roughness={0.9} />
-          </mesh>
+          <group key={i} ref={(g) => { fans.current[i] = g; }} position={[x, 0, z]}>
+            <mesh position={[0, AWAY_FAN.legs / 2, 0]} castShadow>
+              <boxGeometry args={[0.31, AWAY_FAN.legs, 0.2]} />
+              <meshStandardMaterial color={AWAY_FAN.trousers[i % AWAY_FAN.trousers.length]} roughness={0.9} />
+            </mesh>
+            <mesh position={[0, AWAY_FAN.legs + AWAY_FAN.torso / 2, 0]} castShadow>
+              <boxGeometry args={[0.34, AWAY_FAN.torso, 0.25]} />
+              <meshStandardMaterial color={barva} roughness={0.9} />
+            </mesh>
+            <mesh position={[0, AWAY_FAN.legs + AWAY_FAN.torso + AWAY_FAN.head / 2, 0]} castShadow>
+              <boxGeometry args={[0.19, AWAY_FAN.head, 0.19]} />
+              <meshStandardMaterial color={AWAY_FAN.skin[(i * 3) % AWAY_FAN.skin.length]} roughness={0.9} />
+            </mesh>
+          </group>
         );
       })}
     </group>
