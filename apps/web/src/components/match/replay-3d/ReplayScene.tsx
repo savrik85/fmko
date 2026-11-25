@@ -1,11 +1,10 @@
 "use client";
 
-import { useContext, useEffect, useLayoutEffect, useMemo, useRef, type RefObject } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, type RefObject } from "react";
 import * as THREE from "three";
 import { useFrame, useThree } from "@react-three/fiber";
 import { FENCE_BOUNDS, GOAL_NAME, PITCH_SURFACE_Y } from "@/components/stadium/stadium-3d/constants";
 import { crowdMood } from "@/components/stadium/stadium-3d/crowdMood";
-import { RealtimeShadowsContext } from "@/components/stadium/stadium-3d/LightingAndAtmosphere";
 import { crowdExcitement, emptyFrame, GOAL_TEXT, HALF_L, HALF_W, REPLAY, sampleClip, sceneTime, type Clip, type Figure, type Replay, type ReplayKit, type Scene, type Side } from "./scenes";
 
 /** Záběr: scéna a její část. Nový objekt znamená hrát od začátku, i když jde o tutéž scénu (skok zpět na její začátek). */
@@ -207,13 +206,11 @@ const eTmp = new THREE.Euler(), cTmp = new THREE.Color();
 const HIDDEN = new THREE.Matrix4().makeScale(0, 0, 0);
 
 /** Hráči, rozhodčí a míč ve scéně stadionu; kreslí to, co právě hraje `step`, a řídí kameru. */
-export function ReplayScene({ replay, kits, snow, overcast, overview, step, root, onReady }: {
+export function ReplayScene({ replay, kits, snow, overview, step, root, onReady }: {
   replay: Replay;
   kits: { home: ReplayKit; away: ReplayKit };
   /** Na sněhu se hraje s oranžovým míčem. */
   snow: boolean;
-  /** Pod mrakem je slabší i náhradní stín (tmavé kolečko); skutečné stíny zeslabuje světlo stadionu samo. */
-  overcast: boolean;
   /** Pohled z výšky na celý stadion místo televizní kamery z tribuny. */
   overview: boolean;
   step: { current: ReplayStep };
@@ -223,8 +220,6 @@ export function ReplayScene({ replay, kits, snow, overcast, overview, step, root
   onReady: () => void;
 }) {
   const count = replay.figures.length;
-  /** Hráči a míč vrhají skutečný stín od slunce stadionu; kde ho světla nepočítají (mobil), je pod nimi tmavé kolečko. */
-  const realShadows = useContext(RealtimeShadowsContext);
   /** Obraz o kousek dál v klipu: po střihu z něj postavy vezmou rychlost a směr. */
   const ahead = useMemo(() => emptyFrame(count), [count]);
   const frame = useMemo(() => emptyFrame(count), [count]);
@@ -249,7 +244,6 @@ export function ReplayScene({ replay, kits, snow, overcast, overview, step, root
   useEffect(() => () => shirts.dispose(), [shirts]);
   const tiles = useMemo(() => new THREE.InstancedBufferAttribute(new Float32Array(count), 1), [count]);
   useLayoutEffect(() => { TORSO.geometry.setAttribute("tile", tiles); }, [tiles]);
-  const shadowGeometry = useMemo(() => new THREE.CircleGeometry(0.5, 16).rotateX(-Math.PI / 2), []);
   // Tmavé plošky jsou na míči proto, aby bylo poznat, že se točí.
   const ballGeometry = useMemo(() => {
     const g = new THREE.IcosahedronGeometry(BALL_RADIUS, 1);
@@ -260,7 +254,6 @@ export function ReplayScene({ replay, kits, snow, overcast, overview, step, root
     return g;
   }, [snow]);
   const meshes = useRef<(THREE.InstancedMesh | null)[]>([]);
-  const shadows = useRef<THREE.InstancedMesh>(null);
   const rings = useRef<(THREE.Mesh | null)[]>([]);
   const ball = useRef<THREE.Mesh>(null);
   const card = useRef<THREE.Mesh>(null);
@@ -529,15 +522,6 @@ export function ReplayScene({ replay, kits, snow, overcast, overview, step, root
     camera.fov = overview && !keys ? OVERVIEW.fov : CAMERA.fov;
     camera.updateProjectionMatrix();
 
-    // Náhradní stín (tmavé kolečko) tam, kde skutečné stíny nejsou: je levný a funguje i na mobilu.
-    const sh = shadows.current;
-    if (sh) {
-      frame.figures.forEach((f, i) => sh.setMatrixAt(i, f.visible ? mTmp.makeTranslation(states[i].x, PITCH_SURFACE_Y + 0.02, states[i].z) : HIDDEN));
-      const ballShadow = Math.max(0.35, 1 - frame.ballY * 0.15);
-      sh.setMatrixAt(count, mRoot.makeScale(ballShadow * 0.6, 1, ballShadow * 0.6).setPosition(frame.ballX, PITCH_SURFACE_Y + 0.021, frame.ballZ));
-      sh.instanceMatrix.needsUpdate = true;
-    }
-
     const b = ball.current;
     if (b) {
       if (!cut) {
@@ -550,8 +534,9 @@ export function ReplayScene({ replay, kits, snow, overcast, overview, step, root
 
   return (
     <group>
+      {/* Postavy a míč vrhají stín od slunce stadionu. Na mobilu světla stíny nevrhají (výkon), video je tam bez stínů. */}
       {PARTS.map((part, p) => (
-        <instancedMesh key={part.id} ref={(m) => { meshes.current[p] = m; }} args={[part.geometry, undefined, count * perFigure(part)]} frustumCulled={false} castShadow={realShadows}>
+        <instancedMesh key={part.id} ref={(m) => { meshes.current[p] = m; }} args={[part.geometry, undefined, count * perFigure(part)]} frustumCulled={false} castShadow>
           {part === TORSO ? <meshStandardMaterial roughness={0.8} map={shirts} onBeforeCompile={pickShirtTile} /> : <meshStandardMaterial roughness={0.8} />}
         </instancedMesh>
       ))}
@@ -559,9 +544,6 @@ export function ReplayScene({ replay, kits, snow, overcast, overview, step, root
         <mesh position={[0, 0.6, 0]}><boxGeometry args={[1.7, 0.7, 4.2]} /><meshStandardMaterial color="#B91C1C" roughness={0.4} /></mesh>
         <mesh position={[0, 1.25, -0.2]}><boxGeometry args={[1.5, 0.6, 2.2]} /><meshStandardMaterial color="#1F2937" roughness={0.3} /></mesh>
       </group>
-      {!realShadows && <instancedMesh ref={shadows} args={[shadowGeometry, undefined, count + 1]} frustumCulled={false} renderOrder={1}>
-        <meshBasicMaterial color="#000000" transparent opacity={overcast ? 0.17 : 0.28} depthWrite={false} />
-      </instancedMesh>}
       {[0, 1].map((n) => (
         <mesh key={n} ref={(m) => { rings.current[n] = m; }} rotation-x={-Math.PI / 2} visible={false} renderOrder={2}>
           <ringGeometry args={[0.95, 1.4, 40]} />
@@ -575,7 +557,7 @@ export function ReplayScene({ replay, kits, snow, overcast, overview, step, root
         <planeGeometry args={[0.3, 0.42]} />
         <meshBasicMaterial side={THREE.DoubleSide} />
       </mesh>
-      <mesh ref={ball} castShadow={realShadows}>
+      <mesh ref={ball} castShadow>
         <primitive object={ballGeometry} attach="geometry" />
         <meshStandardMaterial vertexColors roughness={0.35} flatShading />
       </mesh>

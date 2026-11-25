@@ -3,7 +3,7 @@
 import { Component, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { apiFetch } from "@/lib/api";
 import { builtExtensionsOf } from "@/components/stadium/stadium-3d/stand-levels";
-import { isOvercast, type WeatherType } from "@/components/stadium/stadium-3d/constants";
+import type { WeatherType } from "@/components/stadium/stadium-3d/constants";
 import { Stadium3D, type Stadium3DCustomization } from "@/components/stadium/stadium-3d/Stadium3D";
 import { VideoLoading } from "./VideoLoading";
 import { venueExtensions, venueFacilities } from "@/app/(hra)/turnaj/venue-scene";
@@ -242,7 +242,7 @@ function Replay3DView({ detail, events, progress, onReady, onSecondHalf }: Repla
         frozen={paused && ready}
         // Pohled „z tribuny“ nemá rozostření okrajů, které stadion používá u pohledů z dálky.
         initialViewpoint="main_stand"
-        replay={<ReplayScene replay={replay} kits={kits} snow={detail.weather === "snow"} overcast={isOvercast((detail.weather as WeatherType | null) ?? "sunny")} overview={overview} step={step} root={frame} onReady={() => { setReady(true); onReady(); }} />}
+        replay={<ReplayScene replay={replay} kits={kits} snow={detail.weather === "snow"} overview={overview} step={step} root={frame} onReady={() => { setReady(true); onReady(); }} />}
       />}
       {/* Načítání zakrývá scénu, dokud se nekreslí plynule: první snímky se zadrhávají. */}
       {!ready && <VideoLoading />}

@@ -1,16 +1,11 @@
 "use client";
 
-import { createContext, useMemo, useRef, useEffect } from "react";
+import { useMemo, useRef, useEffect } from "react";
 import * as THREE from "three";
 import { useFrame, useThree } from "@react-three/fiber";
 import type { TimeOfDay, WeatherType } from "./constants";
 import { SkyDome, SkyEnvironment, getSkyParams } from "./SkyDome";
 
-/**
- * Vrhá hlavní světlo stíny v reálném čase? Na mobilu ne (výkon). Záznam zápasu podle toho hráčům buď zapne
- * skutečný stín, nebo pod ně nakreslí tmavé kolečko.
- */
-export const RealtimeShadowsContext = createContext(true);
 /**
  * Síla stínů pod mrakem (zataženo, déšť, sníh) proti jasnému dni: slunce je schované a světlo přichází z celé
  * oblohy, stíny jsou proto slabší. Stejný poměr mají stíny spočítané pro mobil (BakedShadows).
