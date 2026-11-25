@@ -1,27 +1,29 @@
 "use client";
 
-import { useEffect, useLayoutEffect, useMemo, useRef, type RefObject } from "react";
+import { useContext, useEffect, useLayoutEffect, useMemo, useRef, type RefObject } from "react";
 import * as THREE from "three";
 import { useFrame, useThree } from "@react-three/fiber";
+import { BakedShadowContext } from "@/components/stadium/stadium-3d/BakedShadows";
 import { FENCE_BOUNDS, GOAL_NAME, PITCH_SURFACE_Y } from "@/components/stadium/stadium-3d/constants";
 import { crowdMood } from "@/components/stadium/stadium-3d/crowdMood";
 import { crowdExcitement, emptyFrame, GOAL_TEXT, HALF_L, HALF_W, REPLAY, sampleClip, sceneTime, type Clip, type Figure, type Replay, type ReplayKit, type Scene, type Side } from "./scenes";
 
 /** Záběr: scéna a její část. Nový objekt znamená hrát od začátku, i když jde o tutéž scénu (skok zpět na její začátek). */
-interface ReplayPlay {
+export interface ReplayPlay {
   scene: Scene;
   /** Útočná fáze šance (záznam ukazuje „ŠANCE“), jinak zbytek scény. */
   attack: boolean;
-}
-
-/** Co má scéna právě hrát. Čas záběru si počítá sama ze snímků, takže stojí, kdykoli se scéna nekreslí (pauza). */
-export interface ReplayStep {
-  play: ReplayPlay;
-  /** „Rychle“ přehrává scény dvakrát rychleji. */
-  rate: number;
   /** Záběr stojí na svém prvním snímku (po skoku na akci, o přestávce). */
   hold: boolean;
+  /** Čas hodin záznamu (ms), kdy záběr začal. */
+  at: number;
 }
+
+/**
+ * Hodiny záznamu (ms): vede je stránka záznamu a střídá podle nich kroky. Při pauze a při načítání scény stojí,
+ * při „Rychle“ běží dvakrát rychleji. Scéna vlastní čas nemá: kde v záběru je, počítá z nich.
+ */
+export interface ReplayClock { now: () => number }
 
 /** Co má figura na sobě; vzor dresu mají jen hráči v poli. */
 type Outfit = Pick<ReplayKit, "shirt" | "shorts" | "socks">;
@@ -49,14 +51,13 @@ const CAMERA_AIM_X = -4.6;
 const OVERVIEW = { x: HALF_W + 46, y: 56, fov: 40 };
 /** Scéna nekreslí nic za bližší postranní čárou: kamera stojí tam, kde má stadion hlavní tribunu. */
 const CLIP_PLANES = [new THREE.Plane(new THREE.Vector3(-1, 0, 0), HALF_W + 1.2)];
-/** O tolik se smí lišit čas navazujícího záběru téhož klipu, aby se hrálo plynule dál bez střihu. */
-const SEAM = 0.25;
 /** Výška boků sedícího náhradníka nad zemí (sedačka střídačky je ve výšce 0,5 m). */
 const SEAT_HIP_Y = 0.6;
+const NO_CLIP: THREE.Plane[] = [];
 /** Po kolika plynulých snímcích za sebou se scéna považuje za načtenou. */
 const SMOOTH_FRAMES = 20;
-/** Snímek je plynulý, když netrvá déle (s). */
-const SMOOTH_DELTA = 0.1;
+/** Snímek je plynulý, když netrvá déle (s), tedy aspoň 20 snímků za sekundu. */
+const SMOOTH_DELTA = 0.05;
 /** Jak daleko dopředu v klipu (sekundy) se po střihu měří rychlost a směr postav. */
 const LOOKAHEAD = 0.1;
 
@@ -104,6 +105,17 @@ const PARTS: PartDef[] = [
   { id: "hair", geometry: new THREE.BoxGeometry(0.25, 0.09, 0.26), on: [0, 1.75, -0.01], drop: 0, color: (_, __, fig) => fig.player.hairColor ?? null },
 ];
 const perFigure = (part: PartDef) => (typeof part.on === "string" ? 2 : 1);
+/**
+ * Stín na mobilu, kde světla stíny v reálném čase nevrhají: postava a míč se nakreslí podruhé, zploštělé na trávník
+ * ve směru slunce. Leží `lift` nad trávníkem (nad čárami a nad spočítanými stíny areálu) a je `strength`krát
+ * tak tmavý jako stíny areálu. Šablona (stencil) pustí na každý bod obrazu jen jednu část těla, jinak by se
+ * překrývající části ztmavily dvakrát.
+ */
+const FLAT_SHADOW = { lift: 0.03, strength: 0.55 };
+const FLAT_SHADOW_MATERIAL = {
+  color: "#10200e", transparent: true, depthWrite: false, side: THREE.DoubleSide,
+  stencilWrite: true, stencilRef: 1, stencilFunc: THREE.NotEqualStencilFunc, stencilZPass: THREE.ReplaceStencilOp,
+} as const;
 
 /** Dresy na trupu jsou z jedné textury se třemi poli vedle sebe: domácí, hosté a bílé pole pro jednobarevné dresy. */
 const SHIRT_TILES = { home: 0, away: 1, plain: 2 };
@@ -206,20 +218,30 @@ const eTmp = new THREE.Euler(), cTmp = new THREE.Color();
 const HIDDEN = new THREE.Matrix4().makeScale(0, 0, 0);
 
 /** Hráči, rozhodčí a míč ve scéně stadionu; kreslí to, co právě hraje `step`, a řídí kameru. */
-export function ReplayScene({ replay, kits, snow, overview, step, root, onReady }: {
+export function ReplayScene({ replay, kits, snow, overview, play, clock, root, onReady }: {
   replay: Replay;
   kits: { home: ReplayKit; away: ReplayKit };
   /** Na sněhu se hraje s oranžovým míčem. */
   snow: boolean;
   /** Pohled z výšky na celý stadion místo televizní kamery z tribuny. */
   overview: boolean;
-  step: { current: ReplayStep };
+  /** Co má scéna právě hrát. */
+  play: ReplayPlay;
+  clock: ReplayClock;
   /** Obal záznamu: během opakovaného záběru gólu má atribut `data-replaying` (podle něj se ukáže jeho nápis). */
   root: RefObject<HTMLDivElement | null>;
   /** Zavolá se po prvním vykresleném snímku. */
   onReady: () => void;
 }) {
   const count = replay.figures.length;
+  /** Mobil: stíny se kreslí zploštělé (FLAT_SHADOW). Null: postavy a míč vrhají stín od slunce stadionu. */
+  const flat = useContext(BakedShadowContext);
+  /** Promítne bod podél slunečních paprsků na rovinu těsně nad trávníkem. */
+  const flatProjection = useMemo(() => {
+    if (!flat) return null;
+    const [x, y, z] = flat.sun, ground = PITCH_SURFACE_Y + FLAT_SHADOW.lift;
+    return new THREE.Matrix4().set(1, -x / y, 0, (ground * x) / y, 0, 0, 0, ground, 0, -z / y, 1, (ground * z) / y, 0, 0, 0, 1);
+  }, [flat]);
   /** Obraz o kousek dál v klipu: po střihu z něj postavy vezmou rychlost a směr. */
   const ahead = useMemo(() => emptyFrame(count), [count]);
   const frame = useMemo(() => emptyFrame(count), [count]);
@@ -254,6 +276,8 @@ export function ReplayScene({ replay, kits, snow, overview, step, root, onReady 
     return g;
   }, [snow]);
   const meshes = useRef<(THREE.InstancedMesh | null)[]>([]);
+  const flatMeshes = useRef<(THREE.InstancedMesh | null)[]>([]);
+  const ballShadow = useRef<THREE.Mesh>(null);
   const rings = useRef<(THREE.Mesh | null)[]>([]);
   const ball = useRef<THREE.Mesh>(null);
   const card = useRef<THREE.Mesh>(null);
@@ -272,16 +296,14 @@ export function ReplayScene({ replay, kits, snow, overview, step, root, onReady 
   const gl = useThree((s) => s.gl);
   /** Co se kreslilo minule: podle toho se pozná střih (hráči pak neběží, stojí rovnou na místě). */
   const last = useRef<{ clip: Clip | null; t: number; cuts: number; replaying: boolean }>({ clip: null, t: 0, cuts: 0, replaying: false });
-  /** Záběr, který je právě v obraze: kolik z něj uběhlo (`elapsed`) a kde v klipu je (`t`). */
-  const playback = useRef<{ play: ReplayPlay | null; elapsed: number; t: number }>({ play: null, elapsed: 0, t: 0 });
   const look = useRef(new THREE.Vector3());
   /** Kolik snímků po sobě se nakreslilo bez zadrhnutí a jestli už scéna ohlásila, že je připravená. */
   const smooth = useRef(0);
   const ready = useRef(false);
 
   useEffect(() => {
-    gl.clippingPlanes = overview ? [] : CLIP_PLANES;
-    return () => { gl.clippingPlanes = []; };
+    gl.clippingPlanes = overview ? NO_CLIP : CLIP_PLANES;
+    return () => { gl.clippingPlanes = NO_CLIP; };
   }, [gl, overview]);
   // Zastavená scéna (pauza) se nekreslí; po změně velikosti plátna (celá obrazovka) by zůstala prázdná a po
   // přepnutí pohledu stará.
@@ -313,20 +335,32 @@ export function ReplayScene({ replay, kits, snow, overview, step, root, onReady 
   useFrame((_, delta) => {
     // Záznam se rozběhne, až se scéna kreslí plynule: první snímky po načtení trvají i sekundy (překládají se
     // shadery, dotahují modely) a úvod by mezitím proběhl za načítáním.
-    if (!ready.current && (ready.current = (smooth.current = delta < SMOOTH_DELTA ? smooth.current + 1 : 0) >= SMOOTH_FRAMES)) onReady();
-    const { play, rate, hold } = step.current;
-    const dt = Math.min(delta, 0.1);
-    const p = playback.current;
-    if (p.play !== play) {
-      const first = sceneTime(play.scene, play.attack, 0);
-      // Navazuje-li nový záběr tam, kde ten starý právě je (rozehrání → útok → výsledek), hraje se plynule dál.
-      const seamless = p.play?.scene.clip === play.scene.clip && Math.abs(first - p.t) < SEAM;
-      Object.assign(p, { play, elapsed: seamless ? p.t - first : 0 });
+    if (!ready.current && (smooth.current = delta < SMOOTH_DELTA ? smooth.current + 1 : 0) >= SMOOTH_FRAMES) {
+      // Než se video rozběhne, grafická karta si připraví všechno, co by jinak chystala, až by to kreslila poprvé
+      // (a obraz by se při tom zasekl). Shadery se překládají zvlášť pro obraz bez ořezu a s ním, proto obojí:
+      // i pro to, co zatím vidět není (nápis gólu, karta, auto). Jeden snímek pohledem z výšky k tomu nahraje
+      // tvary a textury celého areálu včetně tribuny, kterou pohled z tribuny ořezává. Načítání to zakrývá
+      // a kameru i ořez si tenhle snímek o kus níž nastaví znovu.
+      camera.position.set(OVERVIEW.x, OVERVIEW.y, 0);
+      camera.lookAt(0, 0, 0);
+      camera.fov = OVERVIEW.fov;
+      camera.updateProjectionMatrix();
+      gl.clippingPlanes = NO_CLIP;
+      gl.compile(world, camera);
+      gl.render(world, camera);
+      gl.clippingPlanes = CLIP_PLANES;
+      gl.compile(world, camera);
+      gl.clippingPlanes = overview ? NO_CLIP : CLIP_PLANES;
+      ready.current = true;
+      onReady();
     }
-    const { scene, attack } = play;
-    // Dokud se scéna načítá, stojí na prvním snímku: nápisy řídí stránka a ta se rozběhne až po načtení.
-    const held = hold || !ready.current;
-    const elapsed = p.elapsed = held ? 0 : p.elapsed + dt * rate;
+    // Jen pro vyhlazování (kamera, otáčení postav): po zadrhnutém snímku se nemá přehnat.
+    const dt = Math.min(delta, 0.1);
+    const { scene, attack, hold } = play;
+    // Kde v záběru scéna je, říkají hodiny záznamu, podle kterých stránka střídá kroky: obojí se tak potká na každém
+    // zařízení stejně. Po zadrhnutém snímku obraz poskočí jako video, které vynechalo snímky. Navazující záběr téhož
+    // klipu (rozehrání → útok → výsledek) začíná tam, kde ten předchozí končí, a hraje se tak plynule dál.
+    const elapsed = hold ? 0 : (clock.now() - play.at) / 1000;
     // Gól: po chvíli oslavy se zakončení zpomaleně zopakuje.
     const again = !attack && scene.replay ? scene.replay : null;
     // Opakovaný záběr je to poslední, co z gólu je: když skončí, drží jeho poslední snímek, dokud nepřijde další akce
@@ -334,25 +368,28 @@ export function ReplayScene({ replay, kits, snow, overview, step, root, onReady 
     const replaying = again !== null && elapsed >= REPLAY.after;
     const t = replaying && again ? THREE.MathUtils.lerp(again.from, again.to, Math.min(1, (elapsed - REPLAY.after) / REPLAY.seconds))
       : sceneTime(scene, attack, elapsed);
-    p.t = t;
     sampleClip(scene.clip, t, frame);
     // Střih: jiný klip, střih uvnitř klipu, skok zpět, začátek a konec opakovaného záběru, snímek po zaseknutí.
     // Je ostrý, bez prolnutí: starý záběr by jinak dozníval pod nápisem nové akce.
     const cut = last.current.clip !== scene.clip || last.current.cuts !== frame.cuts || last.current.replaying !== replaying || t < last.current.t
       || t - last.current.t > 0.5;
+    // Čas stojí (scéna je u konce a další akce ještě nepřišla, hodiny stojí při pauze nebo načítání): obraz stojí jako
+    // zastavené video a postavy zůstanou v pohybu, ve kterém byly. Jinak by běžící hráči na místě zpomalili do stoje.
+    const stalled = !cut && !hold && t === last.current.t;
     root.current?.toggleAttribute("data-replaying", replaying);
     if (last.current.clip !== scene.clip) paint(scene.clip);
     last.current = { clip: scene.clip, t, cuts: frame.cuts, replaying };
-    const now = performance.now() / 1000;
+    // Drobné pohyby (ruce, kroužek pod hráčem) běží taky podle hodin záznamu: při pauze stojí s obrazem.
+    const now = clock.now() / 1000;
 
     // Po střihu se rychlost a směr berou z klipu: kdo ve střihu jde nebo běží, jde hned a čelem po směru. Stejně
-    // u stojícího snímku (po skoku na akci, při načítání): vypadá jako zastavené video a po rozběhnutí hráči
+    // u stojícího snímku (po skoku na akci, o přestávce): vypadá jako zastavené video a po rozběhnutí hráči
     // nezačínají ze stoje.
-    const fromClip = cut || held;
+    const fromClip = cut || hold;
     if (fromClip) sampleClip(scene.clip, t + LOOKAHEAD, ahead);
     frame.figures.forEach((f, i) => {
       const s = states[i];
-      if (!f.visible) return;
+      if (!f.visible || stalled) return;
       const from = fromClip ? f : s, to = fromClip ? (ahead.figures[i].visible ? ahead.figures[i] : f) : f;
       const dx = to.x - from.x, dz = to.z - from.z;
       const stride = fromClip ? 0 : Math.hypot(dx, dz);
@@ -384,7 +421,9 @@ export function ReplayScene({ replay, kits, snow, overview, step, root, onReady 
         const scale = ((fig.player.height ?? 178) / 178) * FIGURE_SCALE;
         // Jak moc hráč běží (0 stojí, 1 sprint): podle toho se předklání, zvedá kolena a pracuje rukama.
         const run = Math.min(1, s.speed / 6);
-        const slide = f.pose === "slide", sit = f.pose === "sit", hug = f.pose === "hug", rest = f.pose === "rest", upright = f.pose === "sitUp", tackle = f.pose === "tackle";
+        const slide = f.pose === "slide", sit = f.pose === "sit", hug = f.pose === "hug", upright = f.pose === "sitUp", tackle = f.pose === "tackle";
+        // Podání ruky vsedě: sedí jako unavený hráč, jen pravou ruku zvedne k soupeři.
+        const seatedShake = f.pose === "sitShake", rest = f.pose === "rest" || seatedShake;
         // Sed na trávníku: unavený hráč je zakloněný a opřený o ruce za zády, rozhodčí sedí zpříma s rukama na kolenou.
         // Skluz do rány: obránce leží skoro na zádech, opřený o ruce, nohy natažené po zemi před sebe k míči.
         const grounded = rest || upright || tackle, sitLean = tackle ? -1 : rest ? -0.35 : 0.1;
@@ -430,8 +469,8 @@ export function ReplayScene({ replay, kits, snow, overview, step, root, onReady 
           // Podání ruky: pravá v pase před tělem, potřásá se v lokti (oba ve stejném rytmu, ruce zůstávají u sebe).
           const shaking = f.pose === "shake" && k === 1;
           // Chlapské objetí: pravé ruce si dál drží mezi sebou, levá toho druhého poplácá po zádech.
-          const arm = rest || tackle ? 0.75 : upright ? -1 : hug ? (k === 1 ? -0.55 : -1.1) : shaking ? -0.55 : cheering ? -2.75 + Math.sin(now * 9 + i) * 0.15 : raised ? Math.PI - 0.25 : f.y > 0.05 ? 0.9 : swing * 0.8 * run + Math.sin(now * 1.3 + i * 2.1) * 0.05;
-          const elbow = rest || tackle ? -0.1 : upright ? -0.3 : hug ? (k === 1 ? -0.9 : -0.5 - Math.max(0, Math.sin(now * 8)) * 0.35) : shaking ? -0.6 + Math.sin(now * 11) * 0.15 : cheering ? -0.35 : raised ? -0.15 : f.y > 0.05 ? -0.9 : -(0.25 + 1.1 * run);
+          const arm = seatedShake && k === 1 ? -1.5 : rest || tackle ? 0.75 : upright ? -1 : hug ? (k === 1 ? -0.55 : -1.1) : shaking ? -0.55 : cheering ? -2.75 + Math.sin(now * 9 + i) * 0.15 : raised ? Math.PI - 0.25 : f.y > 0.05 ? 0.9 : swing * 0.8 * run + Math.sin(now * 1.3 + i * 2.1) * 0.05;
+          const elbow = seatedShake && k === 1 ? -0.5 + Math.sin(now * 11) * 0.15 : rest || tackle ? -0.1 : upright ? -0.3 : hug ? (k === 1 ? -0.9 : -0.5 - Math.max(0, Math.sin(now * 8)) * 0.35) : shaking ? -0.6 + Math.sin(now * 11) * 0.15 : cheering ? -0.35 : raised ? -0.15 : f.y > 0.05 ? -0.9 : -(0.25 + 1.1 * run);
           joints.shoulder[k].makeTranslation(BODY.shoulder[0] * side, BODY.shoulder[1], 0).multiply(mTmp.makeRotationX(arm));
           joints.elbow[k].copy(joints.shoulder[k]).multiply(mTmp.makeTranslation(0, -BODY.elbow, 0)).multiply(mTmp.makeRotationX(elbow));
         }
@@ -451,6 +490,13 @@ export function ReplayScene({ replay, kits, snow, overview, step, root, onReady 
       });
     });
     for (const mesh of meshes.current) if (mesh) mesh.instanceMatrix.needsUpdate = true;
+    // Zploštělé stíny mají stejné rozestavení dílů jako postavy.
+    flatMeshes.current.forEach((shadow, p) => {
+      const body = meshes.current[p];
+      if (!shadow || !body) return;
+      (shadow.instanceMatrix.array as Float32Array).set(body.instanceMatrix.array);
+      shadow.instanceMatrix.needsUpdate = true;
+    });
 
     // Karta ve zdvižené ruce rozhodčího; když ruku spustí, kartu schoval.
     const shown = scene.card && t >= scene.card.at && frame.figures[replay.referee].pose === "armUp" ? scene.card : null;
@@ -529,14 +575,19 @@ export function ReplayScene({ replay, kits, snow, overview, step, root, onReady 
         b.rotation.z -= (frame.ballX - b.position.x) / BALL_RADIUS;
       }
       b.position.set(frame.ballX, PITCH_SURFACE_Y + BALL_RADIUS + frame.ballY, frame.ballZ);
+      if (ballShadow.current && flatProjection) {
+        ballShadow.current.matrix.copy(flatProjection).multiply(mTmp.makeTranslation(b.position.x, b.position.y, b.position.z));
+        ballShadow.current.matrixWorldNeedsUpdate = true;
+      }
     }
   });
 
   return (
     <group>
-      {/* Postavy a míč vrhají stín od slunce stadionu. Na mobilu světla stíny nevrhají (výkon), video je tam bez stínů. */}
+      {/* Postavy a míč vrhají stín od slunce stadionu. Na mobilu ne: tam se stíny počítají jednou při načtení a postavy
+          by se do nich zapekly; stín mají zploštělý (níž). */}
       {PARTS.map((part, p) => (
-        <instancedMesh key={part.id} ref={(m) => { meshes.current[p] = m; }} args={[part.geometry, undefined, count * perFigure(part)]} frustumCulled={false} castShadow>
+        <instancedMesh key={part.id} ref={(m) => { meshes.current[p] = m; }} args={[part.geometry, undefined, count * perFigure(part)]} frustumCulled={false} castShadow={!flat}>
           {part === TORSO ? <meshStandardMaterial roughness={0.8} map={shirts} onBeforeCompile={pickShirtTile} /> : <meshStandardMaterial roughness={0.8} />}
         </instancedMesh>
       ))}
@@ -557,7 +608,18 @@ export function ReplayScene({ replay, kits, snow, overview, step, root, onReady 
         <planeGeometry args={[0.3, 0.42]} />
         <meshBasicMaterial side={THREE.DoubleSide} />
       </mesh>
-      <mesh ref={ball} castShadow>
+      {flat && flatProjection && PARTS.map((part, p) => (
+        <instancedMesh key={part.id} ref={(m) => { flatMeshes.current[p] = m; }} args={[part.geometry, undefined, count * perFigure(part)]} frustumCulled={false}
+          renderOrder={1} matrix={flatProjection} matrixAutoUpdate={false} matrixWorldNeedsUpdate>
+          <meshBasicMaterial {...FLAT_SHADOW_MATERIAL} opacity={flat.opacity * FLAT_SHADOW.strength} />
+        </instancedMesh>
+      ))}
+      {flat && (
+        <mesh ref={ballShadow} geometry={ballGeometry} frustumCulled={false} renderOrder={1} matrixAutoUpdate={false}>
+          <meshBasicMaterial {...FLAT_SHADOW_MATERIAL} opacity={flat.opacity * FLAT_SHADOW.strength} />
+        </mesh>
+      )}
+      <mesh ref={ball} castShadow={!flat}>
         <primitive object={ballGeometry} attach="geometry" />
         <meshStandardMaterial vertexColors roughness={0.35} flatShading />
       </mesh>
