@@ -1,7 +1,7 @@
 "use client";
 
 import { AccumulativeShadows, RandomizedLight } from "@react-three/drei";
-import { isOvercast, type TimeOfDay, type WeatherType } from "./constants";
+import type { TimeOfDay, WeatherType } from "./constants";
 
 /**
  * Stíny pro mobil, spočítané jednou a pak jen zobrazené.
@@ -17,7 +17,7 @@ import { isOvercast, type TimeOfDay, type WeatherType } from "./constants";
 export function BakedShadows({ timeOfDay, weather }: { timeOfDay: TimeOfDay; weather: WeatherType }) {
   if (timeOfDay === "night") return null;
 
-  const overcast = isOvercast(weather);
+  const overcast = weather === "rain" || weather === "cloudy" || weather === "snow";
   const sun: [number, number, number] = timeOfDay === "sunset" ? [50, 14, -35] : [30, 50, 20];
 
   return (

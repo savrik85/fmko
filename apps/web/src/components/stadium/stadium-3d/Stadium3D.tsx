@@ -22,7 +22,7 @@ import { EntranceGate } from "./EntranceGate";
 import { Dugouts } from "./Dugouts";
 import { SurroundTrack } from "./SurroundTrack";
 import { VillageVibe } from "./VillageVibe";
-import { LightingAndAtmosphere, RealtimeShadowsContext } from "./LightingAndAtmosphere";
+import { LightingAndAtmosphere } from "./LightingAndAtmosphere";
 import { WeatherEffects } from "./WeatherEffects";
 import { CameraController } from "./CameraController";
 import { PostFX } from "./PostFX";
@@ -525,14 +525,15 @@ export function Stadium3D({
         {/* Dynamická obloha a osvětlení (den, západ, noc + počasí) */}
         <LightingAndAtmosphere timeOfDay={timeOfDay} weather={weather} isMobile={isMobile} enhanced={fxActive} />
 
-        {/* Mobil: stíny spočítané jednou (v reálném čase jsou vypnuté kvůli výkonu) */}
-        {isMobile && isSceneReady && <BakedShadows timeOfDay={timeOfDay} weather={weather} />}
+        {/* Mobil: stíny spočítané jednou (v reálném čase jsou vypnuté kvůli výkonu). Ve videu ze zápasu ne: hráči
+            se hýbou a stín by na mobilu mít nemohli, tak je tam bez stínů celý obraz. */}
+        {isMobile && isSceneReady && !replay && <BakedShadows timeOfDay={timeOfDay} weather={weather} />}
 
         {/* 3D efekty počasí (déšť, sníh, vítr, blesky, mraky) */}
         <WeatherEffects weather={weather} timeOfDay={timeOfDay} isMobile={isMobile} />
 
         {/* Plynulý kontrolér kamery a filmový oblet */}
-        {replay ? <RealtimeShadowsContext.Provider value={!isMobile}>{replay}</RealtimeShadowsContext.Provider> : <CameraController viewpoint={viewpoint} isMobile={isMobile} viewpoints={viewpoints} instant={!!onSnapshotReady} />}
+        {replay ?? <CameraController viewpoint={viewpoint} isMobile={isMobile} viewpoints={viewpoints} instant={!!onSnapshotReady} />}
 
         {/* Post-processing: ambient occlusion, záře světel, vinětace, tone mapping (jen desktop) */}
         {fxActive && isSceneReady && <PostFX timeOfDay={timeOfDay} miniature={viewpoint === "overview" || viewpoint === "orbit"} />}
