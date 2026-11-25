@@ -1,10 +1,11 @@
 "use client";
 
-import { useEffect, useLayoutEffect, useMemo, useRef, type RefObject } from "react";
+import { useContext, useEffect, useLayoutEffect, useMemo, useRef, type RefObject } from "react";
 import * as THREE from "three";
 import { useFrame, useThree } from "@react-three/fiber";
 import { FENCE_BOUNDS, GOAL_NAME, PITCH_SURFACE_Y } from "@/components/stadium/stadium-3d/constants";
 import { crowdMood } from "@/components/stadium/stadium-3d/crowdMood";
+import { RealtimeShadowsContext } from "@/components/stadium/stadium-3d/LightingAndAtmosphere";
 import { crowdExcitement, emptyFrame, GOAL_TEXT, HALF_L, HALF_W, REPLAY, sampleClip, sceneTime, type Clip, type Figure, type Replay, type ReplayKit, type Scene, type Side } from "./scenes";
 
 /** Záběr: scéna a její část. Nový objekt znamená hrát od začátku, i když jde o tutéž scénu (skok zpět na její začátek). */
@@ -220,6 +221,8 @@ export function ReplayScene({ replay, kits, snow, overview, step, root, onReady 
   onReady: () => void;
 }) {
   const count = replay.figures.length;
+  /** Hráči a míč vrhají skutečný stín od slunce stadionu; kde ho světla nepočítají (mobil), je pod nimi tmavé kolečko. */
+  const realShadows = useContext(RealtimeShadowsContext);
   /** Obraz o kousek dál v klipu: po střihu z něj postavy vezmou rychlost a směr. */
   const ahead = useMemo(() => emptyFrame(count), [count]);
   const frame = useMemo(() => emptyFrame(count), [count]);
@@ -524,7 +527,7 @@ export function ReplayScene({ replay, kits, snow, overview, step, root, onReady 
     camera.fov = overview && !keys ? OVERVIEW.fov : CAMERA.fov;
     camera.updateProjectionMatrix();
 
-    // Stín jako tmavé kolečko je levný a funguje i na mobilu.
+    // Náhradní stín (tmavé kolečko) tam, kde skutečné stíny nejsou: je levný a funguje i na mobilu.
     const sh = shadows.current;
     if (sh) {
       frame.figures.forEach((f, i) => sh.setMatrixAt(i, f.visible ? mTmp.makeTranslation(states[i].x, PITCH_SURFACE_Y + 0.02, states[i].z) : HIDDEN));
@@ -546,7 +549,7 @@ export function ReplayScene({ replay, kits, snow, overview, step, root, onReady 
   return (
     <group>
       {PARTS.map((part, p) => (
-        <instancedMesh key={part.id} ref={(m) => { meshes.current[p] = m; }} args={[part.geometry, undefined, count * perFigure(part)]} frustumCulled={false}>
+        <instancedMesh key={part.id} ref={(m) => { meshes.current[p] = m; }} args={[part.geometry, undefined, count * perFigure(part)]} frustumCulled={false} castShadow={realShadows}>
           {part === TORSO ? <meshStandardMaterial roughness={0.8} map={shirts} onBeforeCompile={pickShirtTile} /> : <meshStandardMaterial roughness={0.8} />}
         </instancedMesh>
       ))}
@@ -554,12 +557,12 @@ export function ReplayScene({ replay, kits, snow, overview, step, root, onReady 
         <mesh position={[0, 0.6, 0]}><boxGeometry args={[1.7, 0.7, 4.2]} /><meshStandardMaterial color="#B91C1C" roughness={0.4} /></mesh>
         <mesh position={[0, 1.25, -0.2]}><boxGeometry args={[1.5, 0.6, 2.2]} /><meshStandardMaterial color="#1F2937" roughness={0.3} /></mesh>
       </group>
-      <instancedMesh ref={shadows} args={[shadowGeometry, undefined, count + 1]} frustumCulled={false} renderOrder={1}>
+      {!realShadows && <instancedMesh ref={shadows} args={[shadowGeometry, undefined, count + 1]} frustumCulled={false} renderOrder={1}>
         <meshBasicMaterial color="#000000" transparent opacity={0.28} depthWrite={false} />
-      </instancedMesh>
+      </instancedMesh>}
       {[0, 1].map((n) => (
         <mesh key={n} ref={(m) => { rings.current[n] = m; }} rotation-x={-Math.PI / 2} visible={false} renderOrder={2}>
-          <ringGeometry args={[0.75, 1.05, 32]} />
+          <ringGeometry args={[0.95, 1.4, 40]} />
           <meshBasicMaterial color="#FDE047" transparent opacity={0.9} depthWrite={false} />
         </mesh>
       ))}
@@ -570,7 +573,7 @@ export function ReplayScene({ replay, kits, snow, overview, step, root, onReady 
         <planeGeometry args={[0.3, 0.42]} />
         <meshBasicMaterial side={THREE.DoubleSide} />
       </mesh>
-      <mesh ref={ball}>
+      <mesh ref={ball} castShadow={realShadows}>
         <primitive object={ballGeometry} attach="geometry" />
         <meshStandardMaterial vertexColors roughness={0.35} flatShading />
       </mesh>
