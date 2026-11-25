@@ -127,31 +127,7 @@ function Dugout({
         />
       </mesh>
 
-      {/* Boční stěny — plexisklo */}
-      <mesh position={[-width / 2 + 0.1, height / 2, 0]} rotation={[0, Math.PI / 2, 0]}>
-        <planeGeometry args={[depth - 0.2, height - 0.2]} />
-        <meshPhysicalMaterial
-          color="#D1E8F2"
-          transparent
-          opacity={0.55}
-          roughness={0.1}
-          metalness={0.1}
-          transmission={0.6}
-          side={THREE.DoubleSide}
-        />
-      </mesh>
-      <mesh position={[width / 2 - 0.1, height / 2, 0]} rotation={[0, Math.PI / 2, 0]}>
-        <planeGeometry args={[depth - 0.2, height - 0.2]} />
-        <meshPhysicalMaterial
-          color="#D1E8F2"
-          transparent
-          opacity={0.55}
-          roughness={0.1}
-          metalness={0.1}
-          transmission={0.6}
-          side={THREE.DoubleSide}
-        />
-      </mesh>
+      {/* Boky jsou otevřené: boční skla procházela rukama náhradníků na krajních sedačkách. */}
 
       {/* Oblouková / šikmá stříška */}
       <mesh position={[0, height + 0.05, 0]} rotation={[0.15, 0, 0]} castShadow>
@@ -167,10 +143,11 @@ function Dugout({
         </mesh>
       )}
 
-      {/* Přední štítek s nápisem */}
+      {/* Štítek s nápisem visí na přední hraně stříšky, těsně před ní: stříška jím neprochází a hlavy náhradníků
+          pod ním zůstávají vidět. */}
       {labelTexture && (
-        <mesh position={[0, height - 0.15, depth / 2 - 0.05]} castShadow>
-          <planeGeometry args={[width * 0.7, 0.35]} />
+        <mesh position={[0, height - 0.1, depth / 2 + 0.2]} castShadow>
+          <planeGeometry args={[width * 0.7, 0.3]} />
           <meshBasicMaterial map={labelTexture} toneMapped={false} />
         </mesh>
       )}
