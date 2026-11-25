@@ -807,9 +807,16 @@ function Spectators({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [filled, length, columns, seatDepth, seatRise, matrix, color, teamColor]);
 
-  // Animace davu (na mobilu se šetří — dav zůstává statický)
+  // Animace davu. Na mobilu se šetří: dav se nehoupe, na dění v záznamu zápasu (gól, šance) ale reaguje stejně.
+  // Hýbe se tam jen po dobu reakce a po ní se vrátí do klidu.
+  const reacting = useRef(false);
   useFrame(({ clock }) => {
-    if (reducedDetail) return;
+    if (reducedDetail) {
+      const mood = crowdMood.home !== 0;
+      if (!mood && !reacting.current) return;
+      reacting.current = mood;
+      if (!mood) return writeFrame(0, false, false);
+    }
     writeFrame(clock.elapsedTime, true, false);
   });
 

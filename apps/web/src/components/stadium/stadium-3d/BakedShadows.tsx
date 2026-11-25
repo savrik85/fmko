@@ -1,7 +1,22 @@
 "use client";
 
+import { createContext } from "react";
 import { AccumulativeShadows, RandomizedLight } from "@react-three/drei";
 import type { TimeOfDay, WeatherType } from "./constants";
+
+/** Jak vypadají stíny spočítané pro mobil: odkud svítí slunce, jak jsou tmavé a jestli je pod mrakem (měkčí). */
+export interface BakedShadowLook { sun: [number, number, number]; opacity: number; overcast: boolean }
+/** V noci se stíny nekreslí (null): areál tam osvětlují reflektory. */
+export function bakedShadowLook(timeOfDay: TimeOfDay, weather: WeatherType): BakedShadowLook | null {
+  if (timeOfDay === "night") return null;
+  const overcast = weather === "rain" || weather === "cloudy" || weather === "snow";
+  return { sun: timeOfDay === "sunset" ? [50, 14, -35] : [30, 50, 20], opacity: overcast ? 0.45 : 0.75, overcast };
+}
+/**
+ * Záznam zápasu na mobilu kreslí stíny hráčů sám, ve směru a síle stínů areálu (hráči se hýbou, do spočítaných
+ * stínů se nedostanou). Null = stíny hráčů počítají světla v reálném čase (počítač), nebo se nekreslí (noc).
+ */
+export const BakedShadowContext = createContext<BakedShadowLook | null>(null);
 
 /**
  * Stíny pro mobil, spočítané jednou a pak jen zobrazené.
@@ -15,10 +30,9 @@ import type { TimeOfDay, WeatherType } from "./constants";
  * areál tam osvětlují reflektory.
  */
 export function BakedShadows({ timeOfDay, weather }: { timeOfDay: TimeOfDay; weather: WeatherType }) {
-  if (timeOfDay === "night") return null;
-
-  const overcast = weather === "rain" || weather === "cloudy" || weather === "snow";
-  const sun: [number, number, number] = timeOfDay === "sunset" ? [50, 14, -35] : [30, 50, 20];
+  const look = bakedShadowLook(timeOfDay, weather);
+  if (!look) return null;
+  const { sun, opacity, overcast } = look;
 
   return (
     <AccumulativeShadows
@@ -29,7 +43,7 @@ export function BakedShadows({ timeOfDay, weather }: { timeOfDay: TimeOfDay; wea
       resolution={1024}
       position={[0, 0.07, 0]}
       color="#10200e"
-      opacity={overcast ? 0.45 : 0.75}
+      opacity={opacity}
       alphaTest={0.7}
     >
       <RandomizedLight
