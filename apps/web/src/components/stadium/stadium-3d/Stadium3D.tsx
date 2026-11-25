@@ -22,7 +22,7 @@ import { EntranceGate } from "./EntranceGate";
 import { Dugouts } from "./Dugouts";
 import { SurroundTrack } from "./SurroundTrack";
 import { VillageVibe } from "./VillageVibe";
-import { LightingAndAtmosphere } from "./LightingAndAtmosphere";
+import { LightingAndAtmosphere, RealtimeShadowsContext } from "./LightingAndAtmosphere";
 import { WeatherEffects } from "./WeatherEffects";
 import { CameraController } from "./CameraController";
 import { PostFX } from "./PostFX";
@@ -532,7 +532,7 @@ export function Stadium3D({
         <WeatherEffects weather={weather} timeOfDay={timeOfDay} isMobile={isMobile} />
 
         {/* Plynulý kontrolér kamery a filmový oblet */}
-        {replay ?? <CameraController viewpoint={viewpoint} isMobile={isMobile} viewpoints={viewpoints} instant={!!onSnapshotReady} />}
+        {replay ? <RealtimeShadowsContext.Provider value={!isMobile}>{replay}</RealtimeShadowsContext.Provider> : <CameraController viewpoint={viewpoint} isMobile={isMobile} viewpoints={viewpoints} instant={!!onSnapshotReady} />}
 
         {/* Post-processing: ambient occlusion, záře světel, vinětace, tone mapping (jen desktop) */}
         {fxActive && isSceneReady && <PostFX timeOfDay={timeOfDay} miniature={viewpoint === "overview" || viewpoint === "orbit"} />}
