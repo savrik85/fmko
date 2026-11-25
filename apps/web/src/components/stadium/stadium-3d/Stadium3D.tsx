@@ -308,15 +308,19 @@ export function Stadium3D({
   };
 
   // Mobile detection
-  const [isMobile, setIsMobile] = useState(false);
+  const [isNarrow, setIsNarrow] = useState(false);
   useEffect(() => {
     if (typeof window === "undefined") return;
     const mq = window.matchMedia("(max-width: 640px)");
-    const update = () => setIsMobile(mq.matches);
+    const update = () => setIsNarrow(mq.matches);
     update();
     mq.addEventListener("change", update);
     return () => mq.removeEventListener("change", update);
   }, []);
+  // Video ze zápasu se na úzké obrazovce nešetří: vypadá všude stejně, i když hráč telefon otočí na šířku
+  // (tím se obrazovka rozšíří přes hranici a obraz by se uprostřed zápasu změnil). Když se zadrhává, sníží se
+  // samo rozlišení (PerformanceMonitor níž).
+  const isMobile = isNarrow && !replay;
 
   // Vylepšená grafika (post-processing + obloha s prostředím) — jen desktop, přepínač v liště.
   // Výchozí zapnuto; volba se pamatuje, aby šlo srovnat před/po i přes reload.
@@ -525,9 +529,8 @@ export function Stadium3D({
         {/* Dynamická obloha a osvětlení (den, západ, noc + počasí) */}
         <LightingAndAtmosphere timeOfDay={timeOfDay} weather={weather} isMobile={isMobile} enhanced={fxActive} />
 
-        {/* Mobil: stíny spočítané jednou (v reálném čase jsou vypnuté kvůli výkonu). Ve videu ze zápasu ne: hráči
-            se hýbou a stín by na mobilu mít nemohli, tak je tam bez stínů celý obraz. */}
-        {isMobile && isSceneReady && !replay && <BakedShadows timeOfDay={timeOfDay} weather={weather} />}
+        {/* Mobil: stíny spočítané jednou (v reálném čase jsou vypnuté kvůli výkonu) */}
+        {isMobile && isSceneReady && <BakedShadows timeOfDay={timeOfDay} weather={weather} />}
 
         {/* 3D efekty počasí (déšť, sníh, vítr, blesky, mraky) */}
         <WeatherEffects weather={weather} timeOfDay={timeOfDay} isMobile={isMobile} />

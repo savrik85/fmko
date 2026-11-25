@@ -534,7 +534,7 @@ export function ReplayScene({ replay, kits, snow, overview, step, root, onReady 
 
   return (
     <group>
-      {/* Postavy a míč vrhají stín od slunce stadionu. Na mobilu světla stíny nevrhají (výkon), video je tam bez stínů. */}
+      {/* Postavy a míč vrhají stín od slunce stadionu. */}
       {PARTS.map((part, p) => (
         <instancedMesh key={part.id} ref={(m) => { meshes.current[p] = m; }} args={[part.geometry, undefined, count * perFigure(part)]} frustumCulled={false} castShadow>
           {part === TORSO ? <meshStandardMaterial roughness={0.8} map={shirts} onBeforeCompile={pickShirtTile} /> : <meshStandardMaterial roughness={0.8} />}
