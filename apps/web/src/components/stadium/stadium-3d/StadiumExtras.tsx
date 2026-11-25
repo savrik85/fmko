@@ -667,7 +667,8 @@ export function HostujiciSektor({
 
   // Naproti domácímu kotli. Když kotel stojí na podélné straně, hosté jdou za branku.
   const naproti = strana === "kotel" ? "za_branou" : strana === "za_branou" ? "kotel" : "za_branou";
-  const zaBrankou = PITCH.depth / 2 + 2.0;
+  // Síť branky sahá 2 m za brankovou čáru: plot sektoru stojí až za ní.
+  const zaBrankou = PITCH.depth / 2 + 3.0;
   const pos: [number, number, number] = naproti === "kotel" ? [0, 0, -zaBrankou] : [0, 0, zaBrankou];
   const rot = naproti === "kotel" ? 0 : Math.PI;
 
@@ -690,7 +691,8 @@ export function HostujiciSektor({
       {/* Postavy v jejich barvě, ať je poznat, že to nejsou domácí */}
       {Array.from({ length: Math.min(24, Math.max(4, Math.round(pocet / 4))) }).map((_, i, pole) => {
         const x = -sirka / 2 + ((i + 0.5) / pole.length) * sirka;
-        const z = 0.5 + (i % 3) * 0.45;
+        // Za plotem, dál od hřiště (osa z sektoru míří ke hřišti). Dřív stáli před ním, tedy v síti branky.
+        const z = -(0.5 + (i % 3) * 0.45);
         return (
           <mesh key={i} ref={(m) => { fans.current[i] = m; }} position={[x, 0.85, z]} castShadow>
             <capsuleGeometry args={[0.16, 0.62, 3, 6]} />
