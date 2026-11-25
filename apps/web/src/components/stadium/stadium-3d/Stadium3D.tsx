@@ -310,15 +310,12 @@ export function Stadium3D({
     setTimeout(() => setStatusToast(null), 900);
   };
 
-  // Mobile detection
+  // Telefon se pozná jednou, podle zařízení: dotykové ovládání a kratší strana obrazovky do 640 px. Podle šířky okna
+  // ne: telefon otočený na šířku je širší, takže se úsporný režim uprostřed prohlížení vypínal a zapínal a celá scéna
+  // se při tom přestavovala (stíny, efekty, tribuny).
   const [isMobile, setIsMobile] = useState(false);
   useEffect(() => {
-    if (typeof window === "undefined") return;
-    const mq = window.matchMedia("(max-width: 640px)");
-    const update = () => setIsMobile(mq.matches);
-    update();
-    mq.addEventListener("change", update);
-    return () => mq.removeEventListener("change", update);
+    setIsMobile(window.matchMedia("(pointer: coarse)").matches && Math.min(window.screen.width, window.screen.height) <= 640);
   }, []);
 
   // Vylepšená grafika (post-processing + obloha s prostředím) — jen desktop, přepínač v liště.
