@@ -207,11 +207,13 @@ const eTmp = new THREE.Euler(), cTmp = new THREE.Color();
 const HIDDEN = new THREE.Matrix4().makeScale(0, 0, 0);
 
 /** Hráči, rozhodčí a míč ve scéně stadionu; kreslí to, co právě hraje `step`, a řídí kameru. */
-export function ReplayScene({ replay, kits, snow, overview, step, root, onReady }: {
+export function ReplayScene({ replay, kits, snow, overcast, overview, step, root, onReady }: {
   replay: Replay;
   kits: { home: ReplayKit; away: ReplayKit };
   /** Na sněhu se hraje s oranžovým míčem. */
   snow: boolean;
+  /** Pod mrakem je slabší i náhradní stín (tmavé kolečko); skutečné stíny zeslabuje světlo stadionu samo. */
+  overcast: boolean;
   /** Pohled z výšky na celý stadion místo televizní kamery z tribuny. */
   overview: boolean;
   step: { current: ReplayStep };
@@ -558,7 +560,7 @@ export function ReplayScene({ replay, kits, snow, overview, step, root, onReady 
         <mesh position={[0, 1.25, -0.2]}><boxGeometry args={[1.5, 0.6, 2.2]} /><meshStandardMaterial color="#1F2937" roughness={0.3} /></mesh>
       </group>
       {!realShadows && <instancedMesh ref={shadows} args={[shadowGeometry, undefined, count + 1]} frustumCulled={false} renderOrder={1}>
-        <meshBasicMaterial color="#000000" transparent opacity={0.28} depthWrite={false} />
+        <meshBasicMaterial color="#000000" transparent opacity={overcast ? 0.17 : 0.28} depthWrite={false} />
       </instancedMesh>}
       {[0, 1].map((n) => (
         <mesh key={n} ref={(m) => { rings.current[n] = m; }} rotation-x={-Math.PI / 2} visible={false} renderOrder={2}>

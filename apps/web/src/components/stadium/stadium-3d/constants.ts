@@ -263,6 +263,8 @@ export function getViewpoints(standsLevel: number, roofLevel: number): Record<Ca
 }
 
 export type WeatherType = "sunny" | "cloudy" | "rain" | "wind" | "snow";
+/** Zataženo: slunce je za mraky, světlo je rozptýlené a stíny slabší. */
+export const isOvercast = (weather: WeatherType) => weather === "rain" || weather === "cloudy" || weather === "snow";
 
 export interface WeatherOption {
   id: WeatherType;
