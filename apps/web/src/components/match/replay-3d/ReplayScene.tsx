@@ -4,7 +4,8 @@ import { useEffect, useLayoutEffect, useMemo, useRef, type RefObject } from "rea
 import * as THREE from "three";
 import { useFrame, useThree } from "@react-three/fiber";
 import { FENCE_BOUNDS, GOAL_NAME, PITCH_SURFACE_Y } from "@/components/stadium/stadium-3d/constants";
-import { emptyFrame, GOAL_TEXT, HALF_L, HALF_W, REPLAY, sampleClip, sceneTime, type Clip, type Figure, type Replay, type ReplayKit, type Scene, type Side } from "./scenes";
+import { crowdMood } from "@/components/stadium/stadium-3d/crowdMood";
+import { crowdExcitement, emptyFrame, GOAL_TEXT, HALF_L, HALF_W, REPLAY, sampleClip, sceneTime, type Clip, type Figure, type Replay, type ReplayKit, type Scene, type Side } from "./scenes";
 
 /** Záběr: scéna a její část. Nový objekt znamená hrát od začátku, i když jde o tutéž scénu (skok zpět na její začátek). */
 interface ReplayPlay {
@@ -268,6 +269,7 @@ export function ReplayScene({ replay, kits, snow, overview, step, root, onReady 
   const goalSignShown = useRef(0);
   const world = useThree((s) => s.scene);
   useEffect(() => () => { if (scored.current) tintGoal(scored.current, false); }, []);
+  useEffect(() => () => { crowdMood.home = crowdMood.away = 0; }, []);
   const camera = useThree((s) => s.camera) as THREE.PerspectiveCamera;
   const gl = useThree((s) => s.gl);
   /** Co se kreslilo minule: podle toho se pozná střih (hráči pak neběží, stojí rovnou na místě). */
@@ -384,9 +386,10 @@ export function ReplayScene({ replay, kits, snow, overview, step, root, onReady 
         const scale = ((fig.player.height ?? 178) / 178) * FIGURE_SCALE;
         // Jak moc hráč běží (0 stojí, 1 sprint): podle toho se předklání, zvedá kolena a pracuje rukama.
         const run = Math.min(1, s.speed / 6);
-        const slide = f.pose === "slide", sit = f.pose === "sit", hug = f.pose === "hug", rest = f.pose === "rest", upright = f.pose === "sitUp";
+        const slide = f.pose === "slide", sit = f.pose === "sit", hug = f.pose === "hug", rest = f.pose === "rest", upright = f.pose === "sitUp", tackle = f.pose === "tackle";
         // Sed na trávníku: unavený hráč je zakloněný a opřený o ruce za zády, rozhodčí sedí zpříma s rukama na kolenou.
-        const grounded = rest || upright, sitLean = rest ? -0.35 : 0.1;
+        // Skluz do rány: obránce leží skoro na zádech, opřený o ruce, nohy natažené po zemi před sebe k míči.
+        const grounded = rest || upright || tackle, sitLean = tackle ? -1 : rest ? -0.35 : 0.1;
         let lift = f.y + Math.abs(Math.sin(s.phase)) * 0.05 * run, shift = 0;
         qRoot.setFromAxisAngle(THREE.Object3D.DEFAULT_UP, s.yaw);
         if (f.pose === "down") {
@@ -405,6 +408,8 @@ export function ReplayScene({ replay, kits, snow, overview, step, root, onReady 
           if (slide) lift = -0.4 * scale;
           // Sedí na trávníku: boky u země (tělo se naklání kolem chodidel, proto kosinus), kolena zvednutá a chodidla na zemi.
           if (grounded) lift = (0.11 - BODY.hip[1] * Math.cos(sitLean)) * scale;
+          // Tělo se zaklání kolem chodidel: při skluzu se posune dopředu, ať boky zůstanou na místě hráče.
+          if (tackle) shift = BODY.hip[1] * Math.sin(-sitLean) * scale;
           // Sedí: boky ve výšce sedačky.
           if (sit) lift = SEAT_HIP_Y - BODY.hip[1] * scale;
         }
@@ -416,8 +421,8 @@ export function ReplayScene({ replay, kits, snow, overview, step, root, onReady 
           const side = k === 0 ? 1 : -1;
           const swing = Math.sin(s.phase) * side;
           // Noha: stehno kmitá dopředu a dozadu, koleno se ohýbá, když jde noha vzad (při skluzu jsou kolena ohnutá pořád).
-          const thigh = sit ? -1.5 : grounded ? -2.2 - sitLean : slide ? 0.3 : -swing * 0.95 * run;
-          const knee = grounded ? 1.33 : sit || slide ? 1.5 : run * (0.25 + 0.9 * Math.max(0, Math.cos(s.phase) * side));
+          const thigh = sit ? -1.5 : tackle ? -Math.PI / 2 - sitLean : grounded ? -2.2 - sitLean : slide ? 0.3 : -swing * 0.95 * run;
+          const knee = tackle ? 0.1 : grounded ? 1.33 : sit || slide ? 1.5 : run * (0.25 + 0.9 * Math.max(0, Math.cos(s.phase) * side));
           joints.hip[k].makeTranslation(BODY.hip[0] * side, BODY.hip[1], 0).multiply(mTmp.makeRotationX(thigh));
           joints.knee[k].copy(joints.hip[k]).multiply(mTmp.makeTranslation(0, -BODY.knee, 0)).multiply(mTmp.makeRotationX(knee));
           // Ruka: v běhu proti noze s ohnutým loktem; při oslavě zdvižená vzhůru a mírně před tělo (kladný úhel paže míří za záda), při výskoku na hlavičku jen
@@ -427,8 +432,8 @@ export function ReplayScene({ replay, kits, snow, overview, step, root, onReady 
           // Podání ruky: pravá v pase před tělem, potřásá se v lokti (oba ve stejném rytmu, ruce zůstávají u sebe).
           const shaking = f.pose === "shake" && k === 1;
           // Chlapské objetí: pravé ruce si dál drží mezi sebou, levá toho druhého poplácá po zádech.
-          const arm = rest ? 0.75 : upright ? -1 : hug ? (k === 1 ? -0.55 : -1.1) : shaking ? -0.55 : cheering ? -2.75 + Math.sin(now * 9 + i) * 0.15 : raised ? Math.PI - 0.25 : f.y > 0.05 ? 0.9 : swing * 0.8 * run + Math.sin(now * 1.3 + i * 2.1) * 0.05;
-          const elbow = rest ? -0.1 : upright ? -0.3 : hug ? (k === 1 ? -0.9 : -0.5 - Math.max(0, Math.sin(now * 8)) * 0.35) : shaking ? -0.6 + Math.sin(now * 11) * 0.15 : cheering ? -0.35 : raised ? -0.15 : f.y > 0.05 ? -0.9 : -(0.25 + 1.1 * run);
+          const arm = rest || tackle ? 0.75 : upright ? -1 : hug ? (k === 1 ? -0.55 : -1.1) : shaking ? -0.55 : cheering ? -2.75 + Math.sin(now * 9 + i) * 0.15 : raised ? Math.PI - 0.25 : f.y > 0.05 ? 0.9 : swing * 0.8 * run + Math.sin(now * 1.3 + i * 2.1) * 0.05;
+          const elbow = rest || tackle ? -0.1 : upright ? -0.3 : hug ? (k === 1 ? -0.9 : -0.5 - Math.max(0, Math.sin(now * 8)) * 0.35) : shaking ? -0.6 + Math.sin(now * 11) * 0.15 : cheering ? -0.35 : raised ? -0.15 : f.y > 0.05 ? -0.9 : -(0.25 + 1.1 * run);
           joints.shoulder[k].makeTranslation(BODY.shoulder[0] * side, BODY.shoulder[1], 0).multiply(mTmp.makeRotationX(arm));
           joints.elbow[k].copy(joints.shoulder[k]).multiply(mTmp.makeTranslation(0, -BODY.elbow, 0)).multiply(mTmp.makeRotationX(elbow));
         }
@@ -453,6 +458,12 @@ export function ReplayScene({ replay, kits, snow, overview, step, root, onReady 
     const shown = scene.card && t >= scene.card.at && frame.figures[replay.referee].pose === "armUp" ? scene.card : null;
     // Gól: ve scéně, která končí gólem, branka zezelená (barva nápisu „GÓÓÓL!“), jakmile je míč za brankovou čárou.
     const inGoal = scene.goal && Math.abs(frame.ballZ) > HALF_L;
+    // Diváci: gól slaví fanoušci střelce a fanoušci soupeře po něm ztichnou; po zahozené šanci se pár lidí na chvíli
+    // zvedne. Řídí se časem klipu, takže v opakovaném záběru gólu se zvednou znovu až s míčem v síti.
+    const fansOf = replay.figures[scene.focus[0]]?.team;
+    const excitement = crowdExcitement(scene, t, inGoal), conceded = scene.goal ? -excitement : 0;
+    crowdMood.home = fansOf === "home" ? excitement : fansOf === "away" ? conceded : 0;
+    crowdMood.away = fansOf === "away" ? excitement : fansOf === "home" ? conceded : 0;
     const goal = inGoal ? world.getObjectsByProperty("name", GOAL_NAME).find((g) => Math.sign(g.getWorldPosition(vPos).z) === Math.sign(frame.ballZ)) ?? null : null;
     if (goal !== scored.current) {
       if (scored.current) tintGoal(scored.current, false);

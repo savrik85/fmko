@@ -1,6 +1,6 @@
 // Spouští se z kořene repa: npx vitest run --root apps/web
 import { describe, expect, it } from "vitest";
-import { actionStarts, emptyFrame, HALF_L, HALF_W, Replay, sampleClip, scenedEvents, sceneTime, shootoutEvents, substitutionsTogether, type ReplayEvent, type ReplayInput, type ReplayPlayer, type Scene } from "./scenes";
+import { actionStarts, breakOf, crowdExcitement, emptyFrame, HALF_L, HALF_W, Replay, replayOrder, sampleClip, scenedEvents, sceneTime, shootoutEvents, substitutionsTogether, type ReplayEvent, type ReplayInput, type ReplayPlayer, type Scene } from "./scenes";
 
 const squad = (prefix: string): ReplayPlayer[] => ["GK", "DEF", "DEF", "DEF", "DEF", "MID", "MID", "MID", "MID", "FWD", "FWD"]
   .map((position, n) => ({ name: `${prefix} ${n}`, position }));
@@ -107,6 +107,34 @@ describe("scény 3D záznamu", () => {
     expect(Math.abs(frame.ballX)).toBeLessThan(3.66);
     sampleClip(goal.clip, sceneTime(goal, false, Infinity), frame);
     expect(Math.abs(frame.ballZ)).toBeGreaterThan(HALF_L);
+  });
+
+  it("hlavičkující trefí míč ve výskoku, míč je u jeho hlavy", () => {
+    const scene = replay.scene(all.findIndex((e) => e.minute === 30 && e.type === "goal"));
+    const frame = emptyFrame(replay.figures.length);
+    // Míč letí od hlavy k bráně půl vteřiny.
+    sampleClip(scene.clip, scene.split - 0.5, frame);
+    const header = frame.figures[replay.figures.findIndex((f) => f.player.name === "H 3")];
+    expect(header.y).toBeGreaterThan(0.6);
+    // Hlava stojící figury je 2 m nad zemí, míč se měří od spodku (poloměr 0,28 m).
+    expect(frame.ballY + 0.28 - header.y).toBeCloseTo(2, 1);
+    // Míč je před ním ve směru náběhu, ne za ním.
+    const ball = { x: frame.ballX, z: frame.ballZ }, at = { x: header.x, z: header.z };
+    expect(Math.hypot(ball.x - at.x, ball.z - at.z)).toBeCloseTo(0.4, 1);
+    sampleClip(scene.clip, scene.start, frame);
+    expect(Math.hypot(ball.x - header.x, ball.z - header.z)).toBeCloseTo(Math.hypot(at.x - header.x, at.z - header.z) + 0.4, 1);
+  });
+
+  it("diváci reagují podle času scény: gól slaví až s míčem v síti, i v opakovaném záběru; po šanci jen krátce", () => {
+    const goal = replay.scene(1), miss = replay.scene(all.findIndex((e) => e.type === "chance" && e.detail === "vedle"));
+    expect(goal.replay!.from).toBeLessThan(goal.split);
+    // Začátek opakovaného záběru je před gólem: dav ještě neslaví. Na jeho konci a při oslavě ano.
+    expect([goal.replay!.from, goal.split - 0.1, goal.split + 0.15, goal.replay!.to, goal.split + 3].map((t) => Math.round(crowdExcitement(goal, t, false) * 100) / 100)).toEqual([0, 0, 0.5, 1, 1]);
+    expect([miss.split - 0.1, miss.split + 0.5, miss.split + 2].map((t) => crowdExcitement(miss, t, false))).toEqual([0, 0.3, 0]);
+    // Karta, střídání ani výkop diváky nezvednou; kop v rozstřelu až s míčem za čárou.
+    const card = replay.scene(all.findIndex((e) => e.type === "card")), kick = replay.scene(all.findIndex((e) => e.detail === "shootout:goal"));
+    expect([crowdExcitement(card, card.end, false), crowdExcitement(replay.kickoff(0), 3, false)]).toEqual([0, 0]);
+    expect([crowdExcitement(kick, kick.start + 1, false), crowdExcitement(kick, kick.start + 2, true)]).toEqual([0, 1]);
   });
 
   it("střela vedle a nad skončí za brankovou čárou mimo hřiště", () => {
@@ -219,6 +247,46 @@ describe("scény 3D záznamu", () => {
     };
     expect(poses(true)).toEqual(["hug", "hug"]);
     expect(poses(false)).toEqual(["shake", "shake"]);
+  });
+
+  it("plánované střídání ve 45. minutě se odehraje o přestávce před výkopem a nikdo při něm neodchází", () => {
+    const planned = event(45, "substitution", 1, 11, { description: "Plánované střídání: Sub 1 za H 5" });
+    // Střídající je ve zbytku 45. minuty ještě v drobné události bez scény: ta se vypíše dřív, než nastoupí.
+    const list = [event(40, "chance", 1, 9, { detail: "vedle" }), planned, event(45, "special", 1, 11, { detail: "possession" }),
+      event(45, "special", 1, 0, { detail: "half_time" }), event(46, "chance", 2, 9, { detail: "vedle" }), event(60, "chance", 1, 9, { detail: "vedle" })];
+    expect(replayOrder(list)).toEqual([0, 2, 3, 1, 4, 5]);
+    // Karta střídajícího ve zbytku minuty má scénu, střídání proto zůstává na místě. Zůstává i střídání
+    // za zraněného a plánované střídání ve 46. minutě.
+    expect(replayOrder(list.with(2, event(45, "card", 1, 11, { detail: "yellow" })))).toEqual([0, 1, 2, 3, 4, 5]);
+    expect(replayOrder(list.with(1, { ...planned, description: "Střídání: Sub 1 za H 5" }))).toEqual([0, 1, 2, 3, 4, 5]);
+    expect(replayOrder([list[0], list[3], list[4], { ...planned, minute: 46 }, list[5]])).toEqual([0, 1, 2, 3, 4]);
+
+    const ordered = replayOrder(list).map((i) => list[i]);
+    expect(breakOf(ordered)).toEqual({ start: 3, end: 4 });
+    expect(breakOf(list)).toEqual({ start: 4, end: 4 });
+    const replay = new Replay(input(ordered));
+    expect(checkAll(replay, ordered, "přestávka")).toEqual([]);
+    const figure = (name: string) => replay.figures.findIndex((f) => f.player.name === name);
+    const frame = emptyFrame(replay.figures.length);
+    const onPitch = (scene: Scene, name: string) => {
+      sampleClip(scene.clip, sceneTime(scene, false, Infinity), frame);
+      const f = frame.figures[figure(name)];
+      return f.visible && f.x > -HALF_W;
+    };
+    // O přestávce stojí týmy před výkopem bez střídaného, ten je v kabině; střídající je ještě na střídačce.
+    const hold = replay.before(3), sub = replay.scene(3), kickoff = replay.before(4);
+    expect([onPitch(hold, "H 5"), onPitch(hold, "Sub 1")]).toEqual([false, false]);
+    expect(replay.before(4, true)).toBe(sub);
+    expect(sub.focus).toEqual([figure("Sub 1")]);
+    expect([onPitch(sub, "H 5"), onPitch(sub, "Sub 1")]).toEqual([false, true]);
+    // Střídající nejde doprostřed, ale volným klusem na svoje místo: k tomu, kde při výkopu stojí.
+    const place = (scene: Scene, t: number) => { sampleClip(scene.clip, t, frame); const f = frame.figures[figure("Sub 1")]; return { x: f.x, z: f.z }; };
+    const post = place(kickoff, kickoff.start), gap = (p: { x: number; z: number }) => Math.hypot(p.x - post.x, p.z - post.z);
+    expect(gap(place(sub, sceneTime(sub, false, Infinity)))).toBeLessThan(gap(place(sub, sub.start)) - 3);
+    // Výkop druhého poločasu přijde až po střídání a drží se v obraze do první akce.
+    expect(kickoff).not.toBe(hold);
+    expect([onPitch(kickoff, "H 5"), onPitch(kickoff, "Sub 1")]).toEqual([false, true]);
+    expect([replay.shownBefore(4), replay.shownBefore(5), replay.shownBefore(6)]).toEqual([-1, 4, 5]);
   });
 
   it("událost hráče, který není v sestavě, je chyba", () => {

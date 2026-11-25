@@ -3,6 +3,7 @@
 import { useMemo, useRef, useEffect, useLayoutEffect } from "react";
 import * as THREE from "three";
 import { useFrame } from "@react-three/fiber";
+import { crowdLift, crowdMood } from "./crowdMood";
 import { PITCH, STAND_DIMS, type StadiumMode } from "./constants";
 import {
   generateWoodTexture,
@@ -673,6 +674,9 @@ function Spectators({
       }
     }
     const jumpBeat = animate ? Math.max(0, Math.sin(t * 5.4)) : 0;
+    const mood = animate ? crowdMood.home : 0;
+    // Po inkasovaném gólu tribuna ztichne: kotel přestane skákat a vlna se nezvedá.
+    const spirit = 1 + Math.min(0, mood);
 
     let beerIdx = 0;
     let scarfIdx = 0;
@@ -690,14 +694,22 @@ function Spectators({
         yb += Math.sin(t * f.bobSpeed + f.phase) * f.bobAmp;
         yaw += Math.sin(t * 0.6 + f.phase) * 0.07;
         // Kotel skáče společně v rytmu
-        if (f.jumper) yb += jumpBeat * 0.2;
+        if (f.jumper) yb += jumpBeat * 0.2 * spirit;
         // Mexická vlna: zvednutí s hladkým profilem cos²
         if (!Number.isNaN(waveHeadX)) {
           const u = (x - waveHeadX) / WAVE_WIDTH;
           if (u > -1 && u < 1) {
-            const bump = Math.cos((u * Math.PI) / 2) ** 2;
+            const bump = Math.cos((u * Math.PI) / 2) ** 2 * spirit;
             yb += bump * WAVE_LIFT;
             armsUp = bump;
+          }
+        }
+        // Gól a šance v záznamu zápasu: kdo je prožívá, vyskakuje a zvedá ruce, každý ve svém rytmu.
+        if (mood > 0) {
+          const lift = crowdLift(mood, (f.phase * 7.13) % 1);
+          if (lift > 0) {
+            yb += lift * Math.max(0, Math.sin(t * 6.5 + f.phase * 3)) * 0.22;
+            armsUp = Math.max(armsUp, lift);
           }
         }
       }

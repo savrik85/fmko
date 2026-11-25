@@ -4,7 +4,7 @@ import { Component, useEffect, useMemo, useRef, useState, type ReactNode } from 
 import { apiFetch } from "@/lib/api";
 import { builtExtensionsOf } from "@/components/stadium/stadium-3d/stand-levels";
 import type { WeatherType } from "@/components/stadium/stadium-3d/constants";
-import { Stadium3D } from "@/components/stadium/stadium-3d/Stadium3D";
+import { Stadium3D, type Stadium3DCustomization } from "@/components/stadium/stadium-3d/Stadium3D";
 import { VideoLoading } from "./VideoLoading";
 import { venueExtensions, venueFacilities } from "@/app/(hra)/turnaj/venue-scene";
 import { ReplayScene, type ReplayStep } from "./ReplayScene";
@@ -26,6 +26,8 @@ interface ReplayProgress {
   intro: "home" | "away" | "handshake" | null;
   kickoff: "1st" | "2nd" | null;
   halfTime: boolean;
+  /** Hrají se střídání o přestávce; výkop druhého poločasu přijde až po nich. */
+  breakSubs: boolean;
   finished: boolean;
   /** Pauza: obraz stojí celý, i sníh, vlajky a diváci. */
   paused: boolean;
@@ -38,11 +40,53 @@ interface ReplayProgress {
   awayGoals: number;
 }
 
+/** Stadion ve videu, kreslený stejně jako na stránce Stadion (jen bez zavlažování: při zápase se nekropí). */
 interface StadiumData {
   capacity?: number;
   facilities: Record<string, number>;
   standExtensions?: { slots: { slot: string; built?: { kind: string; level: number } | null }[] };
+  pitchType?: string;
+  pitchMoisture?: number;
+  mowerLevel?: number;
+  customization?: Stadium3DCustomization;
+  /** Sponzoři s reklamou u hřiště. */
+  sponsors?: string[];
+  /** Úroveň vyhřívání trávníku; na vyhřívaném hřišti sníh neleží. */
+  pitchHeating?: number;
+  /** Sníh z hřiště uklidila objednaná parta. */
+  snowCleared?: boolean;
 }
+
+/** Podoba stadionu uložená při zápase (API: stadium/match-snapshot.ts). */
+interface StadiumSnapshot extends Omit<StadiumData, "standExtensions" | "pitchHeating" | "snowCleared"> {
+  care: "heating" | "irrigation" | "snow_clearing" | null;
+  extensions: { slot: string; kind: string; level: number }[];
+}
+
+/** Poškozený zápis podoby stadionu video neshodí: ukáže se stadion, jak vypadá dnes. */
+function parseSnapshot(raw: string | null | undefined): StadiumSnapshot | null {
+  if (!raw) return null;
+  try {
+    return JSON.parse(raw) as StadiumSnapshot;
+  } catch (e) {
+    console.error("podoba stadionu u zápasu:", e);
+    return null;
+  }
+}
+
+/** Kolik hostů na zápas přijelo (matches.away_fans); pohár a starší zápasy to uložené nemají. */
+function awayFanCount(raw: unknown): number {
+  try {
+    const fans = (typeof raw === "string" ? JSON.parse(raw) : raw) as { pocet?: unknown } | null;
+    return typeof fans?.pocet === "number" ? fans.pocet : 0;
+  } catch (e) {
+    console.warn("hosté na zápase:", e);
+    return 0;
+  }
+}
+
+const extensionSlots = (extensions: { slot: string; kind: string; level: number }[]) =>
+  ({ slots: extensions.map((e) => ({ slot: e.slot, built: { kind: e.kind, level: e.level } })) });
 
 interface Replay3DProps {
   detail: Record<string, unknown>;
@@ -71,7 +115,7 @@ export function Replay3D({ onFailure, ...props }: Replay3DProps & { /** 3D zázn
 }
 
 function Replay3DView({ detail, events, progress, onReady, onSecondHalf }: Replay3DProps) {
-  const { take, idx, flash, intro, kickoff, halfTime, finished, paused, cue, fast, homeGoals, awayGoals, minute } = progress;
+  const { take, idx, flash, intro, kickoff, halfTime, breakSubs, finished, paused, cue, fast, homeGoals, awayGoals, minute } = progress;
   const homeName = detail.home_name as string;
   const kits = useMemo(() => ({ home: detail.home_kit as ReplayKit, away: detail.away_kit as ReplayKit }), [detail]);
   const pens = shootoutScore(detail);
@@ -89,8 +133,8 @@ function Replay3DView({ detail, events, progress, onReady, onSecondHalf }: Repla
   /** Událost, na které záznam je (komu se připisuje gól). */
   const index = cue ?? (shot ? idx : idx - 1);
   /** Akce, která je v obraze, a té patří nápis a titulek; -1 = výkop. Události bez scény obraz nemění, tak ani grafiku. */
-  const pictured = cue ?? (shot ? idx : replay.shownBefore(idx));
-  const scene = useMemo(() => (cue !== null ? replay.scene(cue) : intro ? replay.intro() : finished ? replay.finale() : shot ? replay.scene(idx) : replay.before(idx)), [replay, cue, intro !== null, finished, shot, idx]); // eslint-disable-line react-hooks/exhaustive-deps
+  const pictured = cue ?? (shot ? idx : replay.shownBefore(idx, breakSubs));
+  const scene = useMemo(() => (cue !== null ? replay.scene(cue) : intro ? replay.intro() : finished ? replay.finale() : shot ? replay.scene(idx) : replay.before(idx, breakSubs)), [replay, cue, intro !== null, finished, shot, idx, breakSubs]); // eslint-disable-line react-hooks/exhaustive-deps
   const attack = cue !== null ? scene.split > scene.start : shot;
   // Skok začíná nový záběr, i když míří na akci, která zrovna běží.
   const play = useMemo(() => ({ scene, attack }), [scene, attack, cue !== null, take]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -101,15 +145,24 @@ function Replay3DView({ detail, events, progress, onReady, onSecondHalf }: Repla
   // Stadion domácích; turnaj se hraje na hřišti z losu a velkoklub z poháru stadion ve hře nemá.
   const venue = detail.isTournament === true ? (detail.venue as { capacity?: number; look?: Record<string, unknown> } | null) : null;
   const homeTeamId = detail.home_team_id as string | null;
+  // Zápas si pamatuje, jak stadion vypadal, když se hrál. Starší zápasy to nemají: u nich je stadion, jak vypadá dnes.
+  const snapshot = useMemo(() => parseSnapshot(detail.stadium_snapshot as string | null | undefined), [detail]);
   const [stadium, setStadium] = useState<StadiumData | null>(null);
   useEffect(() => {
     if (venue?.look) {
       const look = venue.look;
-      setStadium({ capacity: venue.capacity, facilities: venueFacilities(look), standExtensions: { slots: venueExtensions(look).map((e) => ({ slot: e.slot, built: { kind: e.kind, level: e.level } })) } });
+      setStadium({ capacity: venue.capacity, facilities: venueFacilities(look), standExtensions: extensionSlots(venueExtensions(look)) });
+    } else if (snapshot) {
+      const { care, extensions, ...look } = snapshot;
+      setStadium({ ...look, standExtensions: extensionSlots(extensions), pitchHeating: care === "heating" ? 1 : 0, snowCleared: care === "snow_clearing" });
     } else if (homeTeamId) {
-      apiFetch<StadiumData>(`/api/teams/${homeTeamId}/stadium`).then(setStadium).catch((e) => console.error("stadion pro 3D záznam:", e));
+      // Reklamy u hřiště jsou na stránce Stadion z vlastního dotazu; bez nich se stadion ukáže taky.
+      const banners = apiFetch<{ bannerContracts?: { sponsorName: string }[] }>(`/api/teams/${homeTeamId}/sponsors`)
+        .then((s) => s.bannerContracts?.map((b) => b.sponsorName) ?? []).catch((e) => { console.warn("sponzoři pro 3D záznam:", e); return []; });
+      Promise.all([apiFetch<StadiumData>(`/api/teams/${homeTeamId}/stadium`), banners])
+        .then(([live, sponsors]) => setStadium({ ...live, sponsors })).catch((e) => console.error("stadion pro 3D záznam:", e));
     }
-  }, [venue, homeTeamId]);
+  }, [venue, snapshot, homeTeamId]);
   // Scéna se staví, až je známo, jak stadion vypadá: jinak by se záznam rozběhl na výchozím hřišti a tribuny by
   // naskočily až během něj. Dokud se podoba nenačte, záznam čeká (hráč může přepnout na tracker). Velkoklub
   // z poháru stadion ve hře nemá, hraje se na výchozím.
@@ -159,17 +212,29 @@ function Replay3DView({ detail, events, progress, onReady, onSecondHalf }: Repla
     <div ref={frame} onPointerMove={stir} onPointerDown={stir} onPointerLeave={(e) => { if (e.pointerType === "mouse") setStirred(false); }} className={`group/shot bg-black ${fullscreen ? "fixed inset-0 z-50" : "absolute inset-0 z-20"}`}>
       {stadiumKnown && <Stadium3D
         pitchCondition={(detail.pitch_condition as number | null) ?? 85}
-        pitchType={(venue?.look?.pitch_type as string) ?? (detail.pitch_type as string) ?? "natural"}
+        pitchType={(venue?.look?.pitch_type as string) ?? stadium?.pitchType ?? (detail.pitch_type as string) ?? "natural"}
+        // Vyhřívaný nebo uklizený trávník je i za sněžení zelený.
+        pitchHeating={stadium?.pitchHeating ?? 0}
+        snowClearingOrdered={stadium?.snowCleared ?? false}
+        pitchMoisture={stadium?.pitchMoisture}
+        mowerLevel={stadium?.mowerLevel}
+        customization={stadium?.customization}
         facilities={stadium?.facilities ?? { stands: 1, fence: 1, entrance_gate: 1 }}
         standExtensions={builtExtensionsOf(stadium?.standExtensions)}
         teamColor={(venue?.look?.primary as string) ?? (detail.home_color as string)}
         secondaryColor={(venue?.look?.secondary as string) ?? (detail.home_secondary as string)}
         badgePattern={venue ? "shield" : (detail.home_badge as string)}
-        badgeInitials={venue ? "PM" : initials(homeName)}
-        sponsors={venue ? ["P-Mobile"] : undefined}
+        badgeInitials={venue ? "PM" : (detail.home_badge_initials as string | null) || initials(homeName)}
+        // Znak na klubové vlajce jako na stránce Stadion: se symbolem a vlastními barvami znaku.
+        badgeSymbol={venue ? null : (detail.home_badge_symbol as string | null)}
+        badgePrimary={venue ? null : (detail.home_badge_primary as string | null)}
+        badgeSecondary={venue ? null : (detail.home_badge_secondary as string | null)}
+        sponsors={venue ? ["P-Mobile"] : stadium?.sponsors}
         adBoardColor={venue ? "#C8006A" : undefined}
         stadiumName={(detail.stadium_name as string | null) ?? `Stadion ${homeName}`}
         // Na tribunách tolik lidí, kolik na zápas přišlo.
+        // Sektor hostů: tolik, kolik jich přijelo, v barvě jejich klubu.
+        awayFans={{ pocet: awayFanCount(detail.away_fans), barva: detail.away_color as string }}
         attendanceRatio={attendance !== null && stadium?.capacity ? Math.min(1, attendance / stadium.capacity) : undefined}
         initialWeather={(detail.weather as WeatherType | null) ?? "sunny"}
         showControls={false}
@@ -185,8 +250,8 @@ function Replay3DView({ detail, events, progress, onReady, onSecondHalf }: Repla
       {ready && <div className="absolute top-0 left-0 z-30 origin-top-left pointer-events-none" style={{ width: GRAPHICS_WIDTH, height: fit.height, transform: `scale(${fit.scale})` }}>
         {/* Nahoře vedle sebe: vlevo výsledková tabulka, vpravo nápis akce. */}
         <div className="absolute top-2 inset-x-2 flex items-start gap-2">
-          {/* Před první akcí (minuta 0), o přestávce a po konci zápasu v obraze žádná akce není, tabulka je bez minuty. */}
-          <ScoreBug detail={detail} homeGoals={homeGoals} awayGoals={awayGoals} minute={halfTime || finished || minute === 0 ? undefined : minute} scored={scored} fast={fast} />
+          {/* Při výkopu (než přijde první akce poločasu), o přestávce i při jejích střídáních a po konci zápasu se nehraje, tabulka je bez minuty. */}
+          <ScoreBug detail={detail} homeGoals={homeGoals} awayGoals={awayGoals} minute={halfTime || breakSubs || finished || pictured < 0 ? undefined : minute} scored={scored} fast={fast} />
           <EventLabel {...graphics} override={fixedLabel} />
         </div>
         <ReplayMark />

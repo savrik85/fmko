@@ -939,6 +939,7 @@ matchesRouter.get("/matches/:id", async (c) => {
   const row = await c.env.DB.prepare(
     `SELECT m.*,
        ht.name as home_name, ht.primary_color as home_color, ht.badge_pattern as home_badge, ht.secondary_color as home_secondary, ht.village_id as home_village_id,
+       ht.badge_symbol as home_badge_symbol, ht.badge_primary_color as home_badge_primary, ht.badge_secondary_color as home_badge_secondary, ht.badge_initials as home_badge_initials,
        at.name as away_name, at.primary_color as away_color, at.badge_pattern as away_badge, at.secondary_color as away_secondary, at.village_id as away_village_id,
        (SELECT sc.scheduled_at FROM season_calendar sc WHERE sc.id = m.calendar_id) AS calendar_at
      FROM matches m
@@ -1019,11 +1020,15 @@ matchesRouter.get("/cup-matches/:id", async (c) => {
   const row = await c.env.DB.prepare(
     `SELECT cm.*, cc.total_rounds,
        hc.name AS home_name, hc.primary_color AS home_color, hc.team_id AS home_real_id,
-       ac.name AS away_name, ac.primary_color AS away_color, ac.team_id AS away_real_id
+       ac.name AS away_name, ac.primary_color AS away_color, ac.team_id AS away_real_id,
+       ht.badge_pattern AS home_badge, ht.secondary_color AS home_secondary, at.badge_pattern AS away_badge, at.secondary_color AS away_secondary,
+       ht.badge_symbol AS home_badge_symbol, ht.badge_primary_color AS home_badge_primary, ht.badge_secondary_color AS home_badge_secondary, ht.badge_initials AS home_badge_initials
      FROM cup_matches cm
      JOIN cup_competitions cc ON cc.id = cm.cup_id
      JOIN cup_teams hc ON hc.id = cm.home_cup_team_id
      JOIN cup_teams ac ON ac.id = cm.away_cup_team_id
+     LEFT JOIN teams ht ON ht.id = hc.team_id
+     LEFT JOIN teams at ON at.id = ac.team_id
      WHERE cm.id = ?`
   ).bind(c.req.param("id")).first<Record<string, unknown>>();
   if (!row) return c.json({ error: "Match not found" }, 404);
@@ -1062,8 +1067,9 @@ matchesRouter.get("/cup-matches/:id", async (c) => {
     roundName: roundName(row.round as number, row.total_rounds as number),
     home_team_id: row.home_real_id ?? null,
     away_team_id: row.away_real_id ?? null,
-    home_badge: "shield", away_badge: "shield",
-    home_secondary: "#FFFFFF", away_secondary: "#FFFFFF",
+    // Klub ze hry má svůj znak a barvy; velkoklub řádek v teams nemá, ten dostane štít.
+    home_badge: row.home_badge ?? "shield", away_badge: row.away_badge ?? "shield",
+    home_secondary: row.home_secondary ?? "#FFFFFF", away_secondary: row.away_secondary ?? "#FFFFFF",
     events: JSON.parse((row.events as string) ?? "[]"),
     commentary: JSON.parse((row.commentary as string) ?? "[]"),
     player_ratings: JSON.parse((row.player_ratings as string) ?? "{}"),

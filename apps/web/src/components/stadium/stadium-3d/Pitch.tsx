@@ -65,6 +65,8 @@ const HALF_D = PITCH.depth / 2;
 
 // Paleta hnědo-žlutých odstínů pro vyšlapaná místa
 const WEAR_COLORS = ["#8B6F47", "#9B7E55", "#A08560", "#7A5C3A", "#6B5836", "#B89868"];
+/** Na sněhu se lajnuje barevně, bílá čára by na něm nebyla vidět. */
+const SNOW_LINE_COLOR = "#F2A49B";
 const SNOW_WEAR_COLORS = ["#B8C9BD", "#A5B8AA", "#8FA294", "#CBD7CE"];
 
 interface DamageSpot {
@@ -339,7 +341,7 @@ export function Pitch({
 
       {/* Čáry hřiště */}
       {/* Bez čar se nekreslí nic: neviditelné čáry by zapsaly hloubku a vyřízly se do kaluží. */}
-      {hasLines && <PitchLines hasFull={hasFull} hasCenter={hasCenter} wide={broadcast} opacity={condition < 35 ? 0.75 : 0.92} />}
+      {hasLines && <PitchLines hasFull={hasFull} hasCenter={hasCenter} wide={broadcast} color={isSnow ? SNOW_LINE_COLOR : "#fff"} opacity={condition < 35 ? 0.75 : 0.92} />}
 
       {/* Rohové praporky */}
       <CornerFlags />
@@ -509,9 +511,8 @@ function MatchBall() {
   );
 }
 
-function PitchLines({ hasFull, hasCenter, wide, opacity }: { hasFull: boolean; hasCenter: boolean; wide: boolean; opacity: number }) {
+function PitchLines({ hasFull, hasCenter, wide, color: lineColor, opacity }: { hasFull: boolean; hasCenter: boolean; wide: boolean; color: string; opacity: number }) {
   const lineY = LINE_Y;
-  const lineColor = "#fff";
   // Z nízké kamery za lajnou je čára podél hřiště tenčí než bod obrazu a trhá se, proto je při záznamu širší.
   const lineWidth = wide ? 0.55 : hasFull ? 0.25 : 0.15;
 

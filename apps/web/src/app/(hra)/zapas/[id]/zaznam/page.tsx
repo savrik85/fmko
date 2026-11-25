@@ -8,7 +8,7 @@ import { Spinner, BadgePreview, JerseyPreview } from "@/components/ui";
 import { PositionBadge } from "@/components/ui/position-badge";
 import { bestTextOn } from "@/lib/team-color";
 import type { BadgePattern } from "@/components/ui";
-import { actionStarts, scenedEvents, shootoutEvents, STEP_SECONDS, substitutionsTogether, type ReplayKit } from "@/components/match/replay-3d/scenes";
+import { actionStarts, breakOf, replayOrder, scenedEvents, shootoutEvents, STEP_SECONDS, substitutionsTogether, type ReplayKit } from "@/components/match/replay-3d/scenes";
 import { cachedReplayView, DEFAULT_REPLAY_VIEW, fetchReplayView, type ReplayView } from "@/lib/ui-prefs";
 import { PitchIcon, VideoIcon } from "@/components/match/replay-view-icons";
 import { VideoLoading } from "@/components/match/replay-3d/VideoLoading";
@@ -166,6 +166,8 @@ export default function MatchReplayPage() {
   const [finished, setFinished] = useState(false);
   const [htPause, setHtPause] = useState(false);
   const [htDone, setHtDone] = useState(false);
+  /** Po přestávce se hrají její střídání (plánovaná na 45. minutu); výkop druhého poločasu přijde až po nich. */
+  const [breakSubs, setBreakSubs] = useState(false);
   // 3D záznam: před výkopem představení trenérů a podání rukou.
   const [intro, setIntro] = useState<"home" | "away" | "handshake" | null>(null);
   const [kickoff, setKickoff] = useState<"1st" | "2nd" | null>(null);
@@ -234,6 +236,7 @@ export default function MatchReplayPage() {
   const [paused, setPaused] = useState(false);
   const { later, cancel } = useStepTimer(paused || failed3d || choosingVideo || (long3d && !ready3d));
   const starts = useMemo(() => (match ? actionStarts(match.events) : []), [match]);
+  const halfTime = useMemo(() => breakOf(match?.events ?? []), [match]);
   /** Po skoku: akce, jejíž první snímek chvíli stojí, než se rozběhne. */
   const [cue, setCue] = useState<number | null>(null);
   const jumpTo = (k: number) => {
@@ -245,7 +248,8 @@ export default function MatchReplayPage() {
     // Po „Konec“ by se záznam hned zase přetočil na konec.
     if (speed === "instant") setSpeed("live");
     // Skok rovnou do druhého poločasu přestávku nespouští.
-    setHtDone((match.events[k]?.minute ?? 0) > 45);
+    setHtDone(k >= halfTime.start);
+    setBreakSubs(k >= halfTime.start && k < halfTime.end);
     setIdx(k);
     setCue(k);
     // Dokud snímek stojí, záznam čeká; akci pak rozběhne krok záznamu níž.
@@ -257,7 +261,7 @@ export default function MatchReplayPage() {
   /** Záznam od začátku: představení trenérů (jen ve videu), výkop, hra. `video` = pro který pohled. */
   const begin = (video: boolean) => {
     if (!match) return;
-    setHg(0); setAg(0); setIdx(0); setCue(null); setFlash(null); setFlashEvent(null); setHtPause(false); setHtDone(false); setFinished(false); setPaused(false);
+    setHg(0); setAg(0); setIdx(0); setCue(null); setFlash(null); setFlashEvent(null); setHtPause(false); setHtDone(false); setBreakSubs(false); setFinished(false); setPaused(false);
     if (speed === "instant") setSpeed("live");
     setTake((n) => n + 1);
     animating.current = true;
@@ -276,7 +280,10 @@ export default function MatchReplayPage() {
     };
     run(0);
   };
-  const startSecondHalf = () => { setHtPause(false); setHtDone(true); setKickoff("2nd"); };
+  const startSecondHalf = () => {
+    setHtPause(false); setHtDone(true);
+    if (idx < halfTime.end) setBreakSubs(true); else setKickoff("2nd");
+  };
   /** Video od začátku (od představení trenérů), nebo od místa, kde záznam je. Scéna se načítá až teď, rovnou ta vybraná. */
   const startVideo = (fromStart: boolean) => {
     setChoosingVideo(false);
@@ -313,12 +320,14 @@ export default function MatchReplayPage() {
     const hydrate = (r: Record<string, unknown>) => {
       const ev = typeof r.events === "string" ? JSON.parse(r.events as string) : (r.events ?? []);
       const co = typeof r.commentary === "string" ? JSON.parse(r.commentary as string) : (r.commentary ?? []);
+      const order = replayOrder(ev);
       setMatch({
         id: r.id as string, home_team_id: r.home_team_id as string, away_team_id: r.away_team_id as string,
         home_score: r.home_score as number, away_score: r.away_score as number, round: r.round as number | null,
         roundName: (r.roundName as string) ?? null, isCup: r.isCup === true, detail: r,
         // Penaltový rozstřel se přehraje jako události za koncem zápasu.
-        events: [...ev, ...shootoutEvents(r)], commentary: co,
+        // Střídání o přestávce se hrají před výkopem druhého poločasu; komentář jde s událostmi.
+        events: [...order.map((i) => ev[i]), ...shootoutEvents(r)], commentary: order.map((i) => co[i]),
         home_name: (r.home_name as string) ?? "Domácí", away_name: (r.away_name as string) ?? "Hosté",
         home_color: (r.home_color as string) ?? "#2D5F2D", away_color: (r.away_color as string) ?? "#D94032",
         home_secondary: (r.home_secondary as string) ?? "#FFF", away_secondary: (r.away_secondary as string) ?? "#FFF",
@@ -423,8 +432,8 @@ export default function MatchReplayPage() {
     if (idx >= match.events.length) { setFinished(true); setHg(match.home_score); setAg(match.away_score); markSeen(); return; }
     const next = match.events[idx];
     if (next.type === "special" && next.description.includes("Poločas")) { setIdx((i) => i + 1); return; }
-    const prev = idx > 0 ? match.events[idx - 1]?.minute ?? 0 : 0;
-    if (!htDone && !htPause && prev <= 45 && next.minute > 45) { setHtPause(true); return; }
+    if (!htDone && idx === halfTime.start) { setHtPause(true); return; }
+    if (breakSubs && idx >= halfTime.end) { setBreakSubs(false); setKickoff("2nd"); return; }
     // Penalta drží dech: nejdřív se dlouho bliká PENALTA a míč leží na puntíku,
     // teprve pak přijde další událost s výsledkem (gól / zahozeno).
     if (next.type === "penalty") {
@@ -484,7 +493,7 @@ export default function MatchReplayPage() {
     // Po skoku se nečeká a událost se ukáže hned, ve stejném kroku jako zmizí stojící snímek.
     if (afterJump) { setIdx((i) => i + 1); return; }
     return later(stepMs("plain"), () => setIdx((i) => i + 1));
-  }, [match, idx, speed, finished, htPause, htDone, tick, markSeen, long3d, scened, cue]);
+  }, [match, idx, speed, finished, htPause, htDone, breakSubs, tick, markSeen, long3d, scened, cue]);
 
   if (loading) return <div className="flex items-center justify-center min-h-[60vh]"><Spinner /></div>;
   if (!match || match.events.length === 0) return (
@@ -519,7 +528,7 @@ export default function MatchReplayPage() {
             </div>
             <div className="flex items-center justify-center gap-1.5 mt-1">
               {!finished && !htPause && <div className="w-2 h-2 rounded-full bg-green-400 animate-pulse" />}
-              <span className="text-white/50 text-xs sm:text-base font-heading font-bold">{finished ? "Konec" : htPause ? "Poločas" : `${view3d ? videoMin : curMin}'`}</span>
+              <span className="text-white/50 text-xs sm:text-base font-heading font-bold">{finished ? "Konec" : htPause || breakSubs ? "Poločas" : `${view3d ? videoMin : curMin}'`}</span>
               {match.round ? <span className="text-white/25 text-xs sm:text-base font-heading">· {match.round}. kolo</span>
                 : match.roundName ? <span className="text-white/25 text-xs sm:text-base font-heading">· 🏆 {match.roundName}</span> : null}
             </div>
@@ -753,7 +762,7 @@ export default function MatchReplayPage() {
               {view3d && !failed3d && !Replay3D && <VideoLoading />}
               {view3d && !failed3d && Replay3D && (
                 <Replay3D detail={match.detail} events={match.events} onReady={() => setReady3d(true)} onFailure={() => setFailed3d(true)} onSecondHalf={startSecondHalf}
-                  progress={{ take, idx, flash, intro, kickoff, halfTime: htPause, finished, paused, cue, fast: speed === "fast", homeGoals: hg, awayGoals: ag, minute: videoMin }} />
+                  progress={{ take, idx, flash, intro, kickoff, halfTime: htPause, breakSubs, finished, paused, cue, fast: speed === "fast", homeGoals: hg, awayGoals: ag, minute: videoMin }} />
               )}
             </>
           )}

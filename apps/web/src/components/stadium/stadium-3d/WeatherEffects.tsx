@@ -59,6 +59,12 @@ export function WeatherEffects({
  */
 const RAIN_BOX = { x: 44, y: 26, z: 44 };
 
+/**
+ * Srážky se kreslí až po všem průhledném (čáry hřiště, stíny a kroužky hráčů): jsou jedna síť se středem uprostřed
+ * hřiště, takže by je jinak všechno průhledné blíž ke kameře překreslilo, i když padají před tím.
+ */
+const PRECIPITATION_ORDER = 10;
+
 function RainParticles({ count }: { count: number }) {
   const meshRef = useRef<THREE.Mesh>(null);
   const { camera } = useThree();
@@ -158,7 +164,7 @@ function RainParticles({ count }: { count: number }) {
     material.uniforms.uCenter.value.set(c.x, Math.max(RAIN_BOX.y * 0.5 - 1, c.y), c.z);
   });
 
-  return <mesh ref={meshRef} geometry={geometry} material={material} frustumCulled={false} />;
+  return <mesh ref={meshRef} geometry={geometry} material={material} frustumCulled={false} renderOrder={PRECIPITATION_ORDER} />;
 }
 
 /** 💦 Dopadové kapky a stříkance na hřišti */
@@ -308,7 +314,7 @@ function SnowParticles({ count }: { count: number }) {
     material.uniforms.uCenter.value.set(c.x, Math.max(SNOW_BOX.y * 0.5 - 1, c.y), c.z);
   });
 
-  return <mesh geometry={geometry} material={material} frustumCulled={false} />;
+  return <mesh geometry={geometry} material={material} frustumCulled={false} renderOrder={PRECIPITATION_ORDER} />;
 }
 
 /**
