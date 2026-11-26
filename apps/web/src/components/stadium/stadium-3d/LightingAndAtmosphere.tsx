@@ -6,6 +6,12 @@ import { useFrame, useThree } from "@react-three/fiber";
 import type { TimeOfDay, WeatherType } from "./constants";
 import { SkyDome, SkyEnvironment, getSkyParams } from "./SkyDome";
 
+/**
+ * Síla stínů pod mrakem (zataženo, déšť, sníh) proti jasnému dni: slunce je schované a světlo přichází z celé
+ * oblohy, stíny jsou proto slabší. Stejný poměr mají stíny spočítané pro mobil (BakedShadows).
+ */
+const OVERCAST_SHADOW = 0.6;
+
 interface LightingAndAtmosphereProps {
   timeOfDay: TimeOfDay;
   weather?: WeatherType;
@@ -107,6 +113,7 @@ export function LightingAndAtmosphere({
                 shadow-camera-top={55}
                 shadow-camera-bottom={-55}
                 shadow-bias={-0.0003}
+                shadow-intensity={OVERCAST_SHADOW}
               />
               {/* Přisvětlení ze stínové strany, stejný idiom jako u zataženo — bez něj
                   zůstala půlka areálu v dešti černá. */}
@@ -131,6 +138,7 @@ export function LightingAndAtmosphere({
                 shadow-camera-top={55}
                 shadow-camera-bottom={-55}
                 shadow-bias={-0.0003}
+                shadow-intensity={OVERCAST_SHADOW}
               />
               <hemisphereLight args={["#CBD5E1", "#3E5C32", 0.4]} />
             </>
@@ -152,6 +160,7 @@ export function LightingAndAtmosphere({
                 shadow-camera-top={55}
                 shadow-camera-bottom={-55}
                 shadow-bias={-0.0003}
+                shadow-intensity={OVERCAST_SHADOW}
               />
               <directionalLight position={[-35, 25, -30]} intensity={0.35} color="#CBD5E1" />
               <hemisphereLight args={["#94A3B8", "#386125", 0.38]} />
@@ -206,6 +215,7 @@ export function LightingAndAtmosphere({
             shadow-camera-top={55}
             shadow-camera-bottom={-55}
             shadow-bias={-0.0003}
+            shadow-intensity={weather === "rain" ? OVERCAST_SHADOW : 1}
           />
           <directionalLight position={[-40, 18, 40]} intensity={0.4} color="#9D76A8" />
           <hemisphereLight args={["#F2A98A", "#4A5E2C", 0.55]} />

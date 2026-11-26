@@ -4,6 +4,7 @@ import { FaceAvatar } from "@/components/players/face-avatar";
 import { BadgePreview, type BadgePattern } from "@/components/ui";
 import { bestTextOn } from "@/lib/team-color";
 import { useEffect, useState, type ReactNode } from "react";
+import type { ReplayClock } from "./ReplayScene";
 import { chanceResult, GOAL_TEXT, sideOf, substitutedOut, type ReplayCoach, type ReplayEvent, type ReplayKit, type ReplayLineup, type ReplayPlayer, type ShotResult, type Side } from "./scenes";
 
 /** Co se právě hraje: událost (při „ŠANCE“ ta, která teprve přijde) a její pořadí v zápase. */
@@ -13,6 +14,29 @@ interface GraphicsProps {
   index: number;
   event: ReplayEvent | undefined;
   attack: boolean;
+  /** Hodiny záznamu: grafika se podle nich časuje, takže při pauze čeká a při „Rychle“ běží rychleji. */
+  clock: ReplayClock;
+}
+
+/**
+ * Kolik z časů `marks` (ms) už na hodinách záznamu uběhlo od chvíle, kdy se změnil `since`; při `since` null
+ * se nepočítá nic.
+ */
+function usePassed(clock: ReplayClock, marks: readonly number[], since: unknown): number {
+  const [passed, setPassed] = useState(0);
+  useEffect(() => {
+    if (since === null) return;
+    const from = clock.now();
+    let id = 0;
+    const tick = () => {
+      const n = marks.filter((ms) => clock.now() - from >= ms).length;
+      setPassed(n);
+      if (n < marks.length) id = requestAnimationFrame(tick);
+    };
+    tick();
+    return () => { cancelAnimationFrame(id); setPassed(0); };
+  }, [clock, since]); // eslint-disable-line react-hooks/exhaustive-deps
+  return passed;
 }
 
 const RESULTS: Record<ShotResult, string> = { goal: GOAL_TEXT, saved: "CHYTIL BRANKÁŘ!", post: "TYČ!", bar: "BŘEVNO!", wide: "VEDLE!", over: "NAD BRÁNU!", blocked: "ZBLOKOVÁNO!" };
@@ -43,9 +67,11 @@ function chanceOrigin(events: ReplayEvent[], index: number): string | undefined 
 
 /**
  * Nápis nahoře v obraze. Šance má jeden nápis od rozehrání (roh, standardka) po střelu: „ŠANCE“ a z čeho
- * vznikla; pak výsledek. Faul před kartou nápis nemá. Jméno hráče je v nápisu jen tam, kde dole není titulek
- * s hráčem.
+ * vznikla; pak výsledek. Ostatní akce mají svůj nápis od prvního snímku: i faul před kartou už ukazuje kartu,
+ * stejně jako penalta a zranění. Jméno hráče je v nápisu jen tam, kde dole není titulek s hráčem.
  */
+const cardLabel = (detail: Record<string, unknown>, card: ReplayEvent): Label =>
+  ({ text: card.detail === "red" ? "ČERVENÁ KARTA" : "ŽLUTÁ KARTA", sub: teamName(detail, card), tone: card.detail === "red" ? "red" : "yellow" });
 function labelOf({ detail, events, index, event, attack }: GraphicsProps): Label | null {
   if (!event) return null;
   if (event.detail?.startsWith("shootout:")) return { text: "ROZSTŘEL", tag: event.detail === "shootout:goal" ? "GÓL" : "NEDAL", sub: teamName(detail, event), tone: event.detail === "shootout:goal" ? "goal" : "miss" };
@@ -58,7 +84,12 @@ function labelOf({ detail, events, index, event, attack }: GraphicsProps): Label
       const result = chanceResult(event);
       return { text: event.detail?.startsWith("penalty_") && result !== "saved" ? "NEPROMĚNIL!" : RESULTS[result], sub: `${event.detail === "header_missed" ? "hlavičkoval" : "střílel"} ${event.playerName}`, tone: "miss" };
     }
-    case "card": return { text: event.detail === "red" ? "ČERVENÁ KARTA" : "ŽLUTÁ KARTA", sub: teamName(detail, event), tone: event.detail === "red" ? "red" : "yellow" };
+    case "card": return cardLabel(detail, event);
+    case "foul": {
+      // Scénu má jen faul, po kterém přijde karta: hned za ním, ve stejné minutě, stejnému týmu.
+      const card = events.slice(index + 1).find((e) => e.type === "card" && e.minute === event.minute && e.teamId === event.teamId);
+      return card ? cardLabel(detail, card) : null;
+    }
     case "injury": return { text: "ZRANĚNÍ", sub: teamName(detail, event), tone: "miss" };
     case "substitution": return { text: "STŘÍDÁNÍ", sub: teamName(detail, event), tone: "info" };
     default: return null;
@@ -95,7 +126,7 @@ function scorers(events: ReplayEvent[], index: number, teamId: number): string {
  * a minuta. Pod jménem je světlý pruh s tím, co nápis nahoře neříká (kolikátý gól a střelci zápasu, druh zranění,
  * kdo odchází); u karty není, tam není co dodat.
  */
-export function EventCard({ detail, events, index, event, attack }: GraphicsProps) {
+export function EventCard({ detail, events, index, event, attack, clock }: GraphicsProps) {
   if (!event || attack || !["goal", "card", "injury", "substitution"].includes(event.type)) return null;
   const player = playerOf(detail, event);
   const color = kitColor(detail, sideOf(event.teamId));
@@ -105,8 +136,8 @@ export function EventCard({ detail, events, index, event, attack }: GraphicsProp
     : event.type === "injury" ? event.detail
     : null;
   const board = event.type === "goal" ? [1, 2].map((teamId) => scorers(events, index, teamId)).filter(Boolean).join(" · ") : null;
-  return <LowerThird key={index} color={color} name={event.playerName} avatar={player?.avatar} title={event.type === "substitution" ? `↑ ${event.playerName}` : event.playerName}
-    note={note} board={board} badge={`${event.minute}'`} />;
+  return <After key={index} clock={clock} ms={LOWER_THIRD_DELAY}><LowerThird color={color} name={event.playerName} avatar={player?.avatar} title={event.type === "substitution" ? `↑ ${event.playerName}` : event.playerName}
+    note={note} board={board} badge={`${event.minute}'`} /></After>;
 }
 
 /** Představení trenéra před výkopem: obličej, jméno, klub a kolik ligových zápasů sezóny jeho tým odehrál a vyhrál. */
@@ -130,6 +161,13 @@ export function CoachCard({ detail, side }: { detail: Record<string, unknown>; s
 }
 
 /** Titulek přes spodek obrazu: obličej na barvě klubu, jméno, světlý pruh s poznámkou a pole vpravo. */
+/** O tolik později (ms hodin záznamu) se objeví spodní titulek akce: nejdřív má být vidět, co se v obraze stalo. */
+const LOWER_THIRD_DELAY = 500;
+/** Ukáže obsah, až na hodinách záznamu uběhne `ms` od chvíle, kdy se objevil. */
+function After({ clock, ms, children }: { clock: ReplayClock; ms: number; children: ReactNode }) {
+  return usePassed(clock, [ms], true) ? children : null;
+}
+
 function LowerThird({ color, name, avatar, title, note, board, badge }: {
   color: string; name: string; avatar: Record<string, unknown> | undefined; title: string; note: string | null | undefined; board: string | null; badge: ReactNode;
 }) {
@@ -172,16 +210,14 @@ export function ReplayMark() {
  * Výsledková tabulka: skóre a minuta. Po gólu (`scored` = kdo ho dal) pod ní vyskočí znak klubu s novým skóre
  * a doletí na tabulku; teprve pak se na ní skóre změní.
  */
-export function ScoreBug({ detail, homeGoals, awayGoals, minute, scored, fast }: {
-  detail: Record<string, unknown>; homeGoals: number; awayGoals: number; minute: number | undefined; scored: Side | null; fast: boolean;
+/** Kdy po gólu (ms hodin záznamu) vyskočí pod tabulkou znak s novým skóre, kdy na ni vyletí a kdy se skóre změní. */
+const SCORE_STEPS = [500, 1700, 2300];
+
+export function ScoreBug({ detail, homeGoals, awayGoals, minute, scored, clock }: {
+  detail: Record<string, unknown>; homeGoals: number; awayGoals: number; minute: number | undefined; scored: Side | null; clock: ReplayClock;
 }) {
   // Po gólu: 0 = na tabulce je staré skóre (míč je sotva v síti), 1 = pod tabulkou je znak s novým skóre, 2 = letí na ni, 3 = skóre je na tabulce.
-  const [step, setStep] = useState(0);
-  useEffect(() => {
-    if (!scored) return;
-    const timers = [500, 1700, 2300].map((ms, n) => setTimeout(() => setStep(n + 1), ms / (fast ? 2 : 1)));
-    return () => { timers.forEach(clearTimeout); setStep(0); };
-  }, [scored, fast]);
+  const step = usePassed(clock, SCORE_STEPS, scored);
   const team = (side: Side, goals: number) => {
     const name = detail[`${side}_name`] as string, flying = scored === side && step < 3;
     return (

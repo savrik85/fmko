@@ -17,6 +17,9 @@ const BOARD_THICKNESS = 0.05;
 const BOARD_OFFSET = 0.6;
 const SLOT_LENGTH = 10;
 const SIDE_OFFSET = 12;     // odsazení od středu pro jih/sever (vyhnout se brankám)
+// Středy reklam u lajny se střídačkami: vnitřní začíná 1,3 m za střídačkou, vnější končí 2,5 m za brankovou čárou.
+const BENCH_SIDE_INNER = 16.5;
+const BENCH_SIDE_OUTER = 27.5;
 
 const BANNER_COLORS = [
   "#E63946", "#1D3557", "#2A9D8F", "#F4A261", "#264653",
@@ -24,7 +27,7 @@ const BANNER_COLORS = [
 ];
 
 // Souvislejší prstenec: jih/sever 2 each (mimo branku uprostřed), východ/západ 4 each
-// (delší strana ~téměř souvislá řada reklam).
+// (na východě téměř souvislá řada reklam, na západě s mezerou pro střídačky).
 const SLOT_POSITIONS: Array<{ x: number; z: number; rotY: number }> = [
   // Jih (z-)
   { x: -SIDE_OFFSET, z: -HALF_D - BOARD_OFFSET, rotY: 0 },
@@ -37,11 +40,12 @@ const SLOT_POSITIONS: Array<{ x: number; z: number; rotY: number }> = [
   { x: HALF_W + BOARD_OFFSET, z:  -6, rotY: -Math.PI / 2 },
   { x: HALF_W + BOARD_OFFSET, z:   6, rotY: -Math.PI / 2 },
   { x: HALF_W + BOARD_OFFSET, z:  18, rotY: -Math.PI / 2 },
-  // Západ (x-)
-  { x: -HALF_W - BOARD_OFFSET, z: -18, rotY: Math.PI / 2 },
-  { x: -HALF_W - BOARD_OFFSET, z:  -6, rotY: Math.PI / 2 },
-  { x: -HALF_W - BOARD_OFFSET, z:   6, rotY: Math.PI / 2 },
-  { x: -HALF_W - BOARD_OFFSET, z:  18, rotY: Math.PI / 2 },
+  // Západ (x-): u této lajny stojí střídačky (z = ±7,5), reklamy jim proto uhýbají do stran a krajní
+  // přesahují brankovou čáru. Před střídačkami by zakryly náhradníky i trenéra.
+  { x: -HALF_W - BOARD_OFFSET, z: -BENCH_SIDE_OUTER, rotY: Math.PI / 2 },
+  { x: -HALF_W - BOARD_OFFSET, z: -BENCH_SIDE_INNER, rotY: Math.PI / 2 },
+  { x: -HALF_W - BOARD_OFFSET, z:  BENCH_SIDE_INNER, rotY: Math.PI / 2 },
+  { x: -HALF_W - BOARD_OFFSET, z:  BENCH_SIDE_OUTER, rotY: Math.PI / 2 },
 ];
 
 export function AdBoards({ sponsors, teamColor }: AdBoardsProps) {
