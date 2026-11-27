@@ -160,6 +160,20 @@ export async function returnCredit(db: D1Database, teamId: string, amount: numbe
     .bind(DENNI_KREDIT, amount, teamId).run();
 }
 
+/**
+ * Dobití kreditu adminem (náhrada za SMS, které spolkla chyba). Může jít i nad denní dobití
+ * a platí do konce herního dne: další den se kredit obnoví na denní částku jako vždy.
+ * Nejdřív proběhne dnešní obnova, jinak by ji první čtení v novém dni přepsalo i s dobitím.
+ * Vrací nový stav, nebo `null`, když tým neexistuje.
+ */
+export async function topUpCredit(db: D1Database, teamId: string, amount: number): Promise<CreditState | null> {
+  await loadCredit(db, teamId);
+  const res = await db.prepare("UPDATE teams SET phone_credit = COALESCE(phone_credit, 0) + ? WHERE id = ?")
+    .bind(amount, teamId).run();
+  if ((res.meta?.changes ?? 0) === 0) return null;
+  return loadCredit(db, teamId);
+}
+
 /** Kredit slovem — do UI, ať se to nepočítá na dvou místech. */
 export function creditWord(zbyva: number, denni: number): string {
   // Na jednu SMS to nestačí — z pohledu hráče je to došlý kredit, i když
