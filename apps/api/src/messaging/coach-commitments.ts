@@ -1081,11 +1081,8 @@ const KEPT_SMS: Record<CommitmentKind, readonly string[]> = {
   squad_apology: [],
   weight_target: REWARD_KEPT_SMS,
   reward: REWARD_KEPT_SMS,
-  fine: [
-    "No jo, trenére. Zasloužil jsem si to.",
-    "Dobře, pokutu beru. Ale radost z toho nemám.",
-    "To snad nemyslíte vážně… No co, zaplatím.",
-  ],
+  // Na pokutu odpovídá hráč přes model podle toho, za co ji dostal (fines/reaction.ts).
+  fine: [],
   bet: [
     "Díky, trenére! Sázka je sázka, a vy jste ji dodržel. 🍻",
     "Na zdraví, trenére! Takhle se to dělá. 🍺",
@@ -1550,8 +1547,16 @@ export async function fulfilMoneyCommitment(
   let move: () => Promise<string>;
   if (r.kind === "fine") {
     const fine = fineCap(d.amount ?? 0, r.weekly_wage);
+    // Za prohřešek, který hráč už zaplatil podle sazebníku kabiny, druhá pokuta nebude (fines/sms-fine.ts).
+    const { scheduleDuplicateOf, recordSmsFine } = await import("../fines/sms-fine");
+    const quote = await db.prepare("SELECT quote FROM coach_commitments WHERE id = ?").bind(r.id).first<{ quote: string | null }>()
+      .catch((e) => { logger.warn({ module: M }, `citace pokuty ${r.id}`, e); return null; });
+    const duplicate = await scheduleDuplicateOf(db, { teamId: r.team_id, playerId: r.player_id, quote: quote?.quote ?? null, day: gameDate });
+    if (duplicate) return { ok: false, error: `${r.first_name} za tohle už platí podle sazebníku (${duplicate.charAt(0).toLowerCase()}${duplicate.slice(1)}).`, status: 409 };
     move = async () => {
       await recordTransaction(db, r.team_id, "incident_fine", fine, `Pokuta: ${name}`, gameDate, r.player_id);
+      // Do zátěže hráče se počítá i pokuta z SMS; odpověď hráče pošle fines/reaction.ts.
+      await recordSmsFine(db, { teamId: r.team_id, playerId: r.player_id, commitmentId: r.id, amount: fine, quote: quote?.quote ?? null, day: gameDate });
       return `Pokuta ${fine.toLocaleString("cs-CZ")} Kč udělena`;
     };
   } else if (r.kind === "bet") {

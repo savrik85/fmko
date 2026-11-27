@@ -1388,6 +1388,26 @@ export async function runScheduledMatches(
                 logger.error({module: "match-runner"}, "Condition persist failed", e);
             }
 
+            // Sazebník pokut kabiny (fines/): karty, kocovina, pozdní příchod, omluvenky. Jen áčka,
+            // U21 sazebník nemá. Reakci hráče pošle hodinový běh telefonu.
+            if (clubSideEffects && (homeIsHuman || awayIsHuman)) {
+                try {
+                    const {applyMatchFines} = await import("../fines/detect");
+                    await applyMatchFines(db, {
+                        matchId, calendarId,
+                        day: (calRow?.scheduled_at ?? new Date().toISOString()).slice(0, 10),
+                        sides: [
+                            {side: 1, teamId: homeTeamId, isHuman: homeIsHuman, opponentName: String(awayTeam?.name ?? "neznámý"), idMap: homeBuild.idMap},
+                            {side: 2, teamId: awayTeamId, isHuman: awayIsHuman, opponentName: String(homeTeam?.name ?? "neznámý"), idMap: awayBuild.idMap},
+                        ],
+                        events: result.events,
+                        absences: matchAbsences,
+                    });
+                } catch (e) {
+                    logger.error({module: "match-runner"}, `pokuty ze sazebníku ${matchId}`, e);
+                }
+            }
+
             // Kdo se nevešel ani na lavičku, nese to nelibě (morálka, nejvýš jedna SMS za tým).
             // Až po uložení morálky ze zápasu, jinak by ji ten zápis přepsal.
             {

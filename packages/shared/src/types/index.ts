@@ -139,3 +139,4 @@ export * from "./staff-tasks";
 export * from "./club-website";
 export * from "./club-website-player";
 export * from "./club-website-pages";
+export * from "./fine-schedule";

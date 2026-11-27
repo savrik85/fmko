@@ -592,6 +592,14 @@ export async function executeDailyTick(
         const { applyLapsAtTraining, missedTrainingStmt, trainingRuleBonus } = await import("../messaging/coach-rules");
         equipAttendanceBonus += await trainingRuleBonus(env.DB, clubId)
           .catch((e) => { logger.warn({ module: "daily-tick", teamId }, "pravidlo docházky", e); return 0; });
+        // Sazebník pokut kabiny (fines/): jen lidské áčko, U21 sazebník nemá.
+        const finesTeam = team.user_id !== "ai" && clubId === teamId;
+        const trainingDay = effectiveDate.toISOString().slice(0, 10);
+        const fineEffects = finesTeam
+          ? await (await import("../fines/detect")).trainingFineEffects(env.DB, teamId, trainingDay,
+            squad.map((p, i) => ({ id: playersResult.results[i].id as string, discipline: Number((p as { discipline?: number }).discipline ?? 50), temper: Number((p as { temper?: number }).temper ?? 50) })))
+            .catch((e) => { logger.warn({ module: "daily-tick", teamId }, "účinek sazebníku na trénink", e); return undefined; })
+          : undefined;
         const result = simulateTraining(rng, squad, {
           type: todayTrainingType ?? "conditioning",
           intensity: todayIntensity,
@@ -604,7 +612,8 @@ export async function executeDailyTick(
           trainingWeather?.weather,
           incidentniDuvody,
           situaceHracu,
-          districtRow?.district ?? undefined);
+          districtRow?.district ?? undefined,
+          fineEffects);
 
         const attendanceWithNames = result.attendance.map((a) => ({
           playerId: playersResult.results[a.playerIndex].id as string,
@@ -884,6 +893,15 @@ export async function executeDailyTick(
             .bind(JSON.stringify(attData), teamId).run();
         } catch (e) {
           logger.warn({ module: "daily-tick" }, "training attendance tracking failed", e);
+        }
+
+        // Pokuty ze sazebníku za vynechaný trénink. Reakci hráče pošle hodinový běh telefonu.
+        if (finesTeam) {
+          const { applyTrainingFines } = await import("../fines/detect");
+          await applyTrainingFines(env.DB, teamId, trainingDay, result.attendance.map((a) => ({
+            playerId: playersResult.results[a.playerIndex].id as string,
+            attended: a.attended, reason: a.reason, restByCoach: a.restByCoach, pledge: a.pledge,
+          }))).catch((e) => logger.error({ module: "daily-tick", teamId }, "pokuty z tréninku", e));
         }
 
         events.push({
@@ -1274,6 +1292,17 @@ export async function executeDailyTick(
     if (r.sessionsCreated > 0) events.push({ type: "recovery", description: `Hospoda: ${r.sessionsCreated} session` });
   } catch (e) {
     logger.error({ module: "daily-tick" }, "pub sessions", e);
+  }
+  });
+
+  // ── Sazebník pokut kabiny: pokuty z včerejší hospody a odpor kabiny (fines/) ──
+  await steps.once("fines", async () => {
+  try {
+    const { runDailyFines } = await import("../fines/daily");
+    const r = await runDailyFines(env.DB, env, todayKey);
+    if (r.teams > 0) events.push({ type: "recovery", description: `Sazebník: ${r.teams} klubů, ${r.fines} pokut z hospody` });
+  } catch (e) {
+    logger.error({ module: "daily-tick" }, "sazebník pokut", e);
   }
   });
 

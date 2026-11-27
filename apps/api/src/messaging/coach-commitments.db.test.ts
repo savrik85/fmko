@@ -325,7 +325,9 @@ describe("pokuta a úkol „poptej se“", () => {
     expect((await db.prepare("SELECT budget FROM teams WHERE id = 'club'").first<{ budget: number }>())?.budget).toBe(5400);
     expect((await db.prepare("SELECT delta FROM coach_relation_log WHERE player_id = 'p1'").first<{ delta: number }>())?.delta).toBe(-5);
     expect(await morale("p1")).toBe(46);
-    expect(await smsTo("p1")).toHaveLength(1);
+    // Odpověď na pokutu už není předem napsaná věta hned po udělení: píše ji model
+    // z faktů v hodinovém běhu telefonu (fines/reaction.ts).
+    expect(await smsTo("p1")).toEqual([]);
   });
 
   it("neudělená pokuta tiše propadne", async () => {

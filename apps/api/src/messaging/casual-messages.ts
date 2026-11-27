@@ -79,6 +79,9 @@ export async function runPhoneHourly(
   // Totéž u slibů a dohod (coach-commitments.ts): timeout modelu dohodu nezahodí.
   const { processPendingCommitments } = await import("./coach-commitments");
   await processPendingCommitments(db, env, now).catch((e) => logger.warn({ module: M }, "dodělání rozpoznání slibů", e));
+  // Odpovědi hráčů na pokuty ze sazebníku a z SMS (fines/reaction.ts): zápasový runner model nemá.
+  const { sendPendingFineReactions } = await import("../fines/reaction");
+  await sendPendingFineReactions(db, env, now).catch((e) => logger.warn({ module: M }, "reakce na pokuty", e));
   // Co trenér řekl o hráčích, se rozšíří po vazbách (hearsay/spread.ts).
   const { spreadHearsay } = await import("../hearsay/spread");
   await spreadHearsay(db, now).catch((e) => logger.warn({ module: M }, "šíření toho, co trenér řekl", e));
