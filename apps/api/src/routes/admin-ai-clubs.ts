@@ -11,6 +11,11 @@
  *   Lidský klub jen výslovně v `teamIds`, s `percentile=0.5` na střed vzoru: jen přidává,
  *   nic nebere, bez hráčů, zaměstnanců a AI povahy navíc (Strakonice a ČB 11/2026).
  *
+ * POST /api/admin/ai-clubs/weaken?leagueId=&shift=8&budgetCap=60000&dryRun=1
+ *   Oslabení původních AI klubů ligy o `shift` bodů hodnocení na hráče a rozpočet na
+ *   `budgetCap` (ai-clubs/weaken.ts). Lidský a převzatý klub zůstanou. Jen jednou na ligu,
+ *   znovu s `force=1`.
+ *
  * POST /api/admin/ai-clubs/lower-league?district=Prachatice&seed=&dryRun=1
  *   III. třída okresu uprostřed sezóny (část 2): 14 AI klubů z největších obcí bez klubu,
  *   U21, rozpis středa a neděle do posledního kola přeboru, bez postupu a sestupu,
@@ -60,6 +65,7 @@ import { Hono } from "hono";
 import type { Bindings } from "../index";
 import { requireAdmin, requireAuth } from "../auth/middleware";
 import { applyLeveling, LEVELING_MODES, planLeveling, type LevelingMode } from "../ai-clubs/leveling";
+import { applyWeakening, MAX_WEAKEN_SHIFT, planWeakening } from "../ai-clubs/weaken";
 import { cryptoSeed } from "../generators/rng";
 import { findAbandonedClubs, MAX_TAKEOVERS_PER_RUN, releaseClubForNewcomer, runAbandonedClubTakeover } from "../ai-clubs/abandoned";
 import { openDistrictRegistration } from "../ai-clubs/district-opening";
@@ -128,6 +134,40 @@ adminAiClubsRouter.post("/level", async (c) => {
   } catch (e) {
     logger.error({ module: M }, `narovnání ligy ${leagueId} (${mode})`, e);
     return c.json({ error: "Narovnání selhalo, podrobnosti jsou v logu" }, 500);
+  }
+});
+
+/** Značka provedeného oslabení: podruhé by kluby klesly znovu o celý posun. */
+const weakenDoneKey = (leagueId: string) => `ai_weaken_done:${leagueId}`;
+
+adminAiClubsRouter.post("/weaken", async (c) => {
+  const leagueId = c.req.query("leagueId");
+  if (!leagueId) return c.json({ error: "Chybí leagueId" }, 400);
+  const shift = Number(c.req.query("shift"));
+  if (!Number.isInteger(shift) || shift < 1 || shift > MAX_WEAKEN_SHIFT) {
+    return c.json({ error: `shift musí být celé číslo 1 až ${MAX_WEAKEN_SHIFT}` }, 400);
+  }
+  const rawCap = c.req.query("budgetCap");
+  const budgetCap = rawCap !== undefined && rawCap !== "" ? Number(rawCap) : null;
+  if (budgetCap !== null && !(Number.isInteger(budgetCap) && budgetCap >= 0)) {
+    return c.json({ error: "budgetCap musí být nezáporné celé číslo" }, 400);
+  }
+  const league = await c.env.DB.prepare("SELECT id FROM leagues WHERE id = ?").bind(leagueId).first<{ id: string }>();
+  if (!league) return c.json({ error: "Liga neexistuje" }, 404);
+
+  const force = c.req.query("force") === "1";
+  const done = await c.env.CACHE_KV.get(weakenDoneKey(leagueId));
+  if (done && !force) return c.json({ error: `Liga už oslabená byla (${done}). Znovu jen s force=1.` }, 409);
+
+  try {
+    const opts = { leagueId, shift, budgetCap };
+    if (isDryRun(c.req.query("dryRun"))) return c.json({ dryRun: true, plan: await planWeakening(c.env.DB, opts) });
+    const { plan, result } = await applyWeakening(c.env.DB, opts);
+    await c.env.CACHE_KV.put(weakenDoneKey(leagueId), `${new Date().toISOString()} o ${shift} bodů`);
+    return c.json({ dryRun: false, plan, result });
+  } catch (e) {
+    logger.error({ module: M }, `oslabení ligy ${leagueId} o ${shift}`, e);
+    return c.json({ error: "Oslabení selhalo, podrobnosti jsou v logu" }, 500);
   }
 });
 
