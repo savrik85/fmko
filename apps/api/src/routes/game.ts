@@ -7186,6 +7186,24 @@ gameRouter.post("/admin/teams/:teamId/grant-budget", async (c) => {
   return c.json({ ok: true, teamId, amount: body.amount, balanceAfter });
 });
 
+// POST /api/admin/teams/:teamId/phone-credit — dobití kreditu na telefonu (náhrada za spolknuté SMS).
+// Body: { amount: number } v Kč, kladné celé číslo. Platí do konce herního dne.
+gameRouter.post("/admin/teams/:teamId/phone-credit", async (c) => {
+  const teamId = c.req.param("teamId");
+  const body = await c.req.json<{ amount: number }>().catch((e) => {
+    logger.warn({ module: "game.ts" }, "parse phone-credit body", e);
+    return null;
+  });
+  if (!body || !Number.isInteger(body.amount) || body.amount <= 0) {
+    return c.json({ error: "amount (kladné celé číslo v Kč) je povinné" }, 400);
+  }
+  const { topUpCredit } = await import("../messaging/phone-credit");
+  const credit = await topUpCredit(c.env.DB, teamId, body.amount);
+  if (!credit) return c.json({ error: "Tým nenalezen" }, 404);
+  logger.info({ module: "game.ts", teamId }, `admin dobil kredit o ${body.amount} Kč, zbývá ${credit.zbyva} Kč`);
+  return c.json({ ok: true, teamId, amount: body.amount, credit });
+});
+
 // POST /api/game/delegate-referees — dodatečná delegace rozhodčích.
 // Denní tick deleguje jen na kolo za dva herní dny. Když se rozhodčí nasadí do
 // rozehrané sezóny (nebo tick kolo minul), tohle je dožene: bez parametrů projde

@@ -4,7 +4,7 @@
  */
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { Miniflare } from "miniflare";
-import { CENA_SMS, DENNI_KREDIT, loadCredit, refundCoachSms, spendCredit } from "./phone-credit";
+import { CENA_SMS, DENNI_KREDIT, loadCredit, refundCoachSms, spendCredit, topUpCredit } from "./phone-credit";
 import { playerInClub } from "./player-reach";
 
 let miniflare: Miniflare;
@@ -71,6 +71,23 @@ describe("denní dobití", () => {
 
   it("tým, který kredit ještě nikdy neměl, dostane první dobití", async () => {
     expect((await loadCredit(db, "rival")).zbyva).toBe(DENNI_KREDIT);
+  });
+});
+
+describe("dobití adminem", () => {
+  it("přidá kredit i nad denní dobití a čtení týž den ho nepřepíše", async () => {
+    expect((await topUpCredit(db, "club", DENNI_KREDIT))?.zbyva).toBe(6 + DENNI_KREDIT);
+    expect((await loadCredit(db, "club")).zbyva).toBe(6 + DENNI_KREDIT);
+  });
+
+  it("v novém herním dni se nejdřív dobije denní kredit a dobití se přičte k němu", async () => {
+    await setDay("2026-11-10");
+    expect((await topUpCredit(db, "club", 10))?.zbyva).toBe(DENNI_KREDIT + 10);
+    expect(await credit()).toEqual({ c: DENNI_KREDIT + 10, d: "2026-11-10" });
+  });
+
+  it("neexistující tým nedobije", async () => {
+    expect(await topUpCredit(db, "missing", 36)).toBeNull();
   });
 });
 
