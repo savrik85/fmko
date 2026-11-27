@@ -46,6 +46,7 @@ export const MENU_GROUPS: MenuGroup[] = [
       // Mládež: U21 a Akademie se přepínají nahoře na stránce (components/players/youth-section-nav.tsx)
       { href: "/u21", label: "Mládež", icon: "🧒", color: "#3D7A3D", alsoActive: ["/akademie"] },
       { href: "/trenink", label: "Tréninky", icon: "🏋️", color: "#3D7A3D" },
+      { href: "/pokladnicka", label: "Pokladnička", icon: "🐷", color: "#8B5A2B" },
       { href: "/zamestnanci", label: "Zaměstnanci", icon: "👔", color: "#4E6B7B" },
       { href: "/prestupy", label: "Přestupy", icon: "🤝", color: "#4A8A4A" },
     ],

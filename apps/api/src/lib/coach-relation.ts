@@ -32,6 +32,8 @@ export type CoachRelationSource =
   | "hearsay"
   | "left_out"
   | "arrival"
+  // Pokuta podle sazebníku kabiny nebo z SMS (fines/).
+  | "fine"
   | "admin";
 
 export interface CoachRelationChange {

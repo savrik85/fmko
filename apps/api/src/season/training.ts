@@ -1,4 +1,5 @@
 import { SULK_TRAINING_REASONS } from "../multiplayer/left-out";
+import { FINE_SKIP_REASONS, type TrainingFineEffects } from "../fines/detect";
 import { isYouthAge, pickYouthTrainingReason } from "../events/youth-excuses";
 import type { Weather } from "../engine/types";
 /**
@@ -443,6 +444,8 @@ export function simulateAttendance(
   situaceHracu?: ReadonlyArray<readonly string[] | undefined>,
   /** Okres klubu: mladí jezdí za zábavou do jeho měst. */
   district?: string,
+  /** Sazebník pokut kabiny (fines/detect.ts): odradí od flákání, přetížené hráče naopak odežene. */
+  fineEffects?: TrainingFineEffects,
 ): TrainingAttendance[] {
   // Trenér, který drží kázeň, dostane na trénink víc lidí. Kolem hodnoty 40 je to
   // neutrální, nahoře i dole to hýbe docházkou nejvýš o deset procentních bodů.
@@ -516,6 +519,12 @@ export function simulateAttendance(
       return { playerIndex: i, attended: false, reason: rng.pick(SULK_TRAINING_REASONS) };
     }
     if (hod < attendProb) {
+      // Hráč přetížený pokutami radši nepřijde. Náhoda se losuje jen u týmu se sazebníkem,
+      // ostatním se pořadí losů nemění.
+      const skip = !isCeleb ? fineEffects?.skipChance(i) ?? 0 : 0;
+      if (skip > 0 && rng.random() < skip) {
+        return { playerIndex: i, attended: false, reason: rng.pick(FINE_SKIP_REASONS) };
+      }
       return { playerIndex: i, attended: true };
     }
 
@@ -527,6 +536,12 @@ export function simulateAttendance(
     const reason = youthReason ?? (km > 10 && rng.random() < 0.4
       ? rng.pick(COMMUTE_ABSENCE_REASONS)
       : rng.pick(isYouthAge(player.age) ? YOUNG_SAFE_REASONS : ABSENCE_REASONS));
+
+    // Sazebník: za tenhle důvod by platil, tak se radši zvedne a přijde.
+    const deter = fineEffects?.deterrence(i, reason) ?? 0;
+    if (deter > 0 && rng.random() < deter) {
+      return { playerIndex: i, attended: true };
+    }
 
     return {
       playerIndex: i,
@@ -581,6 +596,8 @@ export function simulateTraining(
   situaceHracu?: ReadonlyArray<readonly string[] | undefined>,
   /** Okres klubu (města pro omluvenky mladých). */
   district?: string,
+  /** Sazebník pokut kabiny (fines/detect.ts). */
+  fineEffects?: TrainingFineEffects,
 ): TrainingResult {
   const allAttendance: TrainingAttendance[] = [];
   const attendanceCounts = new Map<number, number>();
@@ -593,6 +610,7 @@ export function simulateTraining(
     incidentniDuvody,
     situaceHracu,
     district,
+    fineEffects,
   );
   for (const a of session) {
     if (a.attended) attendanceCounts.set(a.playerIndex, 1);

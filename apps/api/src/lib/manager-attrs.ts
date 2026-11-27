@@ -34,6 +34,8 @@ export type ManagerAttrSource =
   | "incident"
   // Absolvovaný kurz trenérské školy (test na konci splněný).
   | "course"
+  // Sazebník pokut: důsledné vymáhání, nebo odpouštění (fines/).
+  | "fines"
   | "admin";
 
 /** České názvy do popisků a UI. */

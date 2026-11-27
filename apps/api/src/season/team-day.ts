@@ -762,6 +762,15 @@ export async function processTeamDay(
                   .bind(cnt, `⚠️ ${matchDayAbsences.length} nových omluvenek!`, matchConvId).run().catch((e) => logger.warn({ module: "daily-tick" }, "match_day conversation update", e));
                 logger.info({ module: "daily-tick", teamId }, `match_day absences: ${matchDayAbsences.length}`);
               }
+
+              // Stávka kvůli sazebníku pokut: ultimátum kabiny platilo na dnešní zápas (fines/squad.ts).
+              if (team.user_id !== "ai" && team.team_type !== "u21") {
+                const { strikeForMatch } = await import("../fines/squad");
+                const skipIds = new Set<string>([...alreadyIds,
+                  ...matchDayAbsences.map((a) => squadRows.results[a.playerIndex]?.id as string).filter(Boolean)]);
+                await strikeForMatch(env.DB, { teamId, calendarId: todayMatch.id, convId: matchConvId, day: todayMatch.scheduled_at.slice(0, 10), skipIds })
+                  .catch((e) => logger.error({ module: "daily-tick", teamId }, "stávka kvůli pokutám", e));
+              }
             }
           }
         }
