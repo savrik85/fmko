@@ -1,8 +1,9 @@
 -- 0341: Útraty z kasy pokut. Kasa pokut se nepřevádí do rozpočtu klubu, platí se z ní jen
 -- hospoda pro kabinu (fines/fund.ts). Každá útrata má řádek, ať ji trenér vidí na stránce Pokuty.
+-- Bez cizího klíče na teams, jako kniha transactions: záznam útraty přežije i smazání týmu.
 CREATE TABLE IF NOT EXISTS fine_fund_spends (
   id TEXT PRIMARY KEY,
-  team_id TEXT NOT NULL REFERENCES teams(id) ON DELETE CASCADE,
+  team_id TEXT NOT NULL,
   amount_czk INTEGER NOT NULL,
   description TEXT NOT NULL,
   game_date TEXT NOT NULL,
