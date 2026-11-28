@@ -533,8 +533,9 @@ export async function applyAcceptedInvite(
         await cancelFollowUp(db, followUpId);
         return false;
       }
-      const { recordTransaction } = await import("../season/finance-processor");
-      await recordTransaction(db, invite.teamId, "event", -PUB_ROUND_COST, "Runda pro kluky v hospodě", gameDate)
+      // Rundu pro kluky platí nejdřív kasa pokut, zbytek klub (fines/fund.ts).
+      const { paySquadPub } = await import("../fines/fund");
+      await paySquadPub(db, { fundTeamId: invite.teamId, budgetTeamId: invite.teamId, cost: PUB_ROUND_COST, description: "Runda pro kluky v hospodě", gameDate })
         .catch((e) => logger.warn({ module: M, teamId: invite.teamId }, "runda v hospodě", e));
       // Stejný odstup jako „Pojedeme na jedno" (routes/game.ts /pub-visit): hned potom celý tým
       // do hospody nevezme a návštěvu na pozvání nepřepíše.

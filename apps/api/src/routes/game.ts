@@ -1222,6 +1222,7 @@ gameRouter.post("/teams/:teamId/pub-visit", async (c) => {
   const gameDate = team.game_date.slice(0, 10); // YYYY-MM-DD
   // Co se v hospodě stalo, ať to trenér vidí hned (dřív přišlo jen `{ ok }` a karta mlčela).
   let session: { attendees: number; stories: string[] } = { attendees: 0, stories: [] };
+  let fromFund = 0;
 
   if (body.choice === "no") {
     // Trenér zakázal hospodu — žádná pub_session, jen morale penalty.
@@ -1230,18 +1231,20 @@ gameRouter.post("/teams/:teamId/pub-visit", async (c) => {
     ).bind(teamId).run().catch((e) => logger.warn({ module: "game" }, "apply no-pub morale penalty", e));
   } else {
     // "all" / "one" — vytvoř coach-led pub_session (effects přes incident.effects, condition_log, hangover...)
+    // Hospodu pro kluky platí nejdřív kasa pokut, klub doplácí jen to, co v ní chybí (fines/fund.ts).
+    const cost = body.choice === "all" ? 1500 : 500;
     const { spendBlockedMessage } = await import("../season/finance-processor");
-    const blocked = await spendBlockedMessage(c.env.DB, teamId, body.choice === "all" ? 1500 : 500);
+    const { budgetShareOfSquadPub, paySquadPub } = await import("../fines/fund");
+    const blocked = await spendBlockedMessage(c.env.DB, teamId, await budgetShareOfSquadPub(c.env.DB, teamId, cost));
     if (blocked) return c.json({ error: blocked }, 400);
     const { createCoachLedSession } = await import("../season/pub");
     const result = await createCoachLedSession(c.env.DB, teamId, gameDate, body.choice);
     if (!result.ok) return c.json({ error: result.reason }, 400);
     session = { attendees: result.attendeesCount, stories: result.stories };
 
-    // Cost (mimo session — peněženka týmu)
-    const cost = body.choice === "all" ? -1500 : -500;
-    await recordTransaction(c.env.DB, teamId, "event", cost, "Hospoda", team.game_date)
-      .catch((e) => logger.warn({ module: "game" }, "record pub cost", e));
+    const paid = await paySquadPub(c.env.DB, { fundTeamId: teamId, budgetTeamId: teamId, cost, description: "Hospoda", gameDate: team.game_date })
+      .catch((e) => { logger.warn({ module: "game" }, "record pub cost", e); return null; });
+    fromFund = paid?.fromFund ?? 0;
   }
 
   // Cooldown event — vázaný na TÝM. Dřív se ukládal jen s league_id a četl se stejně,
@@ -1254,7 +1257,7 @@ gameRouter.post("/teams/:teamId/pub-visit", async (c) => {
     team.game_date,
   ).run().catch((e) => logger.warn({ module: "game" }, "record pub cooldown event", e));
 
-  return c.json({ ok: true, choice: body.choice, ...session });
+  return c.json({ ok: true, choice: body.choice, ...session, fromFund });
 });
 
 // GET /api/teams/:id/pub-status — cooldown check
@@ -1268,10 +1271,12 @@ gameRouter.get("/teams/:teamId/pub-status", async (c) => {
     "SELECT created_at FROM seasonal_events WHERE team_id = ? AND type = 'hospoda_action' ORDER BY created_at DESC LIMIT 1"
   ).bind(teamId).first<{ created_at: string }>().catch((e) => { logger.warn({ module: "game" }, "db op failed", e); return null; });
 
-  if (!lastVisit) return c.json({ available: true });
+  const { fineFundBalance } = await import("../fines/fund");
+  const fineFund = await fineFundBalance(c.env.DB, teamId);
+  if (!lastVisit) return c.json({ available: true, fineFund });
 
   const daysDiff = (new Date(team.game_date).getTime() - new Date(lastVisit.created_at).getTime()) / (1000 * 60 * 60 * 24);
-  return c.json({ available: daysDiff >= 2, daysLeft: Math.max(0, Math.ceil(2 - daysDiff)) });
+  return c.json({ available: daysDiff >= 2, daysLeft: Math.max(0, Math.ceil(2 - daysDiff)), fineFund });
 });
 
 // GET /api/teams/:id/news — obecní zpravodaj / news feed

@@ -5,6 +5,7 @@ import { useState, useEffect } from "react";
 import Link from "next/link";
 import { useTeam } from "@/context/team-context";
 import { apiFetch, apiAction } from "@/lib/api";
+import { formatKc } from "@/lib/format";
 import { Card, CardBody, SectionLabel, useConfirm, ListCard, ListRow, RowIcon, RowGroup, PageLoading } from "@/components/ui";
 import { DistrictEvents } from "./DistrictEvents";
 
@@ -296,24 +297,37 @@ function DiaryItem({ ev, applied }: { ev: SeasonalEvent; applied?: EventEffect[]
 /* ── Hospoda ── */
 
 interface PubResult {
+  fromFund: number;
   choice: "all" | "one" | "no";
   attendees: number;
   stories: string[];
 }
 
-const PUB_CHOICES: Array<{ id: "all" | "one" | "no"; label: string; hint: string; effects: Array<{ text: string; tone: "good" | "bad" }> }> = [
-  { id: "all", label: "Celý tým jde", hint: "Pijáci můžou přebrat a ráno mít kocovinu.", effects: [
-    { text: "+8 nálada", tone: "good" }, { text: "−15 kondice", tone: "bad" }, { text: "−1 500 Kč", tone: "bad" },
+const PUB_CHOICES: Array<{ id: "all" | "one" | "no"; label: string; hint: string; cost: number; effects: Array<{ text: string; tone: "good" | "bad" | "neutral" }> }> = [
+  { id: "all", label: "Celý tým jde", hint: "Pijáci můžou přebrat a ráno mít kocovinu.", cost: 1500, effects: [
+    { text: "+8 nálada", tone: "good" }, { text: "−15 kondice", tone: "bad" },
   ] },
-  { id: "one", label: "Pozvat na pivo kluka s nejhorší náladou", hint: "", effects: [
-    { text: "+3 nálada", tone: "good" }, { text: "−5 kondice", tone: "bad" }, { text: "−500 Kč", tone: "bad" },
+  { id: "one", label: "Pozvat na pivo kluka s nejhorší náladou", hint: "", cost: 500, effects: [
+    { text: "+3 nálada", tone: "good" }, { text: "−5 kondice", tone: "bad" },
   ] },
-  { id: "no", label: "Zakázat hospodu", hint: "", effects: [{ text: "−3 nálada celé kabině", tone: "bad" }] },
+  { id: "no", label: "Zakázat hospodu", hint: "", cost: 0, effects: [{ text: "−3 nálada celé kabině", tone: "bad" }] },
 ];
+
+/** Hospodu platí nejdřív kasa pokut, klub jen zbytek (API fines/fund.ts). */
+function pubCostChips(cost: number, fineFund: number): Array<{ text: string; tone: "good" | "bad" | "neutral" }> {
+  if (cost <= 0) return [];
+  const fromFund = Math.min(cost, fineFund);
+  const fromBudget = cost - fromFund;
+  return [
+    ...(fromFund > 0 ? [{ text: `−${formatKc(fromFund)} z kasy pokut`, tone: "neutral" as const }] : []),
+    ...(fromBudget > 0 ? [{ text: `−${formatKc(fromBudget)}${fromFund > 0 ? " klub" : ""}`, tone: "bad" as const }] : []),
+  ];
+}
 
 function PubAction({ teamId }: { teamId: string | null }) {
   const [available, setAvailable] = useState(false);
   const [daysLeft, setDaysLeft] = useState(0);
+  const [fineFund, setFineFund] = useState(0);
   const [open, setOpen] = useState(false);
   const [result, setResult] = useState<PubResult | null>(null);
   const [sending, setSending] = useState(false);
@@ -321,8 +335,8 @@ function PubAction({ teamId }: { teamId: string | null }) {
 
   useEffect(() => {
     if (!teamId) return;
-    apiFetch<{ available: boolean; daysLeft?: number }>(`/api/teams/${teamId}/pub-status`)
-      .then((d) => { setAvailable(d.available); setDaysLeft(d.daysLeft ?? 0); })
+    apiFetch<{ available: boolean; daysLeft?: number; fineFund?: number }>(`/api/teams/${teamId}/pub-status`)
+      .then((d) => { setAvailable(d.available); setDaysLeft(d.daysLeft ?? 0); setFineFund(d.fineFund ?? 0); })
       .catch((e) => { console.error("pub-status fetch:", e); });
   }, [teamId]);
 
@@ -334,7 +348,7 @@ function PubAction({ teamId }: { teamId: string | null }) {
     const ok = await apiAction(
       apiFetch<PubResult & { ok: boolean }>(`/api/teams/${teamId}/pub-visit`, {
         method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ choice }),
-      }).then((r) => { holder.r = { choice, attendees: r.attendees ?? 0, stories: r.stories ?? [] }; }),
+      }).then((r) => { holder.r = { choice, attendees: r.attendees ?? 0, stories: r.stories ?? [], fromFund: r.fromFund ?? 0 }; }),
       "Do hospody to dnes nevyšlo",
     );
     if (ok && holder.r) {
@@ -376,6 +390,7 @@ function PubAction({ teamId }: { teamId: string | null }) {
                 {result.choice === "no" ? "Hospoda je zakázaná, kluci brblají." : `Šlo ${result.attendees} ${result.attendees === 1 ? "kluk" : result.attendees < 5 ? "kluci" : "kluků"}.`}
               </div>
               {result.stories.map((s, i) => <p key={i} className="text-ink-light">{s}</p>)}
+              {result.fromFund > 0 && <p className="text-ink-light">Z kasy pokut šlo {formatKc(result.fromFund)}.</p>}
               {result.choice !== "no" && (
                 <Link href="/hospoda" className="inline-block text-pitch-700 underline decoration-pitch-500/30 hover:text-pitch-500">
                   Celý večer v Hospodě
@@ -392,7 +407,7 @@ function PubAction({ teamId }: { teamId: string | null }) {
                   meta={c.hint || undefined}
                   detail={
                     <span className="flex flex-wrap gap-1 mt-1">
-                      {c.effects.map((e, i) => (
+                      {[...c.effects, ...pubCostChips(c.cost, fineFund)].map((e, i) => (
                         <span key={i} className={`text-xs font-medium px-1.5 py-0.5 rounded ${TONE_CHIP[e.tone]}`}>{e.text}</span>
                       ))}
                     </span>

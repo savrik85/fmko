@@ -9,7 +9,7 @@ import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { useTeam } from "@/context/team-context";
 import { apiFetch } from "@/lib/api";
-import { formatKc } from "@/lib/format";
+import { formatKc, formatSigned } from "@/lib/format";
 import {
   Button, ErrorBox, ListCard, ListEmpty, ListRow, PageLoading, RowValue, SectionLabel, StatusChip, Tabs,
   useConfirm, useTabParam, type ChipTone,
@@ -37,6 +37,7 @@ interface FinesData {
   fund: number;
   fines: FineRow[];
   burdened: Array<{ playerId: string; name: string; stage: number; label: string }>;
+  spends: Array<{ id: string; amountCzk: number; description: string; gameDate: string }>;
 }
 
 const TAB_KEYS = ["prehled", "sazebnik", "historie"] as const;
@@ -171,6 +172,9 @@ export default function FinesPage() {
           </div>
           <StatusChip tone={SQUAD_TONE[Math.min(data.squad.stage, 3)]}>{data.squad.label}</StatusChip>
         </div>
+        <p className="text-sm text-muted">
+          Do rozpočtu klubu kasa nejde. Platí se z ní hospoda s klukama: když je vezmeš do <Link href="/udalosti" className="text-pitch-700 underline decoration-pitch-500/30 hover:text-pitch-500">hospody</Link>, bere se nejdřív odsud.
+        </p>
         <p className="text-base text-ink">{statusLine}</p>
         {data.squad.ultimatum && (
           <ErrorBox message="Kabina dala ultimátum: když sazebník do zápasu nezmírníš nebo nezrušíš, kluci nepřijdou." />
@@ -258,6 +262,14 @@ export default function FinesPage() {
               ? <ListEmpty icon="⚖️">Zatím nikdo nic neplatil.</ListEmpty>
               : data.fines.map((f) => fineRow(f, f.status === "paid"))}
           </ListCard>
+          {data.spends.length > 0 && (
+            <ListCard title="Utraceno z kasy" count={data.spends.length}>
+              {data.spends.map((x) => (
+                <ListRow key={x.id} title={x.description} meta={formatDay(x.gameDate)}
+                  trailing={<RowValue tone="minus">{formatSigned(-x.amountCzk)}</RowValue>} />
+              ))}
+            </ListCard>
+          )}
           {message && <ActionMessage ok={message.ok} text={message.text} />}
         </div>
       )}
