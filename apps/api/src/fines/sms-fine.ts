@@ -54,15 +54,16 @@ export async function scheduleDuplicateOf(
   return null;
 }
 
+/**
+ * Zapíše pokutu z SMS do pokladničky kabiny. Když se nezapíše, vyhodí chybu: volající
+ * (coach-commitments.ts) pak slib vrátí, ať ho jde udělit znovu a pokuta nezmizí.
+ */
 export async function recordSmsFine(
   db: D1Database, o: { teamId: string; playerId: string; commitmentId: string; amount: number; quote: string | null; day: string },
 ): Promise<void> {
-  try {
-    await recordFines(db, o.teamId, o.day.slice(0, 10), [{
-      playerId: o.playerId, itemKey: null, conditionKey: null, sourceRef: `sms|${o.commitmentId}`, source: "sms",
-      amountCzk: o.amount, fact: o.quote ? `Trenér ti v SMS napsal: „${o.quote.slice(0, 200)}“` : "Pokuta od trenéra v SMS",
-    }], []);
-  } catch (e) {
-    logger.warn({ module: M, teamId: o.teamId }, `evidence SMS pokuty ${o.commitmentId}`, e);
-  }
+  const recorded = await recordFines(db, o.teamId, o.day.slice(0, 10), [{
+    playerId: o.playerId, itemKey: null, conditionKey: null, sourceRef: `sms|${o.commitmentId}`, source: "sms",
+    amountCzk: o.amount, fact: o.quote ? `Trenér ti v SMS napsal: „${o.quote.slice(0, 200)}“` : "Pokuta od trenéra v SMS",
+  }], []);
+  if (recorded.length === 0) throw new Error(`SMS pokuta ${o.commitmentId} se nezapsala do pokladničky`);
 }

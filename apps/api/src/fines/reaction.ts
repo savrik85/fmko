@@ -315,8 +315,11 @@ async function reactToFines(db: D1Database, env: ChatEnv | undefined, fines: Pen
   const teamId = fines[0].teamId;
   const { clubReceivesMessages } = await import("../incidents/club-messages");
   if (!(await clubReceivesMessages(db, teamId))) return;
-  const row = await db.prepare(`${PLAYER_PROFILE_SQL} WHERE id = ?`).bind(fines[0].playerId).first<Record<string, unknown>>();
-  if (!row || row.team_id !== teamId) return;
+  // Hráč áčka, nebo kluk z U21 téhož klubu (pokuta z SMS, fines/sms-fine.ts).
+  const row = await db.prepare(
+    `${PLAYER_PROFILE_SQL} WHERE id = ? AND (team_id = ? OR team_id IN (SELECT id FROM teams WHERE parent_team_id = ?))`,
+  ).bind(fines[0].playerId, teamId, teamId).first<Record<string, unknown>>();
+  if (!row) return;
   const p = profileFromRow(row);
   const day = fines.reduce((d, f) => (f.gameDate > d ? f.gameDate : d), fines[0].gameDate);
   const facts = await reactionFacts(db, fines, p, day);
