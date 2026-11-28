@@ -12,6 +12,17 @@ export interface ReleaseNote {
 
 export const RELEASE_NOTES: ReleaseNote[] = [
   {
+    date: "2026-11-28",
+    emoji: "⚖️",
+    title: "Pokuty",
+    items: [
+      "V menu Tým přibyla stránka [Pokuty](/pokuty): sazebník pokut si skládáš z hotových položek za trénink, zápas a hospodu.",
+      "Sazebník schvaluje kapitán a platí od dalšího pondělí. Vyhlásit ho jde i bez jeho souhlasu, ale kabina ho pak nevezme za svůj.",
+      "Pokuty se zapisují samy a hráč na každou odpoví v Telefonu.",
+      "Přehnané pokuty kabina nevezme: hráči odmítnou platit, kapitán dá ultimátum a kluci můžou na zápas stávkovat.",
+    ],
+  },
+  {
     date: "2026-11-23",
     emoji: "🔎",
     title: "Profil soupeře",
