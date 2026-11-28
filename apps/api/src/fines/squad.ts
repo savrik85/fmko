@@ -13,7 +13,7 @@ import { logger } from "../lib/logger";
 import { currentSeasonSql } from "../lib/season";
 import { captainOf } from "./captain";
 import { scheduleHarshness } from "./harshness";
-import { addDays, loadSchedule, moraleStmt, PLAYER_PROFILE_SQL, playerBurden, profileFromRow, type PlayerFineProfile, type ScheduleRow } from "./store";
+import { addDays, currentSeasonNumber, loadSchedule, moraleStmt, PLAYER_PROFILE_SQL, playerBurden, profileFromRow, type PlayerFineProfile, type ScheduleRow } from "./store";
 
 const M = "fines-squad";
 
@@ -140,8 +140,11 @@ export async function evaluateSquadFines(db: D1Database, env: ChatEnv | undefine
     .bind(teamId).all<Record<string, unknown>>();
   const players = (rows.results ?? []).map(profileFromRow);
   const burdens = await Promise.all(players.map(async (p) => ({ p, b: await playerBurden(db, p, day) })));
+  // Změny sazebníku z minulé sezóny se už nepočítají.
+  const season = active ? await currentSeasonNumber(db) : null;
+  const changesSeason = s.row.season_number === season ? s.row.changes_season : 0;
   const pressure = active ? squadPressure({
-    ratios: burdens.map((x) => x.b.ratio), origin: s.row.origin, changesSeason: s.row.changes_season,
+    ratios: burdens.map((x) => x.b.ratio), origin: s.row.origin, changesSeason,
     resentful: !!s.row.resentment_until && s.row.resentment_until >= day,
     harshness: scheduleHarshness(s.active).score,
   }) : 0;

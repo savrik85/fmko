@@ -9,7 +9,7 @@ import { CLASSIC_FINE_SCHEDULE, type FineScheduleItemInput } from "@okresni-masi
 import { imposeSchedule, proposeSchedule } from "./captain";
 import { applyMatchFines, applyTrainingFines } from "./detect";
 import { forgiveFine, insistOnFine } from "./actions";
-import { scheduleDuplicateOf } from "./sms-fine";
+import { recordSmsFine, scheduleDuplicateOf } from "./sms-fine";
 import { reactionFacts, type PendingFine } from "./reaction";
 import { PLAYER_PROFILE_SQL, profileFromRow } from "./store";
 
@@ -86,6 +86,15 @@ describe("schválení a platnost", () => {
     expect(row?.squad_stage).toBeGreaterThanOrEqual(1);
     const capRel = await db.prepare("SELECT coach_relationship AS r FROM players WHERE id = 'cap'").first<{ r: number }>();
     expect(capRel?.r).toBe(59);
+  });
+
+  it("změny sazebníku se počítají za sezónu, v nové začínají od nuly", async () => {
+    await approveClassic();
+    // Minulá sezóna: pět změn.
+    await db.prepare("UPDATE fine_schedules SET changes_season = 5, season_number = 0").run();
+    await proposeSchedule(db, undefined, { teamId: "club", day: PROPOSED, items: [item({ conditionKey: "any", amountCzk: 500 })] });
+    await imposeSchedule(db, undefined, { teamId: "club", day: PROPOSED });
+    expect(await db.prepare("SELECT changes_season, season_number FROM fine_schedules").first()).toEqual({ changes_season: 1, season_number: 1 });
   });
 
   it("zmírnění platí hned a kapitána se neptá", async () => {
@@ -172,6 +181,30 @@ describe("prominutí, trvání a SMS pokuta", () => {
     await db.prepare("INSERT INTO fines (id, team_id, player_id, item_key, source, source_ref, value_kind, amount_czk, czk_equivalent, status, in_schedule, game_date) VALUES ('r1', 'club', 'stu', 'training_missed', 'auto', 'x', 'czk', 50, 50, 'refused', 1, ?)").bind(IN_EFFECT).run();
     expect(await insistOnFine(db, { teamId: "club", fineId: "r1", day: IN_EFFECT })).toMatchObject({ ok: true });
     expect(await fund()).toBe(50);
+  });
+
+  it("SMS pokuta jde do pokladničky i bez sazebníku, prominutí ji vrátí", async () => {
+    await recordSmsFine(db, { teamId: "club", playerId: "p1", commitmentId: "c1", amount: 300, quote: "Pokuta 300", day: IN_EFFECT });
+    expect(await fund()).toBe(300);
+    // Totéž udělení podruhé se nezapíše a volající se to dozví.
+    await expect(recordSmsFine(db, { teamId: "club", playerId: "p1", commitmentId: "c1", amount: 300, quote: "Pokuta 300", day: IN_EFFECT })).rejects.toThrow();
+    expect(await fund()).toBe(300);
+    const f = await db.prepare("SELECT id FROM fines WHERE source = 'sms'").first<{ id: string }>();
+    expect(await forgiveFine(db, { teamId: "club", fineId: f!.id, day: IN_EFFECT })).toMatchObject({ ok: true, message: "Prominuto." });
+    expect(await fund()).toBe(0);
+  });
+
+  it("SMS pokuta klukovi z U21 téhož klubu jde do pokladničky áčka", async () => {
+    await db.batch([
+      db.prepare("INSERT INTO teams (id, name, user_id, parent_team_id, team_type) VALUES ('club-u21', 'TJ Dvory U21', 'u1', 'club', 'u21')"),
+      db.prepare("INSERT INTO players (id, team_id, first_name, last_name, age, weekly_wage, coach_relationship, life_context, personality) VALUES ('junior', 'club-u21', 'Ondra', 'Malý', 17, 0, 50, '{}', ?)").bind(personality({})),
+    ]);
+    await recordSmsFine(db, { teamId: "club", playerId: "junior", commitmentId: "c2", amount: 100, quote: null, day: IN_EFFECT });
+    expect(await fund()).toBe(100);
+    // Cizí hráč ne.
+    await db.prepare("INSERT INTO players (id, team_id, first_name, last_name, age) VALUES ('alien', 'other', 'Cizí', 'Hráč', 25)").run();
+    await expect(recordSmsFine(db, { teamId: "club", playerId: "alien", commitmentId: "c3", amount: 100, quote: null, day: IN_EFFECT })).rejects.toThrow();
+    expect(await fund()).toBe(100);
   });
 
   it("SMS pokuta za trénink, který už zaplatil podle sazebníku, je zdvojená", async () => {

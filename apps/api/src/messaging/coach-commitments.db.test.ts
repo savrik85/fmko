@@ -49,6 +49,10 @@ beforeAll(async () => {
     "ALTER TABLE match_player_stats ADD COLUMN goals INTEGER",
     "ALTER TABLE match_player_stats ADD COLUMN assists INTEGER",
   ]) await db.prepare(sql).run();
+  // Pokuty z SMS jdou do pokladničky kabiny (fines/sms-fine.ts).
+  await db.prepare("CREATE TABLE seasons (id TEXT, number INTEGER, status TEXT)").run();
+  await db.exec(readFileSync(new URL("../../migrations/0340_fine_schedule.sql", import.meta.url), "utf8")
+    .replace(/--[^\n]*/g, "").replace(/\n/g, " "));
   // Odložené zprávy (poděkování po pozvání) a sloupec v teams, který migrace přidává.
   await db.exec(readFileSync(new URL("../../migrations/0275_player_follow_ups.sql", import.meta.url), "utf8")
     .replace(/--[^\n]*/g, "").replace(/\n/g, " "));
@@ -57,7 +61,7 @@ beforeAll(async () => {
 afterAll(async () => { await miniflare.dispose(); });
 
 beforeEach(async () => {
-  for (const t of ["coach_commitments", "teams", "players", "matches", "match_player_stats", "injuries", "conversations", "messages", "coach_relation_log", "transactions", "player_follow_ups", "club_incident_knowledge"]) {
+  for (const t of ["coach_commitments", "teams", "players", "matches", "match_player_stats", "injuries", "conversations", "messages", "coach_relation_log", "transactions", "player_follow_ups", "club_incident_knowledge", "fines"]) {
     await db.prepare(`DELETE FROM ${t}`).run();
   }
   await db.batch([
@@ -320,9 +324,11 @@ describe("pokuta a úkol „poptej se“", () => {
   it("pokuta bez částky = týdenní odměna, udělí se tlačítkem a zhorší vztah", async () => {
     const id = await record({ kind: "fine" }, "strhnu ti to z výplaty");
     const btn = await db.prepare("SELECT body FROM messages WHERE sender_type = 'system'").first<{ body: string }>();
-    expect(btn?.body).toBe("⚖️ Filip: pokuta 400 Kč. Udělit ji musíš sám, peníze půjdou do kasy.");
+    expect(btn?.body).toBe("⚖️ Filip: pokuta 400 Kč. Udělit ji musíš sám, peníze půjdou do pokladničky kabiny.");
     expect(await fulfilMoneyCommitment(db, { teamId: "club", commitmentId: id, now: T0 })).toMatchObject({ ok: true, effect: "Pokuta 400 Kč udělena" });
-    expect((await db.prepare("SELECT budget FROM teams WHERE id = 'club'").first<{ budget: number }>())?.budget).toBe(5400);
+    // Peníze jdou do pokladničky kabiny, kasa klubu se nehne.
+    expect((await db.prepare("SELECT budget, fine_fund_balance AS fund FROM teams WHERE id = 'club'").first())).toEqual({ budget: 5000, fund: 400 });
+    expect((await db.prepare("SELECT source, status, amount_czk FROM fines WHERE player_id = 'p1'").first())).toEqual({ source: "sms", status: "paid", amount_czk: 400 });
     expect((await db.prepare("SELECT delta FROM coach_relation_log WHERE player_id = 'p1'").first<{ delta: number }>())?.delta).toBe(-5);
     expect(await morale("p1")).toBe(46);
     // Odpověď na pokutu už není předem napsaná věta hned po udělení: píše ji model
@@ -365,7 +371,7 @@ describe("pokuta netiskne peníze", () => {
     expect(await fulfilMoneyCommitment(db, { teamId: "club", commitmentId: big, now: T0 })).toMatchObject({ ok: true });
     const again = await record({ kind: "fine", amount: 300 });
     expect(await fulfilMoneyCommitment(db, { teamId: "club", commitmentId: again, now: T0 })).toMatchObject({ ok: false, status: 409 });
-    expect((await db.prepare("SELECT budget FROM teams WHERE id = 'club'").first<{ budget: number }>())?.budget).toBe(5400);
+    expect((await db.prepare("SELECT fine_fund_balance AS fund FROM teams WHERE id = 'club'").first<{ fund: number }>())?.fund).toBe(400);
   });
 });
 

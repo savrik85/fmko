@@ -206,7 +206,7 @@ export default function FineFundPage() {
                 <Link href={`/hrac/${f.playerId}`} className="hover:text-pitch-500">{f.playerName}</Link>
                 <span className="ml-2 align-middle"><StatusChip tone={chip.tone}>{chip.label}</StatusChip></span>
               </>}
-              meta={`${formatDay(f.gameDate)} · ${f.itemKey ? itemTitle({ itemKey: f.itemKey, conditionKey: f.conditionKey ?? "any" }) : "Pokuta z SMS (do kasy klubu)"} · ${fineValueLabel(f.valueKind, f.amountCzk)}`}
+              meta={`${formatDay(f.gameDate)} · ${f.itemKey ? itemTitle({ itemKey: f.itemKey, conditionKey: f.conditionKey ?? "any" }) : "Pokuta z SMS"} · ${fineValueLabel(f.valueKind, f.amountCzk)}`}
               detail={<span className="block space-y-2 mt-1">
                 {f.fact && <span className="block text-ink">{f.fact}</span>}
                 {f.status !== "forgiven" && f.source !== "sms" && (

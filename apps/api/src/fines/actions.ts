@@ -40,7 +40,7 @@ export async function insistOnFine(db: D1Database, o: { teamId: string; fineId: 
     moraleStmt(db, f.player_id, -4),
     ...coachRelationStmts(db, { playerId: f.player_id, delta: -3, source: "fine", description: "Trenér trval na zaplacení pokuty", gameDate: o.day }),
   ];
-  if (f.value_kind === "czk" && f.in_schedule === 1 && f.amount_czk) {
+  if (f.value_kind === "czk" && f.amount_czk) {
     stmts.push(db.prepare("UPDATE teams SET fine_fund_balance = fine_fund_balance + ? WHERE id = ?").bind(f.amount_czk, o.teamId));
   }
   await db.batch(stmts);
@@ -59,7 +59,8 @@ export async function forgiveFine(db: D1Database, o: { teamId: string; fineId: s
   const claim = await db.prepare("UPDATE fines SET status = 'forgiven', resolved_at = ? WHERE id = ? AND status != 'forgiven'").bind(o.day, f.id).run();
   if ((claim.meta?.changes ?? 0) === 0) return { ok: false, error: "Už je prominutá.", status: 409 };
   const stmts: D1PreparedStatement[] = [moraleStmt(db, f.player_id, 2)];
-  if (f.status === "paid" && f.value_kind === "czk" && f.in_schedule === 1 && f.amount_czk) {
+  // Zaplacené pokuty v korunách (ze sazebníku i z SMS) leží v pokladničce, prominutí je vrací.
+  if (f.status === "paid" && f.value_kind === "czk" && f.amount_czk) {
     stmts.push(db.prepare("UPDATE teams SET fine_fund_balance = MAX(0, fine_fund_balance - ?) WHERE id = ?").bind(f.amount_czk, o.teamId));
   }
   const payers = f.item_key

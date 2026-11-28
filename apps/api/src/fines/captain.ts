@@ -15,7 +15,7 @@ import type { ChatEnv } from "../messaging/ai-player-chat";
 import { logger } from "../lib/logger";
 import { captainDecision, isSoftening, scheduleHarshness, type CaptainDecision } from "./harshness";
 import {
-  addDays, ensureScheduleRowStmt, itemStmts, loadSchedule, moraleStmt, nextMonday,
+  ACTIVE_SEASON_SQL, addDays, ensureScheduleRowStmt, itemStmts, loadSchedule, moraleStmt, nextMonday,
   PLAYER_PROFILE_SQL, profileFromRow, type PlayerFineProfile,
 } from "./store";
 
@@ -171,9 +171,11 @@ function activateStmts(
   return [
     ...itemStmts(db, teamId, "active", items),
     ...itemStmts(db, teamId, "draft", []),
+    // Změny se počítají za sezónu: v nové sezóně začíná počítadlo znovu od nuly.
     db.prepare(`UPDATE fine_schedules SET status = 'active', origin = ?, effective_from = ?, ultimatum_match_id = NULL,
-      changes_season = changes_season + ?, updated_at = datetime('now') WHERE team_id = ?`)
-      .bind(origin, nextMonday(day), replacing ? 1 : 0, teamId),
+      changes_season = CASE WHEN season_number IS (${ACTIVE_SEASON_SQL}) THEN changes_season + ? ELSE ? END,
+      season_number = (${ACTIVE_SEASON_SQL}), updated_at = datetime('now') WHERE team_id = ?`)
+      .bind(origin, nextMonday(day), replacing ? 1 : 0, replacing ? 1 : 0, teamId),
   ];
 }
 

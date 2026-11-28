@@ -211,8 +211,10 @@ async function priorCount(db: D1Database, teamId: string, playerId: string, item
   return r?.n ?? 0;
 }
 
+export const ACTIVE_SEASON_SQL = "SELECT number FROM seasons WHERE status = 'active' ORDER BY number DESC LIMIT 1";
+
 export async function currentSeasonNumber(db: D1Database): Promise<number | null> {
-  const r = await db.prepare("SELECT number FROM seasons WHERE status = 'active' ORDER BY number DESC LIMIT 1").first<{ number: number }>()
+  const r = await db.prepare(ACTIVE_SEASON_SQL).first<{ number: number }>()
     .catch((e) => { logger.warn({ module: M }, "aktuální sezóna", e); return null; });
   return r?.number ?? null;
 }
@@ -232,7 +234,11 @@ export async function recordFines(
     try {
       const item = c.itemKey ? items.find((i) => i.itemKey === c.itemKey && i.conditionKey === c.conditionKey) : undefined;
       if (c.source !== "sms" && !item) continue;
-      const profileRow = await db.prepare(`${PLAYER_PROFILE_SQL} WHERE id = ? AND team_id = ?`).bind(c.playerId, teamId).first<Record<string, unknown>>();
+      // Pokutu z SMS dá trenér i klukovi z U21 téhož klubu (telefon je jeden), platí se do pokladničky áčka.
+      const profileRow = await db.prepare(c.source === "sms"
+        ? `${PLAYER_PROFILE_SQL} WHERE id = ? AND (team_id = ? OR team_id IN (SELECT id FROM teams WHERE parent_team_id = ?))`
+        : `${PLAYER_PROFILE_SQL} WHERE id = ? AND team_id = ?`,
+      ).bind(c.playerId, teamId, ...(c.source === "sms" ? [teamId] : [])).first<Record<string, unknown>>();
       if (!profileRow) continue;
       const p = profileFromRow(profileRow);
       if (item && item.scope === "senior" && p.age <= 19) continue;
@@ -247,18 +253,25 @@ export async function recordFines(
       }
       const czk = free ? 0 : fineCzkEquivalent(valueKind, amount);
       const { stage } = await playerBurden(db, p, day, czk);
-      // Pokutu z SMS strhne klub (coach-commitments.ts) a dopad na vztah už dal slib, tady se jen eviduje.
+      // Pokuta z SMS jde do pokladničky jako ostatní, dopad na vztah už dal slib v SMS (coach-commitments.ts).
       const isSms = c.source === "sms";
       const status: RecordedFine["status"] = free ? "forgiven" : isSms ? "paid" : stage >= 2 ? "refused" : "paid";
       const id = crypto.randomUUID();
-      const res = await db.prepare(
-        `INSERT OR IGNORE INTO fines (id, team_id, player_id, item_key, condition_key, source, source_ref, value_kind, amount_czk,
-           czk_equivalent, status, fact, in_schedule, game_date, season_number, resolved_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      ).bind(id, teamId, c.playerId, item?.itemKey ?? c.itemKey, item?.conditionKey ?? c.conditionKey, c.source, c.sourceRef,
-        valueKind, valueKind === "czk" ? amount : null, czk, status, (free ? `${c.fact} (první v sezóně, promíjí se)` : c.fact).slice(0, 300),
-        item ? 1 : 0, day, season, status === "paid" ? day : null).run();
-      if ((res.meta?.changes ?? 0) === 0) continue;
+      // Zaplacená pokuta v korunách jde do pokladničky ve stejné dávce jako zápis pokuty. Přičte se
+      // jen tehdy, když se pokuta opravdu zapsala (duplicitní `sourceRef` INSERT OR IGNORE přeskočí).
+      const paidCzk = status === "paid" && valueKind === "czk" && amount ? amount : 0;
+      const [res] = await db.batch([
+        db.prepare(
+          `INSERT OR IGNORE INTO fines (id, team_id, player_id, item_key, condition_key, source, source_ref, value_kind, amount_czk,
+             czk_equivalent, status, fact, in_schedule, game_date, season_number, resolved_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        ).bind(id, teamId, c.playerId, item?.itemKey ?? c.itemKey, item?.conditionKey ?? c.conditionKey, c.source, c.sourceRef,
+          valueKind, valueKind === "czk" ? amount : null, czk, status, (free ? `${c.fact} (první v sezóně, promíjí se)` : c.fact).slice(0, 300),
+          item ? 1 : 0, day, season, status === "paid" ? day : null),
+        db.prepare("UPDATE teams SET fine_fund_balance = fine_fund_balance + ? WHERE id = ? AND EXISTS (SELECT 1 FROM fines WHERE id = ?)")
+          .bind(paidCzk, teamId, id),
+      ]);
+      if ((res?.meta?.changes ?? 0) === 0) continue;
 
       const stmts: D1PreparedStatement[] = [];
       if (!free && !isSms) {
@@ -267,9 +280,6 @@ export async function recordFines(
         if (eff.relation) {
           const { coachRelationStmts } = await import("../lib/coach-relation");
           stmts.push(...coachRelationStmts(db, { playerId: c.playerId, delta: eff.relation, source: "fine", description: `Pokuta: ${fineItemDef(item?.itemKey ?? "")?.label ?? "od trenéra"}`, gameDate: day }));
-        }
-        if (status === "paid" && valueKind === "czk" && item && amount) {
-          stmts.push(db.prepare("UPDATE teams SET fine_fund_balance = fine_fund_balance + ? WHERE id = ?").bind(amount, teamId));
         }
         if (valueKind === "laps") {
           stmts.push(db.prepare(`UPDATE players SET life_context = json_set(COALESCE(life_context, '{}'), '$.condition',
