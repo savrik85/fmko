@@ -56,8 +56,7 @@ export function trainingFineCandidates(day: string, attendance: readonly Trainin
  */
 export function deterrence(item: ScheduleItem, p: { discipline: number; temper: number }, origin: ScheduleRow["origin"]): number {
   const czk = fineCzkEquivalent(item.valueKind, item.amountCzk);
-  const base = item.valueKind === "laps" ? 0.25 : item.valueKind === "kit_wash" ? 0.2
-    : czk >= 500 ? 0.4 : czk >= 200 ? 0.36 : czk >= 100 ? 0.3 : czk >= 50 ? 0.22 : 0.1;
+  const base = czk >= 500 ? 0.4 : czk >= 200 ? 0.36 : czk >= 100 ? 0.3 : czk >= 50 ? 0.22 : 0.1;
   const rebel = p.discipline < 35 && p.temper >= 65;
   const personal = p.discipline >= 70 ? 0.3 : rebel ? 0.2 : 1;
   return Math.min(0.4, base * personal * (origin === "imposed" ? 0.6 : 1));

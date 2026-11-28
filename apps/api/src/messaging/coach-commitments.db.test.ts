@@ -324,9 +324,9 @@ describe("pokuta a úkol „poptej se“", () => {
   it("pokuta bez částky = týdenní odměna, udělí se tlačítkem a zhorší vztah", async () => {
     const id = await record({ kind: "fine" }, "strhnu ti to z výplaty");
     const btn = await db.prepare("SELECT body FROM messages WHERE sender_type = 'system'").first<{ body: string }>();
-    expect(btn?.body).toBe("⚖️ Filip: pokuta 400 Kč. Udělit ji musíš sám, peníze půjdou do pokladničky kabiny.");
+    expect(btn?.body).toBe("⚖️ Filip: pokuta 400 Kč. Udělit ji musíš sám, peníze půjdou do kasy pokut kabiny.");
     expect(await fulfilMoneyCommitment(db, { teamId: "club", commitmentId: id, now: T0 })).toMatchObject({ ok: true, effect: "Pokuta 400 Kč udělena" });
-    // Peníze jdou do pokladničky kabiny, kasa klubu se nehne.
+    // Peníze jdou do kasy pokut, kasa klubu se nehne.
     expect((await db.prepare("SELECT budget, fine_fund_balance AS fund FROM teams WHERE id = 'club'").first())).toEqual({ budget: 5000, fund: 400 });
     expect((await db.prepare("SELECT source, status, amount_czk FROM fines WHERE player_id = 'p1'").first())).toEqual({ source: "sms", status: "paid", amount_czk: 400 });
     expect((await db.prepare("SELECT delta FROM coach_relation_log WHERE player_id = 'p1'").first<{ delta: number }>())?.delta).toBe(-5);

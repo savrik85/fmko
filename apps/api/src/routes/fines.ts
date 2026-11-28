@@ -11,7 +11,7 @@ import type { FineScheduleItemInput } from "@okresni-masina/shared";
 import { logger } from "../lib/logger";
 import { BURDEN_STAGE_LABELS } from "../fines/burden";
 import { captainOf, imposeSchedule, proposeSchedule, type ProposalNote } from "../fines/captain";
-import { forgiveFine, insistOnFine, manualFine } from "../fines/actions";
+import { forgiveFine, insistOnFine } from "../fines/actions";
 import { addDays, loadSchedule, PLAYER_PROFILE_SQL, playerBurden, profileFromRow } from "../fines/store";
 
 const M = "routes-fines";
@@ -81,7 +81,6 @@ finesRouter.get("/teams/:teamId/fines", async (c) => {
       source: f.source, valueKind: f.value_kind, amountCzk: f.amount_czk, status: f.status, fact: f.fact, inSchedule: f.in_schedule === 1, gameDate: f.game_date,
     })),
     burdened,
-    players: players.map((p) => ({ id: p.id, name: `${p.firstName} ${p.lastName}` })),
   });
 });
 
@@ -95,7 +94,6 @@ function itemsFrom(body: unknown): FineScheduleItemInput[] | null {
       valueKind: String(o.valueKind) as FineScheduleItemInput["valueKind"],
       amountCzk: typeof o.amountCzk === "number" ? o.amountCzk : null,
       repeatMode: String(o.repeatMode ?? "flat") as FineScheduleItemInput["repeatMode"],
-      scope: String(o.scope ?? "senior") as FineScheduleItemInput["scope"],
     };
   });
 }
@@ -130,17 +128,6 @@ finesRouter.post("/teams/:teamId/fines/impose", async (c) => {
   const r = await imposeSchedule(c.env.DB, c.env, { teamId, day: t.day, waitUntil: waitUntilOf(c) });
   if (!r.ok) return c.json({ error: r.error }, r.status as 409);
   return c.json(r);
-});
-
-finesRouter.post("/teams/:teamId/fines/manual", async (c) => {
-  const teamId = c.req.param("teamId");
-  const t = await teamDay(c, teamId);
-  if (!t) return c.json({ error: "Tým nenalezen" }, 404);
-  const body = await c.req.json<{ playerId?: unknown; itemKey?: unknown }>().catch((e) => { logger.warn({ module: M, teamId }, "tělo ruční pokuty", e); return null; });
-  if (typeof body?.playerId !== "string" || typeof body?.itemKey !== "string") return c.json({ error: "Vyber hráče a položku." }, 400);
-  const r = await manualFine(c.env.DB, { teamId, playerId: body.playerId, itemKey: body.itemKey, day: t.day });
-  if (!r.ok) return c.json({ error: r.error }, r.status as 409);
-  return c.json({ ok: true, message: r.message });
 });
 
 for (const [path, action] of [["insist", insistOnFine], ["forgive", forgiveFine]] as const) {

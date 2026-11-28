@@ -105,7 +105,7 @@ const STANCE_HINT: Record<FineStance, string> = {
 
 export function fineInstruction(f: FineReactionFacts): string {
   const inSchedule = f.fines.some((x) => x.inSchedule);
-  const where = inSchedule ? " do pokladničky kabiny" : ", peníze jdou klubu";
+  const where = " do kasy pokut kabiny";
   const lines = [
     f.fines.length === 1 ? `Trenér ti právě dal pokutu${where}:` : `Trenér ti právě dal pokuty${where}:`,
     ...f.fines.map(fineLine),
@@ -133,12 +133,12 @@ export function fineInstruction(f: FineReactionFacts): string {
 
 export const FINE_REPLIES: Record<FineStance, readonly string[]> = {
   accepts: [
-    "Jo, trenére, to je moje. Hodím to do pokladničky.",
+    "Jo, trenére, to je moje. Hodím to do kasy.",
     "Beru, pravidlo je pravidlo. Příště si dám pozor.",
     "No jo, chytli mě. Zaplatím a bude klid.",
-    "Dobře, zasloužím si to. Do pokladničky to dám ještě tenhle týden.",
+    "Dobře, zasloužím si to. Do kasy to dám ještě tenhle týden.",
     "Máte pravdu, trenére. Zaplatím, ať je to z krku.",
-    "Jasně, sazebník je sazebník. Pošlu to pokladníkovi.",
+    "Jasně, sazebník je sazebník. Zaplatím na tréninku.",
     "Tak jo, beru to. Aspoň bude na sud.",
     "Ok, chápu. Zaplatím a víckrát se to nestane.",
   ],

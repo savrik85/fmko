@@ -1,11 +1,9 @@
 /**
- * Co trenér s pokutou udělá: trvá na zaplacení dluhu, promine, nebo dá ruční pokutu
- * (položky, které hra sama nepozná, např. „Pozdě na sraz“).
+ * Co trenér s pokutou udělá: trvá na zaplacení dluhu, nebo ji promine.
  */
 
-import { fineItemDef } from "@okresni-masina/shared";
 import { logger } from "../lib/logger";
-import { activeItemsOn, addDays, moraleStmt, recordFines, type RecordedFine } from "./store";
+import { addDays, moraleStmt } from "./store";
 
 const M = "fines-actions";
 
@@ -59,7 +57,7 @@ export async function forgiveFine(db: D1Database, o: { teamId: string; fineId: s
   const claim = await db.prepare("UPDATE fines SET status = 'forgiven', resolved_at = ? WHERE id = ? AND status != 'forgiven'").bind(o.day, f.id).run();
   if ((claim.meta?.changes ?? 0) === 0) return { ok: false, error: "Už je prominutá.", status: 409 };
   const stmts: D1PreparedStatement[] = [moraleStmt(db, f.player_id, 2)];
-  // Zaplacené pokuty v korunách (ze sazebníku i z SMS) leží v pokladničce, prominutí je vrací.
+  // Zaplacené pokuty v korunách (ze sazebníku i z SMS) leží v kase pokut, prominutí je vrací.
   if (f.status === "paid" && f.value_kind === "czk" && f.amount_czk) {
     stmts.push(db.prepare("UPDATE teams SET fine_fund_balance = MAX(0, fine_fund_balance - ?) WHERE id = ?").bind(f.amount_czk, o.teamId));
   }
@@ -77,21 +75,4 @@ export async function forgiveFine(db: D1Database, o: { teamId: string; fineId: s
     return { ok: true, message: `Prominuto. ${who}.` };
   }
   return { ok: true, message: "Prominuto." };
-}
-
-/** Ruční pokuta za položku, kterou hra sama nepozná. Jedna za položku a hráče za den. */
-export async function manualFine(db: D1Database, o: { teamId: string; playerId: string; itemKey: string; day: string }): Promise<ActionResult & { fine?: RecordedFine }> {
-  const def = fineItemDef(o.itemKey);
-  if (!def?.manual) return { ok: false, error: "Ručně jde dát jen pokuta za položku, kterou hra sama nepozná.", status: 400 };
-  const { items } = await activeItemsOn(db, o.teamId, o.day);
-  const item = items.find((i) => i.itemKey === o.itemKey);
-  if (!item) return { ok: false, error: "Tahle položka v platném sazebníku není. Pokutu mimo sazebník dáš v SMS.", status: 409 };
-  const player = await db.prepare("SELECT id FROM players WHERE id = ? AND team_id = ?").bind(o.playerId, o.teamId).first();
-  if (!player) return { ok: false, error: "Hráč není v kádru.", status: 404 };
-  const [fine] = await recordFines(db, o.teamId, o.day, [{
-    playerId: o.playerId, itemKey: item.itemKey, conditionKey: item.conditionKey,
-    sourceRef: `manual|${item.itemKey}|${o.playerId}|${o.day}`, source: "manual", fact: `${def.label} (zapsal trenér)`,
-  }], items);
-  if (!fine) return { ok: false, error: "Za tohle už dnes pokutu má.", status: 409 };
-  return { ok: true, message: fine.status === "refused" ? "Zapsáno, ale hráč odmítá platit." : "Zapsáno do pokladničky.", fine };
 }
