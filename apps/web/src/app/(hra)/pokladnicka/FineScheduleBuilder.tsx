@@ -10,9 +10,13 @@ import {
   FINE_VALUES, MAX_FINE_ITEMS, fineCzkEquivalent, fineItemDef,
   type FineItemGroup, type FineRepeatMode, type FineScheduleItemInput, type FineScope, type FineValueKind,
 } from "@okresni-masina/shared";
+import { Button, ChoiceGroup } from "@/components/ui";
+import { formatKc } from "@/lib/format";
 
 const GROUP_ORDER: FineItemGroup[] = ["training", "match", "off_pitch", "manual"];
 const SELECT = "select w-full min-h-11 text-base";
+const REPEAT_OPTIONS = (Object.keys(FINE_REPEAT_LABELS) as FineRepeatMode[]).map((k) => ({ value: k, label: FINE_REPEAT_LABELS[k] }));
+const SCOPE_OPTIONS = (Object.keys(FINE_SCOPE_LABELS) as FineScope[]).map((k) => ({ value: k, label: FINE_SCOPE_LABELS[k] }));
 
 /** Hodnota položky v jednom výběru: „czk:50“, „keg“. */
 function valueKey(it: FineScheduleItemInput): string {
@@ -60,10 +64,10 @@ export function FineScheduleBuilder({ items, onChange }: {
         const def = fineItemDef(it.itemKey);
         const warn = itemWarning(it);
         return (
-          <div key={i} className="rounded-xl border border-gray-200 bg-surface p-3 space-y-2.5">
+          <div key={i} className="rounded-soft border border-line bg-surface p-3 space-y-2.5">
             <div className="flex items-start justify-between gap-2">
               <span className="text-sm font-heading font-bold text-muted uppercase">Položka {i + 1}</span>
-              <button type="button" onClick={() => remove(i)} className="text-sm font-bold text-card-red hover:underline">Odebrat</button>
+              <Button size="sm" variant="ghost" onClick={() => remove(i)}>Odebrat</Button>
             </div>
             <label className="block">
               <span className="text-sm text-muted">Za co</span>
@@ -87,40 +91,30 @@ export function FineScheduleBuilder({ items, onChange }: {
               </label>
             )}
             {def && <p className="text-sm text-muted">{def.hint}</p>}
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
-              <label className="block">
-                <span className="text-sm text-muted">Kolik</span>
-                <select className={SELECT} value={valueKey(it)} onChange={(e) => update(i, parseValue(e.target.value))}>
-                  {FINE_CZK_AMOUNTS.map((a) => <option key={a} value={`czk:${a}`}>{a.toLocaleString("cs-CZ")} Kč</option>)}
-                  {Object.values(FINE_VALUES).map((v) => <option key={v.kind} value={v.kind}>{v.label}</option>)}
-                </select>
-              </label>
-              <label className="block">
-                <span className="text-sm text-muted">Opakování</span>
-                <select className={SELECT} value={it.repeatMode} onChange={(e) => update(i, { repeatMode: e.target.value as FineRepeatMode })}>
-                  {(Object.keys(FINE_REPEAT_LABELS) as FineRepeatMode[]).map((k) => <option key={k} value={k}>{FINE_REPEAT_LABELS[k]}</option>)}
-                </select>
-              </label>
-              <label className="block">
-                <span className="text-sm text-muted">Pro koho</span>
-                <select className={SELECT} value={it.scope} onChange={(e) => update(i, { scope: e.target.value as FineScope })}>
-                  {(Object.keys(FINE_SCOPE_LABELS) as FineScope[]).map((k) => <option key={k} value={k}>{FINE_SCOPE_LABELS[k]}</option>)}
-                </select>
-              </label>
+            <label className="block">
+              <span className="text-sm text-muted">Kolik</span>
+              <select className={SELECT} value={valueKey(it)} onChange={(e) => update(i, parseValue(e.target.value))}>
+                {FINE_CZK_AMOUNTS.map((a) => <option key={a} value={`czk:${a}`}>{formatKc(a)}</option>)}
+                {Object.values(FINE_VALUES).map((v) => <option key={v.kind} value={v.kind}>{v.label}</option>)}
+              </select>
+            </label>
+            <div>
+              <span className="block text-sm text-muted mb-1">Opakování</span>
+              <ChoiceGroup ariaLabel="Opakování" className="flex-col sm:flex-row" value={it.repeatMode} onChange={(v) => update(i, { repeatMode: v })}
+                options={REPEAT_OPTIONS} />
+            </div>
+            <div>
+              <span className="block text-sm text-muted mb-1">Pro koho</span>
+              <ChoiceGroup ariaLabel="Pro koho" columns={2} value={it.scope} onChange={(v) => update(i, { scope: v })}
+                options={SCOPE_OPTIONS} />
             </div>
             {warn && <p className="text-sm text-warn">⚠️ {warn}</p>}
           </div>
         );
       })}
       <div className="flex flex-wrap gap-2">
-        <button type="button" onClick={add} disabled={items.length >= MAX_FINE_ITEMS}
-          className="px-3 py-2.5 rounded-control text-base font-bold border border-pitch-500 text-pitch-600 hover:bg-pitch-50 disabled:opacity-50">
-          Přidat položku
-        </button>
-        <button type="button" onClick={() => onChange(CLASSIC_FINE_SCHEDULE.map((x) => ({ ...x })))}
-          className="px-3 py-2.5 rounded-control text-base font-bold border border-gray-300 text-ink hover:bg-surface-3">
-          Klasika okresu
-        </button>
+        <Button variant="secondary" onClick={add} disabled={items.length >= MAX_FINE_ITEMS}>Přidat položku</Button>
+        <Button variant="secondary" onClick={() => onChange(CLASSIC_FINE_SCHEDULE.map((x) => ({ ...x })))}>Klasika okresu</Button>
       </div>
       {items.length >= MAX_FINE_ITEMS && <p className="text-sm text-muted">Víc než {MAX_FINE_ITEMS} položek si kabina nezapamatuje.</p>}
     </div>

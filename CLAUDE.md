@@ -39,6 +39,17 @@
    - České názvy, které už v repu jsou (`tymyDivaka`, `youth.ts`…), nenapodobovat.
    - Před každým commitem projít nové názvy: `git diff --cached | grep "^+" | grep -oE "\b(const|let|function|interface|type|class)\s+\w+" | sort -u`
 
+7. **NIKDY ručně stavěné UI prvky. Každá stránka stojí na `@/components/ui`.**
+   - Tlačítko = `<Button variant="primary|secondary|danger|ghost" size=…>` (nebo `btn btn-*`), nikdy `<button className="px-3 py-2.5 rounded-control bg-pitch-500 …">`.
+   - Chyba = `ErrorBox`, stav = `StatusChip`, seznam = `ListCard`/`ListRow`, volba ze 2–6 možností = `ChoiceGroup`,
+     pole = `Input` / třída `select` / `MoneyInput`, potvrzení = `useConfirm({ sheet: true })`, načítání = `PageLoading`/`SectionLoading`,
+     částka = `formatKc`. Barvy jen tokeny (`border-line`, ne `border-gray-200`).
+   - Před psaním nové stránky otevřít nejbližší existující stránku (Finance, Trénink…) a převzít její strukturu a díly 1:1.
+     Když díl něco neumí, říct to uživateli, ne si postavit vlastní.
+   - Před commitem UI: `git diff --cached | grep "^+" | grep -nE "<button|<select|border-gray-|bg-gray-|rounded-control|text-card-red\"|window.confirm"`
+     a každý nález nahradit dílem z kitu. Platí i pro UI napsané subagentem.
+   - Postup a seznam dílů: `docs/redesign-prvku/plan.md`. Porušeno 11-28 na Pokladničce.
+
 ---
 
 ## 🚢 Deploy workflow
