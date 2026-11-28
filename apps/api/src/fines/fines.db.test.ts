@@ -97,6 +97,19 @@ describe("schválení a platnost", () => {
     expect(await db.prepare("SELECT changes_season, season_number FROM fine_schedules").first()).toEqual({ changes_season: 1, season_number: 1 });
   });
 
+  it("sazebník schválený kapitánem zruší ultimátum i stav kabiny", async () => {
+    await db.prepare("INSERT INTO fine_schedules (team_id, squad_stage, squad_stage_at, ultimatum_match_id) VALUES ('club', 2, ?, 'm1')").bind(PROPOSED).run();
+    await approveClassic();
+    expect(await db.prepare("SELECT squad_stage, ultimatum_match_id FROM fine_schedules").first()).toEqual({ squad_stage: 1, ultimatum_match_id: null });
+  });
+
+  it("vnucený sazebník stav kabiny nesnižuje", async () => {
+    await db.prepare("INSERT INTO fine_schedules (team_id, squad_stage, squad_stage_at) VALUES ('club', 3, ?)").bind(PROPOSED).run();
+    await proposeSchedule(db, undefined, { teamId: "club", day: PROPOSED, items: [item({ conditionKey: "any", amountCzk: 500 })] });
+    await imposeSchedule(db, undefined, { teamId: "club", day: PROPOSED });
+    expect((await db.prepare("SELECT squad_stage FROM fine_schedules").first<{ squad_stage: number }>())?.squad_stage).toBe(3);
+  });
+
   it("zmírnění platí hned a kapitána se neptá", async () => {
     await approveClassic();
     const softer = CLASSIC_FINE_SCHEDULE.map((i) => ({ ...i, amountCzk: i.valueKind === "czk" ? 20 : i.amountCzk }));

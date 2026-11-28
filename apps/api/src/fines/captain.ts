@@ -172,10 +172,13 @@ function activateStmts(
     ...itemStmts(db, teamId, "active", items),
     ...itemStmts(db, teamId, "draft", []),
     // Změny se počítají za sezónu: v nové sezóně začíná počítadlo znovu od nuly.
+    // Sazebník schválený kapitánem kabinu uklidní jako zmírnění (ultimátum padá, stávka taky).
+    // Vnucený stav kabiny nechává, ten nastaví impose.
     db.prepare(`UPDATE fine_schedules SET status = 'active', origin = ?, effective_from = ?, ultimatum_match_id = NULL,
+      squad_stage = CASE WHEN ? = 'approved' THEN MIN(squad_stage, 1) ELSE squad_stage END,
       changes_season = CASE WHEN season_number IS (${ACTIVE_SEASON_SQL}) THEN changes_season + ? ELSE ? END,
       season_number = (${ACTIVE_SEASON_SQL}), updated_at = datetime('now') WHERE team_id = ?`)
-      .bind(origin, nextMonday(day), replacing ? 1 : 0, replacing ? 1 : 0, teamId),
+      .bind(origin, nextMonday(day), origin, replacing ? 1 : 0, replacing ? 1 : 0, teamId),
   ];
 }
 
