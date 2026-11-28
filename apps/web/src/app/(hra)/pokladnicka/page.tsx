@@ -10,7 +10,7 @@ import Link from "next/link";
 import { useTeam } from "@/context/team-context";
 import { apiFetch } from "@/lib/api";
 import { formatKc } from "@/lib/format";
-import { ListCard, ListEmpty, ListRow, PageLoading, RowIcon, SectionLabel, StatusChip, useConfirm, type ChipTone } from "@/components/ui";
+import { Button, ErrorBox, ListCard, ListEmpty, ListRow, PageLoading, RowIcon, SectionLabel, StatusChip, useConfirm, type ChipTone } from "@/components/ui";
 import {
   FINE_REPEAT_LABELS, FINE_SCOPE_LABELS, fineItemDef, fineValueLabel,
   type FineScheduleItemInput, type FineValueKind,
@@ -54,6 +54,13 @@ function itemTitle(it: { itemKey: string; conditionKey: string }): string {
   return def ? (def.conditions.length > 1 && cond ? `${def.label}: ${cond.label.toLowerCase()}` : def.label) : it.itemKey;
 }
 
+const SQUAD_TONE: ChipTone[] = ["ok", "warn", "danger", "danger"];
+
+/** Výsledek akce: chyba v ErrorBoxu, potvrzení zeleně. */
+function ActionMessage({ ok, text }: { ok: boolean; text: string }) {
+  return ok ? <p className="text-base text-pitch-600 px-1" role="status">{text}</p> : <ErrorBox message={text} />;
+}
+
 const STATUS_CHIP: Record<FineRow["status"], { tone: ChipTone; label: string }> = {
   paid: { tone: "ok", label: "Zaplaceno" },
   refused: { tone: "danger", label: "Odmítá platit" },
@@ -70,7 +77,7 @@ export default function FineFundPage() {
   // Kde se zpráva ukáže: u pokut (prominutí, trvání, ruční pokuta), nebo dole u sazebníku.
   const [message, setMessage] = useState<{ ok: boolean; text: string; at: "fines" | "schedule" } | null>(null);
   const [manual, setManual] = useState<{ playerId: string; itemKey: string }>({ playerId: "", itemKey: "" });
-  const { confirm, dialog } = useConfirm();
+  const { confirm, dialog } = useConfirm({ sheet: true });
 
   const load = useCallback(() => {
     if (!teamId) return;
@@ -118,7 +125,7 @@ export default function FineFundPage() {
     if (ok) await post("impose");
   }
 
-  if (error) return <div className="page-container"><div className="card p-4 text-base text-muted">{error}</div></div>;
+  if (error) return <div className="page-container"><ErrorBox message={error} /></div>;
   if (!data) return <PageLoading />;
 
   const p = data.proposal;
@@ -135,17 +142,12 @@ export default function FineFundPage() {
           Sazebník pokut si skládáš z hotových položek a za kabinu ho schvaluje kapitán. Kdo pravidlo poruší, platí do
           pokladničky. Rozumné pokuty kabinu srovnají, přehnané ji postaví proti tobě.
         </p>
-        <div className="grid grid-cols-2 gap-3">
-          <div className="rounded-xl bg-surface-3 p-3">
-            <div className="text-sm text-muted">V pokladničce</div>
-            <div className="text-xl font-heading font-bold text-ink">{formatKc(data.fund)}</div>
+        <div className="flex items-end justify-between flex-wrap gap-3">
+          <div>
+            <div className="text-micro text-muted uppercase tracking-wide">V pokladničce</div>
+            <div className="font-heading font-[800] text-3xl sm:text-4xl tabular-nums text-ink">{formatKc(data.fund)}</div>
           </div>
-          <div className="rounded-xl bg-surface-3 p-3">
-            <div className="text-sm text-muted">Kabina</div>
-            <div className={`text-base font-heading font-bold ${data.squad.stage >= 2 ? "text-card-red" : data.squad.stage === 1 ? "text-warn" : "text-ink"}`}>
-              {data.squad.label}
-            </div>
-          </div>
+          <StatusChip tone={SQUAD_TONE[Math.min(data.squad.stage, 3)]}>{data.squad.label}</StatusChip>
         </div>
         <p className="text-base text-ink">
           {data.status !== "active" ? "Sazebník zatím nemáš. Bez něj dáváš pokuty jen v SMS."
@@ -154,7 +156,7 @@ export default function FineFundPage() {
             : `Sazebník platí, kabina ho odsouhlasila${data.captainName ? ` přes kapitána (${data.captainName})` : ""}.`}
         </p>
         {data.squad.ultimatum && (
-          <p className="text-base text-card-red font-bold">Kabina dala ultimátum: když sazebník do zápasu nezmírníš nebo nezrušíš, kluci nepřijdou.</p>
+          <ErrorBox message="Kabina dala ultimátum: když sazebník do zápasu nezmírníš nebo nezrušíš, kluci nepřijdou." />
         )}
       </div>
 
@@ -166,11 +168,8 @@ export default function FineFundPage() {
             {p.note ? `: ${itemTitle(p.note)}.` : "."} Co přesně píše, najdeš v Telefonu.
           </p>
           <div className="flex flex-wrap gap-2">
-            <Link href={`/telefon`} className="px-3 py-2.5 rounded-control text-base font-bold border border-gray-300 text-ink hover:bg-surface-3">Otevřít Telefon</Link>
-            <button type="button" onClick={impose} disabled={busy !== null}
-              className="px-3 py-2.5 rounded-control text-base font-bold bg-card-red text-white hover:opacity-90 disabled:opacity-50">
-              Vyhlásit i tak
-            </button>
+            <Link href="/telefon" className="btn btn-secondary btn-md">Otevřít Telefon</Link>
+            <Button variant="danger" onClick={impose} disabled={busy !== null}>Vyhlásit i tak</Button>
           </div>
           <p className="text-sm text-muted">Nebo sazebník níž uprav a předlož znovu.</p>
         </div>
@@ -212,20 +211,16 @@ export default function FineFundPage() {
                 {f.status !== "forgiven" && f.source !== "sms" && (
                   <span className="flex flex-wrap gap-2">
                     {f.status === "refused" && (
-                      <button type="button" onClick={() => post(`${f.id}/insist`, undefined, f.id)} disabled={busy !== null}
-                        className="px-3 py-2 rounded-control text-sm font-bold bg-pitch-500 text-white hover:bg-pitch-600 disabled:opacity-50">Trvat na zaplacení</button>
+                      <Button size="sm" onClick={() => post(`${f.id}/insist`, undefined, f.id)} disabled={busy !== null}>Trvat na zaplacení</Button>
                     )}
-                    <button type="button" onClick={() => post(`${f.id}/forgive`, undefined, f.id)} disabled={busy !== null}
-                      className="px-3 py-2 rounded-control text-sm font-bold border border-gray-300 text-ink hover:bg-surface-3 disabled:opacity-50">Prominout</button>
+                    <Button size="sm" variant="secondary" onClick={() => post(`${f.id}/forgive`, undefined, f.id)} disabled={busy !== null}>Prominout</Button>
                   </span>
                 )}
               </span>} />
           );
         })}
       </ListCard>
-      {message?.at === "fines" && (
-        <p className={`text-base px-1 -mt-2 ${message.ok ? "text-pitch-600" : "text-card-red"}`}>{message.text}</p>
-      )}
+      {message?.at === "fines" && <ActionMessage ok={message.ok} text={message.text} />}
       {owed.length > 0 && (
         <p className="text-sm text-muted -mt-3 px-1">Trvat na zaplacení: hráč zaplatí, ale vztah k tobě utrpí. Prominout: když za totéž jiní platili, vědí o tom.</p>
       )}
@@ -248,11 +243,10 @@ export default function FineFundPage() {
               {manualItems.map((it) => <option key={it.id} value={it.itemKey}>{itemTitle(it)} ({fineValueLabel(it.valueKind, it.amountCzk)})</option>)}
             </select>
           </label>
-          <button type="button" disabled={!manual.playerId || !manual.itemKey || busy !== null}
-            onClick={async () => { if (await post("manual", manual, "manual")) setManual({ playerId: "", itemKey: "" }); }}
-            className="px-3 py-2.5 rounded-control text-base font-bold bg-pitch-500 text-white hover:bg-pitch-600 disabled:opacity-50">
+          <Button disabled={!manual.playerId || !manual.itemKey || busy !== null}
+            onClick={async () => { if (await post("manual", manual, "manual")) setManual({ playerId: "", itemKey: "" }); }}>
             Zapsat pokutu
-          </button>
+          </Button>
         </div>
       )}
 
@@ -264,14 +258,12 @@ export default function FineFundPage() {
         <FineScheduleBuilder items={draft} onChange={(it) => { setDraft(it); setDirty(true); }} />
       </div>
 
-      {message?.at === "schedule" && (
-        <p className={`text-base px-1 ${message.ok ? "text-pitch-600" : "text-card-red"}`}>{message.text}</p>
-      )}
-      <button type="button" disabled={busy !== null || (!dirty && !(draft.length > 0 && data.status !== "active" && !pending))}
-        onClick={() => post("propose", { items: draft }, "propose")}
-        className={`btn btn-lg w-full ${dirty ? "btn-primary" : "btn-ghost"}`}>
+      {message?.at === "schedule" && <ActionMessage ok={message.ok} text={message.text} />}
+      <Button size="lg" variant={dirty ? "primary" : "ghost"} className="w-full"
+        disabled={busy !== null || (!dirty && !(draft.length > 0 && data.status !== "active" && !pending))}
+        onClick={() => post("propose", { items: draft }, "propose")}>
         {draft.length === 0 && data.status === "active" ? "Zrušit sazebník" : "Předložit kapitánovi"}
-      </button>
+      </Button>
     </div>
   );
 }
