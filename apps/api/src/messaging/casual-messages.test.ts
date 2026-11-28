@@ -56,7 +56,7 @@ beforeEach(async () => {
     await db.prepare(`DROP TABLE IF EXISTS ${t}`).run();
   }
   for (const sql of [
-    "CREATE TABLE teams (id TEXT PRIMARY KEY, name TEXT, user_id TEXT, parent_team_id TEXT, village_id TEXT, league_id TEXT, game_date TEXT)",
+    "CREATE TABLE teams (id TEXT PRIMARY KEY, name TEXT, user_id TEXT, parent_team_id TEXT, village_id TEXT, league_id TEXT, game_date TEXT, fine_fund_balance INTEGER NOT NULL DEFAULT 0)",
     "CREATE TABLE users (id TEXT PRIMARY KEY, last_activity_at TEXT)",
     `CREATE TABLE players (id TEXT PRIMARY KEY, team_id TEXT, first_name TEXT, last_name TEXT, nationality TEXT, nickname TEXT, avatar TEXT,
        age INTEGER, position TEXT, personality TEXT, life_context TEXT, coach_relationship INTEGER, is_celebrity INTEGER, status TEXT, overall_rating INTEGER)`,
