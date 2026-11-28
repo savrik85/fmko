@@ -1,7 +1,7 @@
 /**
  * Pokuta z SMS a sazebník kabiny.
  *
- * Pokuta z SMS zůstává (trenér ji napíše, udělí tlačítkem, peníze jdou klubu), jen se
+ * Pokuta z SMS zůstává (trenér ji napíše, udělí tlačítkem, peníze jdou do kasy pokut), jen se
  * eviduje mezi pokutami: počítá se do zátěže hráče a hráč na ni odpoví podle faktů.
  * Když trenér v SMS pokutuje prohřešek, za který hráč už v posledních dnech zaplatil
  * podle sazebníku, druhá pokuta se neudělí.
@@ -55,7 +55,7 @@ export async function scheduleDuplicateOf(
 }
 
 /**
- * Zapíše pokutu z SMS do pokladničky kabiny. Když se nezapíše, vyhodí chybu: volající
+ * Zapíše pokutu z SMS do kasy pokut kabiny. Když se nezapíše, vyhodí chybu: volající
  * (coach-commitments.ts) pak slib vrátí, ať ho jde udělit znovu a pokuta nezmizí.
  */
 export async function recordSmsFine(
@@ -65,5 +65,5 @@ export async function recordSmsFine(
     playerId: o.playerId, itemKey: null, conditionKey: null, sourceRef: `sms|${o.commitmentId}`, source: "sms",
     amountCzk: o.amount, fact: o.quote ? `Trenér ti v SMS napsal: „${o.quote.slice(0, 200)}“` : "Pokuta od trenéra v SMS",
   }], []);
-  if (recorded.length === 0) throw new Error(`SMS pokuta ${o.commitmentId} se nezapsala do pokladničky`);
+  if (recorded.length === 0) throw new Error(`SMS pokuta ${o.commitmentId} se nezapsala do kasy pokut`);
 }

@@ -532,7 +532,7 @@ export async function recordCommitment(
     const body = o.detected.kind === "bonus"
       ? `💰 ${o.playerFirstName}: slíbil jsi mu prémii ${(o.detected.amount ?? 0).toLocaleString("cs-CZ")} Kč. Vyplatit ji musíš sám.`
       : o.detected.kind === "fine"
-        ? `⚖️ ${o.playerFirstName}: pokuta ${(amount ?? 0).toLocaleString("cs-CZ")} Kč${(o.detected.amount ?? 0) > (amount ?? 0) ? " (víc než týdenní odměnu, nejvýš 1 000 Kč, strhnout nejde)" : ""}. Udělit ji musíš sám, peníze půjdou do pokladničky kabiny.`
+        ? `⚖️ ${o.playerFirstName}: pokuta ${(amount ?? 0).toLocaleString("cs-CZ")} Kč${(o.detected.amount ?? 0) > (amount ?? 0) ? " (víc než týdenní odměnu, nejvýš 1 000 Kč, strhnout nejde)" : ""}. Udělit ji musíš sám, peníze půjdou do kasy pokut kabiny.`
         : `📈 ${o.playerFirstName}: slíbil jsi mu vyšší odměny o ${o.detected.percent} %${o.weeklyWage ? `, týdně ${o.weeklyWage} → ${raisedBy(o.weeklyWage, o.detected.percent ?? 0)} Kč` : ""}. Zvýšit je musíš sám.`;
     // O sekundu později než zpráva trenéra, ať je v konverzaci až pod ní.
     stmts.push(db.prepare(

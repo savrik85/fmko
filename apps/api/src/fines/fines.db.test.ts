@@ -17,7 +17,7 @@ let miniflare: Miniflare;
 let db: D1Database;
 
 const item = (o: Partial<FineScheduleItemInput>): FineScheduleItemInput => ({
-  itemKey: "training_missed", conditionKey: "slacking", valueKind: "czk", amountCzk: 50, repeatMode: "flat", scope: "senior", ...o,
+  itemKey: "training_missed", conditionKey: "slacking", valueKind: "czk", amountCzk: 50, repeatMode: "flat", ...o,
 });
 // Středa 2026-11-25: sazebník platí od pondělí 2026-11-30.
 const PROPOSED = "2026-11-25";
@@ -34,6 +34,7 @@ beforeAll(async () => {
     "CREATE TABLE conversations (id TEXT PRIMARY KEY, team_id TEXT, type TEXT, title TEXT, participant_id TEXT, participant_avatar TEXT, last_message_text TEXT, last_message_at TEXT, unread_count INTEGER DEFAULT 0, created_at TEXT, pinned INTEGER)",
     "CREATE TABLE messages (id TEXT PRIMARY KEY, conversation_id TEXT, sender_type TEXT, sender_id TEXT, sender_name TEXT, body TEXT, metadata TEXT, sent_at TEXT, read INTEGER DEFAULT 0)",
     "CREATE TABLE injuries (player_id TEXT, days_remaining INTEGER)",
+    "CREATE TABLE lineups (id TEXT PRIMARY KEY, team_id TEXT, captain_id TEXT, submitted_at TEXT)",
   ]) await db.prepare(sql).run();
   await db.exec(readFileSync(new URL("../../migrations/0340_fine_schedule.sql", import.meta.url), "utf8")
     .replace(/--[^\n]*/g, "").replace(/\n/g, " "));
@@ -44,7 +45,7 @@ afterAll(async () => { await miniflare.dispose(); });
 const personality = (o: Record<string, number>) => JSON.stringify({ discipline: 50, patriotism: 50, alcohol: 30, temper: 40, leadership: 40, ...o });
 
 beforeEach(async () => {
-  for (const t of ["teams", "players", "seasons", "coach_relation_log", "conversations", "messages", "fine_schedules", "fine_schedule_items", "fines"]) {
+  for (const t of ["teams", "lineups", "players", "seasons", "coach_relation_log", "conversations", "messages", "fine_schedules", "fine_schedule_items", "fines"]) {
     await db.prepare(`DELETE FROM ${t}`).run();
   }
   await db.batch([
@@ -117,6 +118,23 @@ describe("schválení a platnost", () => {
   });
 });
 
+describe("kapitán a mladí", () => {
+  it("sazebník schvaluje kapitán ze sestavy, ne ten z nastavení týmu", async () => {
+    await db.batch([
+      db.prepare("INSERT INTO lineups VALUES ('l1', 'club', 'cap', '2026-11-20T10:00:00Z')"),
+      db.prepare("INSERT INTO lineups VALUES ('l2', 'club', 'p1', '2026-11-24T10:00:00Z')"),
+    ]);
+    const r = await proposeSchedule(db, undefined, { teamId: "club", day: PROPOSED, items: [...CLASSIC_FINE_SCHEDULE] });
+    expect(r).toMatchObject({ ok: true, captainName: "Filip Pešek" });
+  });
+
+  it("osmnáctiletý z áčka platí podle sazebníku jako ostatní", async () => {
+    await approveClassic();
+    const r = await applyTrainingFines(db, "club", IN_EFFECT, [{ playerId: "kid", attended: false, reason: "Zaspal" }]);
+    expect(r.map((f) => f.playerId)).toEqual(["kid"]);
+  });
+});
+
 describe("pokuty z tréninku", () => {
   it("flákání a hospoda ano, práce a volno od trenéra ne, jeden prohřešek jednou", async () => {
     await approveClassic();
@@ -128,10 +146,10 @@ describe("pokuty z tréninku", () => {
       { playerId: "stu", attended: false, reason: "Dal jsi mu volno, odpočívá", restByCoach: true },
     ];
     const recorded = await applyTrainingFines(db, "club", IN_EFFECT, att);
-    // Mladý do 19 let nepatří pod „Jen dospělí“.
-    expect(recorded.map((f) => f.playerId).sort()).toEqual(["cap", "p1"]);
+    // Kdo hraje za áčko, platí podle sazebníku, i osmnáctiletý.
+    expect(recorded.map((f) => f.playerId).sort()).toEqual(["cap", "kid", "p1"]);
     expect(await applyTrainingFines(db, "club", IN_EFFECT, att)).toEqual([]);
-    expect(await fund()).toBe(100);
+    expect(await fund()).toBe(150);
   });
 
   it("od druhého prohřešku dvojnásobek", async () => {

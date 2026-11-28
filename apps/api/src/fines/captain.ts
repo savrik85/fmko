@@ -27,12 +27,19 @@ export interface ProposalNote {
   selfInterest: boolean;
 }
 
-/** Kapitán týmu, bez kapitána nejvlivnější dospělý hráč (vůdcovství, pak vztah k trenérovi). */
+/**
+ * Kapitán týmu: ten, koho trenér určil v poslední uložené sestavě (lineups.captain_id;
+ * teams.captain_id skoro žádný klub nemá). Bez kapitána nejvlivnější dospělý hráč.
+ */
 export async function captainOf(db: D1Database, teamId: string): Promise<PlayerFineProfile | null> {
+  const lineup = await db.prepare(
+    "SELECT captain_id FROM lineups WHERE team_id = ? AND captain_id IS NOT NULL ORDER BY submitted_at DESC LIMIT 1",
+  ).bind(teamId).first<{ captain_id: string }>();
   const t = await db.prepare("SELECT captain_id FROM teams WHERE id = ?").bind(teamId).first<{ captain_id: string | null }>();
-  if (t?.captain_id) {
+  for (const id of [lineup?.captain_id, t?.captain_id]) {
+    if (!id) continue;
     const r = await db.prepare(`${PLAYER_PROFILE_SQL} WHERE id = ? AND team_id = ? AND (status IS NULL OR status = 'active')`)
-      .bind(t.captain_id, teamId).first<Record<string, unknown>>();
+      .bind(id, teamId).first<Record<string, unknown>>();
     if (r) return profileFromRow(r);
   }
   const r = await db.prepare(

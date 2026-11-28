@@ -9,7 +9,7 @@
 
 import {
   fineCzkEquivalent, fineItemDef,
-  type FineItemKey, type FineRepeatMode, type FineScheduleItemInput, type FineScope, type FineValueKind,
+  type FineItemKey, type FineRepeatMode, type FineScheduleItemInput, type FineValueKind,
 } from "@okresni-masina/shared";
 import { logger } from "../lib/logger";
 import { BURDEN_WINDOW_DAYS, burdenRatio, burdenStage, fineTolerance, weeklyPocket, type BurdenStage } from "./burden";
@@ -70,7 +70,6 @@ function itemFromRow(r: Record<string, unknown>): ScheduleItem {
     valueKind: r.value_kind as FineValueKind,
     amountCzk: (r.amount_czk as number | null) ?? null,
     repeatMode: r.repeat_mode as FineRepeatMode,
-    scope: r.scope as FineScope,
   };
 }
 
@@ -100,9 +99,9 @@ export function itemStmts(db: D1Database, teamId: string, version: "active" | "d
     db.prepare("DELETE FROM fine_schedule_items WHERE team_id = ? AND version = ?").bind(teamId, version),
     ...items.map((it, i) => db.prepare(
       `INSERT INTO fine_schedule_items (id, team_id, version, item_key, condition_key, value_kind, amount_czk, repeat_mode, scope, sort_order)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'all', ?)`,
     ).bind(crypto.randomUUID(), teamId, version, it.itemKey, it.conditionKey, it.valueKind,
-      it.valueKind === "czk" ? it.amountCzk : null, it.repeatMode, it.scope, i)),
+      it.amountCzk, it.repeatMode, i)),
   ];
 }
 
@@ -234,14 +233,13 @@ export async function recordFines(
     try {
       const item = c.itemKey ? items.find((i) => i.itemKey === c.itemKey && i.conditionKey === c.conditionKey) : undefined;
       if (c.source !== "sms" && !item) continue;
-      // Pokutu z SMS dá trenér i klukovi z U21 téhož klubu (telefon je jeden), platí se do pokladničky áčka.
+      // Pokutu z SMS dá trenér i klukovi z U21 téhož klubu (telefon je jeden), platí se do kasy pokut áčka.
       const profileRow = await db.prepare(c.source === "sms"
         ? `${PLAYER_PROFILE_SQL} WHERE id = ? AND (team_id = ? OR team_id IN (SELECT id FROM teams WHERE parent_team_id = ?))`
         : `${PLAYER_PROFILE_SQL} WHERE id = ? AND team_id = ?`,
       ).bind(c.playerId, teamId, ...(c.source === "sms" ? [teamId] : [])).first<Record<string, unknown>>();
       if (!profileRow) continue;
       const p = profileFromRow(profileRow);
-      if (item && item.scope === "senior" && p.age <= 19) continue;
 
       const valueKind: FineValueKind = item?.valueKind ?? "czk";
       let amount: number | null = item ? item.amountCzk : (c.amountCzk ?? 0);
@@ -253,11 +251,11 @@ export async function recordFines(
       }
       const czk = free ? 0 : fineCzkEquivalent(valueKind, amount);
       const { stage } = await playerBurden(db, p, day, czk);
-      // Pokuta z SMS jde do pokladničky jako ostatní, dopad na vztah už dal slib v SMS (coach-commitments.ts).
+      // Pokuta z SMS jde do kasy pokut jako ostatní, dopad na vztah už dal slib v SMS (coach-commitments.ts).
       const isSms = c.source === "sms";
       const status: RecordedFine["status"] = free ? "forgiven" : isSms ? "paid" : stage >= 2 ? "refused" : "paid";
       const id = crypto.randomUUID();
-      // Zaplacená pokuta v korunách jde do pokladničky ve stejné dávce jako zápis pokuty. Přičte se
+      // Zaplacená pokuta v korunách jde do kasy pokut ve stejné dávce jako zápis pokuty. Přičte se
       // jen tehdy, když se pokuta opravdu zapsala (duplicitní `sourceRef` INSERT OR IGNORE přeskočí).
       const paidCzk = status === "paid" && valueKind === "czk" && amount ? amount : 0;
       const [res] = await db.batch([
@@ -276,14 +274,10 @@ export async function recordFines(
       const stmts: D1PreparedStatement[] = [];
       if (!free && !isSms) {
         const eff = STAGE_EFFECT[stage];
-        stmts.push(moraleStmt(db, c.playerId, eff.morale + (valueKind === "kit_wash" ? -1 : 0)));
+        stmts.push(moraleStmt(db, c.playerId, eff.morale));
         if (eff.relation) {
           const { coachRelationStmts } = await import("../lib/coach-relation");
           stmts.push(...coachRelationStmts(db, { playerId: c.playerId, delta: eff.relation, source: "fine", description: `Pokuta: ${fineItemDef(item?.itemKey ?? "")?.label ?? "od trenéra"}`, gameDate: day }));
-        }
-        if (valueKind === "laps") {
-          stmts.push(db.prepare(`UPDATE players SET life_context = json_set(COALESCE(life_context, '{}'), '$.condition',
-            MAX(0, COALESCE(json_extract(life_context, '$.condition'), 100) - 4)) WHERE id = ?`).bind(c.playerId));
         }
       }
       if (stmts.length > 0) await db.batch(stmts);

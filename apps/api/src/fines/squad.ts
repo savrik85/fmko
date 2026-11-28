@@ -69,7 +69,7 @@ function ultimatumInstruction(when: string | null): string {
 const ULTIMATUM_REPLIES = [
   "Trenére, za kabinu: buď ten sazebník stáhnete, nebo na příští zápas nepřijdem.",
   "Domluvili jsme se. Dokud platí tyhle pokuty, na zápas nejdem.",
-  "Ultimátum, trenére. Zmírněte pokuty, nebo v sobotu hrajete sám.",
+  "Ultimátum, trenére. Zmírněte pokuty, nebo příští zápas hrajete sám.",
   "Kluci řekli dost. Buď sazebník změníte, nebo na zápas nedorazíme.",
   "Trenére, tohle je vzkaz celé kabiny: pokuty dolů, jinak nehrajem.",
   "Dáváme vám čas do zápasu. Pak bez nás.",
@@ -136,7 +136,7 @@ export async function evaluateSquadFines(db: D1Database, env: ChatEnv | undefine
   const s = await loadSchedule(db, teamId);
   if (!s.row) return 0;
   const active = s.row.status === "active" && s.active.length > 0;
-  const rows = await db.prepare(`${PLAYER_PROFILE_SQL} WHERE team_id = ? AND (status IS NULL OR status = 'active') AND age > 19`)
+  const rows = await db.prepare(`${PLAYER_PROFILE_SQL} WHERE team_id = ? AND (status IS NULL OR status = 'active')`)
     .bind(teamId).all<Record<string, unknown>>();
   const players = (rows.results ?? []).map(profileFromRow);
   const burdens = await Promise.all(players.map(async (p) => ({ p, b: await playerBurden(db, p, day) })));
@@ -216,7 +216,7 @@ export async function strikeForMatch(
   const s = await loadSchedule(db, o.teamId);
   if (!s.row || s.row.status !== "active" || s.row.squad_stage < 2 || s.row.ultimatum_match_id !== o.calendarId) return 0;
   const rows = await db.prepare(
-    `${PLAYER_PROFILE_SQL} WHERE team_id = ? AND (status IS NULL OR status = 'active') AND age > 19
+    `${PLAYER_PROFILE_SQL} WHERE team_id = ? AND (status IS NULL OR status = 'active')
       AND (suspended_matches IS NULL OR suspended_matches = 0)
       AND id NOT IN (SELECT player_id FROM injuries WHERE days_remaining > 0)`,
   ).bind(o.teamId).all<Record<string, unknown>>();

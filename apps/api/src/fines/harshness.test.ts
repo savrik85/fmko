@@ -8,7 +8,7 @@ import { burdenRatio, burdenStage, fineTolerance, weeklyPocket } from "./burden"
 
 const loyal = { coachRelationship: 60, temper: 40, discipline: 60, alcohol: 30, leadership: 60 };
 const item = (o: Partial<FineScheduleItemInput>): FineScheduleItemInput => ({
-  itemKey: "training_missed", conditionKey: "slacking", valueKind: "czk", amountCzk: 50, repeatMode: "flat", scope: "senior", ...o,
+  itemKey: "training_missed", conditionKey: "slacking", valueKind: "czk", amountCzk: 50, repeatMode: "flat", ...o,
 });
 
 describe("kapitán a sazebník", () => {

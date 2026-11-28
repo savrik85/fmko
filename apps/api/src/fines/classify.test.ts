@@ -59,8 +59,8 @@ describe("důvody absence na tréninku", () => {
 });
 
 describe("omluvenky na zápas", () => {
-  it("zranění, stopka a narození dítěte se nepokutují nikdy", () => {
-    for (const reason of ["Zranění", "Stopka za karty", "Osobní volno", "Narodilo se mu dítě"]) {
+  it("zranění, nemoc, stopka, volno a narození dítěte se nepokutují nikdy", () => {
+    for (const reason of ["Zranění", "Zdraví", "Stopka za karty", "Osobní volno", "Volno od trenéra", "Narodilo se mu dítě"]) {
       expect(matchExcuseConditionMatches("any", { reason, announcedOnMatchDay: true }), reason).toBe(false);
     }
   });
@@ -75,7 +75,7 @@ describe("omluvenky na zápas", () => {
 describe("víc položek za trénink", () => {
   it("hospoda vyhraje nad „úplně jakýkoli“", async () => {
     const { trainingFineCandidates } = await import("./detect");
-    const base = { valueKind: "czk" as const, repeatMode: "flat" as const, scope: "senior" as const };
+    const base = { valueKind: "czk" as const, repeatMode: "flat" as const };
     const items = [
       { id: "a", itemKey: "training_missed" as const, conditionKey: "any", amountCzk: 200, ...base },
       { id: "b", itemKey: "training_missed" as const, conditionKey: "pub", amountCzk: 50, ...base },

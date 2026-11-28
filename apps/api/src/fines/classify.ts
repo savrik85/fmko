@@ -52,7 +52,7 @@ export function trainingConditionMatches(condition: string, category: TrainingAb
 }
 
 /** Důvody omluvenek na zápas (matches.absences.reason), které se nikdy nepokutují. */
-const NEVER_FINED_MATCH_REASONS = /^(zran[eě]n[ií]|stopka za karty|po obvin[eě]n[ií]|osobn[ií] volno|narodilo se mu d[ií]t[eě]|nemocn[yý] rodi[cč])$/i;
+const NEVER_FINED_MATCH_REASONS = /^(zran[eě]n[ií]|zdrav[ií]|stopka za karty|po obvin[eě]n[ií]|osobn[ií] volno|volno od tren[eé]ra|narodilo se mu d[ií]t[eě])$/i;
 const HANGOVER_MATCH_REASONS = /^(kocovina|alkohol)$/i;
 
 export function matchExcuseConditionMatches(condition: string, a: { reason: string; announcedOnMatchDay: boolean }): boolean {
