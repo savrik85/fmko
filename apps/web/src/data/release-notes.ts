@@ -19,6 +19,7 @@ export const RELEASE_NOTES: ReleaseNote[] = [
       "V menu Tým přibyla stránka [Pokuty](/pokuty): sazebník pokut si skládáš z hotových položek za trénink, zápas a hospodu.",
       "Sazebník schvaluje kapitán a platí od dalšího pondělí. Vyhlásit ho jde i bez jeho souhlasu, ale kabina ho pak nevezme za svůj.",
       "Pokuty se zapisují samy a hráč na každou odpoví v Telefonu.",
+      "Peníze z pokut jdou do kasy pokut, ne do rozpočtu klubu. Platí se z ní hospoda s klukama, klub doplácí jen to, co v kase chybí.",
       "Přehnané pokuty kabina nevezme: hráči odmítnou platit, kapitán dá ultimátum a kluci můžou na zápas stávkovat.",
     ],
   },

@@ -35,7 +35,7 @@ finesRouter.get("/teams/:teamId/fines", async (c) => {
   const t = await teamDay(c, teamId);
   if (!t) return c.json({ error: "Tým nenalezen" }, 404);
   if (t.u21) return c.json({ error: "Sazebník má jen áčko." }, 400);
-  const [s, fund, fines, squadRows, captain] = await Promise.all([
+  const [s, fund, fines, squadRows, captain, spends] = await Promise.all([
     loadSchedule(db, teamId),
     db.prepare("SELECT fine_fund_balance FROM teams WHERE id = ?").bind(teamId).first<{ fine_fund_balance: number | null }>(),
     db.prepare(
@@ -46,6 +46,9 @@ finesRouter.get("/teams/:teamId/fines", async (c) => {
     ).bind(teamId, addDays(t.day, -42)).all<Record<string, unknown>>(),
     db.prepare(`${PLAYER_PROFILE_SQL} WHERE team_id = ? AND (status IS NULL OR status = 'active') ORDER BY last_name`).bind(teamId).all<Record<string, unknown>>(),
     captainOf(db, teamId),
+    // Útraty z kasy pokut (hospoda pro kluky, fines/fund.ts).
+    db.prepare("SELECT id, amount_czk, description, game_date FROM fine_fund_spends WHERE team_id = ? AND game_date > ? ORDER BY game_date DESC, created_at DESC LIMIT 50")
+      .bind(teamId, addDays(t.day, -42)).all<{ id: string; amount_czk: number; description: string; game_date: string }>(),
   ]);
   const players = (squadRows.results ?? []).map(profileFromRow);
   const burdened: Array<{ playerId: string; name: string; stage: number; label: string }> = [];
@@ -81,6 +84,7 @@ finesRouter.get("/teams/:teamId/fines", async (c) => {
       source: f.source, valueKind: f.value_kind, amountCzk: f.amount_czk, status: f.status, fact: f.fact, inSchedule: f.in_schedule === 1, gameDate: f.game_date,
     })),
     burdened,
+    spends: (spends.results ?? []).map((x) => ({ id: x.id, amountCzk: x.amount_czk, description: x.description, gameDate: x.game_date })),
   });
 });
 

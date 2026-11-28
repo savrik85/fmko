@@ -1562,15 +1562,27 @@ export async function fulfilMoneyCommitment(
   } else if (r.kind === "bet") {
     if (!d.won) return { ok: false, error: "Sázka ještě nevyšla.", status: 409 };
     const price = betPrice(d);
-    if ((r.budget ?? 0) < price) return { ok: false, error: `Na ${price.toLocaleString("cs-CZ")} Kč v kase nemáš.`, status: 400 };
+    // Hospodu pro kabinu platí nejdřív kasa pokut (fines/fund.ts), klub jen zbytek.
+    const { budgetShareOfSquadPub, paySquadPub } = await import("../fines/fund");
+    const rosterTeamId = r.roster_team_id ?? r.team_id;
+    const fromBudget = d.reward === "pub" ? await budgetShareOfSquadPub(db, rosterTeamId, price) : price;
+    if ((r.budget ?? 0) < fromBudget) {
+      const short = fromBudget < price ? `Kasa pokut na hospodu nestačí a na doplatek ${fromBudget.toLocaleString("cs-CZ")} Kč klub nemá.` : `Na ${price.toLocaleString("cs-CZ")} Kč v kase nemáš.`;
+      return { ok: false, error: short, status: 400 };
+    }
     move = async () => {
       if (d.reward === "pub") {
         // Hospoda pro celou kabinu jako „Pojedeme na jedno“ (routes/game.ts /pub-visit): posezení s příběhy.
         const { createCoachLedSession } = await import("../season/pub");
-        const session = await createCoachLedSession(db, r.roster_team_id ?? r.team_id, gameDate.slice(0, 10), "all")
+        const session = await createCoachLedSession(db, rosterTeamId, gameDate.slice(0, 10), "all")
           .catch((e) => { logger.warn({ module: M }, `hospoda za sázku ${r.id}`, e); return null; });
         if (session && !session.ok) logger.warn({ module: M }, `hospoda za sázku ${r.id} se nezapsala: ${session.reason}`);
-        await recordTransaction(db, r.team_id, "event", -price, "Hospoda za sázku s kabinou", gameDate);
+        const paid = await paySquadPub(db, { fundTeamId: rosterTeamId, budgetTeamId: r.team_id, cost: price, description: "Hospoda za sázku s kabinou", gameDate });
+        if (paid.fromFund > 0) {
+          return paid.fromBudget > 0
+            ? `Sázka zaplacena (${paid.fromFund.toLocaleString("cs-CZ")} Kč z kasy pokut, ${paid.fromBudget.toLocaleString("cs-CZ")} Kč klub)`
+            : `Sázka zaplacena z kasy pokut (${price.toLocaleString("cs-CZ")} Kč)`;
+        }
       } else {
         await recordTransaction(db, r.team_id, d.reward === "money" ? "player_bonus" : "manager_social", -price,
           d.squad ? "Sázka s kabinou" : `Sázka s hráčem: ${name}`, gameDate, r.player_id);
